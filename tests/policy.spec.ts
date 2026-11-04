@@ -14,7 +14,7 @@ const feishuSource = (config: { chats: { chatId: string; listen: 'mentions' | 'a
 const base = SettingsSchema.parse({
   policy: { sources: { feishu: { allowed: [{ id: MEMBER, name: 'Alice' }], syncChat: CHAT }, github: { allowed: [{ id: 'Alice' }] } } },
   eval: { mode: 'auto' },
-  sources: { feishu: feishuSource({ chats: [{ chatId: CHAT, listen: 'mentions' }, { chatId: OBSERVED, listen: 'all' }], directMessages: true }) },
+  sources: { github: { enabled: true, config: {} }, feishu: feishuSource({ chats: [{ chatId: CHAT, listen: 'mentions' }, { chatId: OBSERVED, listen: 'all' }], directMessages: true }) },
 })
 function setup(settings: Settings = base) {
   const sources = new SourceRegistry(() => settings)
@@ -40,7 +40,7 @@ describe('source scope', () => {
   it('listens to nothing from a configured Source whose plugin is not loaded, and keeps an invalid stored configuration disabled', () => {
     const bare = new SourceRegistry(() => base)
     expect(bare.scope(feishu())).toEqual({ listened: false, reason: 'source_not_installed' })
-    expect(bare.scope(github('anyone'))).toEqual({ listened: true, observed: false })
+    expect(bare.scope(github('anyone'))).toEqual({ listened: false, reason: 'source_not_installed' })
     const broken = new SourceRegistry(() => SettingsSchema.parse({ sources: { feishu: { enabled: true, config: { chats: 'oops' } } } }))
     broken.register(feishuKind)
     expect(broken.instance('feishu')).toMatchObject({ enabled: false })
@@ -188,7 +188,7 @@ describe('revalidating a Mandate from the admission table', () => {
     const chats = item.scope === 'none' ? [] : [{ chatId: CHAT, listen: item.scope }]
     const settings = SettingsSchema.parse({
       eval: { mode: item.mode },
-      sources: { feishu: feishuSource({ chats, directMessages: true }) },
+      sources: { github: { enabled: true, config: {} }, feishu: feishuSource({ chats, directMessages: true }) },
       policy: {
         rules: [{ id: 'copy', name: 'Copy', enabled: item.rule, instruction: 'x' }],
         sources: { feishu: { allowed: item.listed ? [{ id: SENDER }] : [], admission: { [CHAT]: Object.fromEntries(cells.map(cell => [cell, grant(cell)])) } } },
@@ -266,7 +266,7 @@ describe('settings migration', () => {
 
 it('renames the variables a stored prepare command reads from earlier project names to the current one', () => {
   const settings = SettingsSchema.parse(migrateSettings({ executor: { prepare: 'git worktree add "$DSH_TAG_DIR" -b "agent/${DSH_GO_NAME}" "refs/x/$DSH_FREELANCER_TICKET"' } }))
-  expect(settings.executor.prepare).toBe('git worktree add "$DSH_SUPERAGENT_DIR" -b "agent/${DSH_SUPERAGENT_NAME}" "refs/x/$DSH_SUPERAGENT_TICKET"')
+  expect(settings.executor.prepare).toBe('git worktree add "$DSH_SUPER_PERSONAL_AGENT_DIR" -b "agent/${DSH_SUPER_PERSONAL_AGENT_NAME}" "refs/x/$DSH_SUPER_PERSONAL_AGENT_TICKET"')
 })
 
 it('reads a stored GitHub Source configuration that names a merge account without it', () => {

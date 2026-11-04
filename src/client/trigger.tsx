@@ -15,12 +15,12 @@ export function TriggerStatus({ filter }: { filter: ThreadFilter }) {
     true) }
   return <>
     <StatusHead hint={t('triggerIntro')} />
-    <div className="dt-filters">
+    <div className="spa-filters">
       {THREAD_FILTERS.map(value => <Pill key={value} active={filter === value}
         onClick={() => go(value)}>{t(`threadFilter.${value}`)}</Pill>)}
     </div>
     <LoadState error={error} loading={!data} />
-    {data && (data.items.length ? <ul className="dt-list">{data.items.map(thread => <ThreadLine key={thread.key} thread={thread} />)}</ul>
+    {data && (data.items.length ? <ul className="spa-list">{data.items.map(thread => <ThreadLine key={thread.key} thread={thread} />)}</ul>
       : <Hint>{t('threadsNone')}</Hint>)}
     {data?.next_offset != null && <LoadMore onMore={() => setLimit(limit + 20)} />}
   </>

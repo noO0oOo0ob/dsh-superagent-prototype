@@ -45,7 +45,7 @@ export function DeploymentPage({ setup, form, accounts: showAccounts }: { setup:
       return { revision: revision + 1, restarting: false }
     } })
   const accounts = setup.accounts
-  // Remote browsers (`memory` mode) are read-only; `unavailable` indicates `dsh-superagent` is still starting.
+  // Remote browsers (`memory` mode) are read-only; `unavailable` indicates `dsh-super-personal-agent` is still starting.
   const readOnlyHint = !form ? t('deploymentNoForms') : snapshot?.mode === 'memory' ? t('deploymentReadOnly')
     : snapshot?.status === 'loading' ? t('loading') : snapshot?.status === 'unavailable' ? t('deploymentUnavailable')
     : !editable ? t('deploymentReadOnly') : undefined
@@ -55,11 +55,11 @@ export function DeploymentPage({ setup, form, accounts: showAccounts }: { setup:
   </Field>
   const feishu = accounts?.feishu ? accounts.feishu.name || accounts.feishu.botId
     : setup.feishuProblem ? setupText(t, setup.feishuProblem) : t('deploymentFeishuNone')
-  return <form className="dt-form" onSubmit={event => { void draft.submit(event) }}>
+  return <form className="spa-form" onSubmit={event => { void draft.submit(event) }}>
     <Fields disabled={draft.busy}>
       <Hint>{t('deploymentIntro')}</Hint>
-      {setup.problem && <div className="dt-row-buttons">
-        <p className="dt-error" role="status"><SetupMessage problem={setup.problem} lead /></p><CheckSetupButton />
+      {setup.problem && <div className="spa-row-buttons">
+        <p className="spa-error" role="status"><SetupMessage problem={setup.problem} lead /></p><CheckSetupButton />
       </div>}
       {showAccounts && <Section title={t('deploymentDerived')} hint={t('deploymentDerivedHint')}>
         <KeyValues rows={[[t('deploymentRepository'), accounts?.repository ?? '—'],
@@ -68,9 +68,9 @@ export function DeploymentPage({ setup, form, accounts: showAccounts }: { setup:
       </Section>}
       <Section title={t('deploymentMachine')}>
         {readOnlyHint && <Hint>{readOnlyHint}</Hint>}
-        <div className="dt-field">
-          <span className="dt-field-head">{t('deploymentStateDir')}<InfoTip text={t('deploymentStateDirHint')} /></span>
-          <span className="dt-mono">{setup.machine.stateDir}</span>
+        <div className="spa-field">
+          <span className="spa-field-head">{t('deploymentStateDir')}<InfoTip text={t('deploymentStateDirHint')} /></span>
+          <span className="spa-mono">{setup.machine.stateDir}</span>
         </div>
       </Section>
       <Section title={t('deploymentLimits')} hint={t('deploymentLimitsHint')}>
@@ -87,9 +87,9 @@ export function DeploymentPage({ setup, form, accounts: showAccounts }: { setup:
 function PluginPage({ form }: { form: DeploymentForm }) {
   const { t } = usePanel()
   const { state, error } = usePanelData()
-  return <div className="dt-embedded">
+  return <div className="spa-embedded">
     {state ? <DeploymentPage setup={state.setup} form={form} accounts />
-      : error ? <p className="dt-error" role="alert">{error.message}</p> : <p className="dt-hint">{t('loading')}</p>}
+      : error ? <p className="spa-error" role="alert">{error.message}</p> : <p className="spa-hint">{t('loading')}</p>}
   </div>
 }
 /** DSH Plugin Manager config view entry; renders nothing in `summary` mode because DSH displays the package description. */

@@ -51,7 +51,7 @@ type HttpHandler = (req: unknown, res: unknown) => Promise<void>
 let http: HttpHandler
 async function api(method: string, path: string): Promise<{ status: number; body: unknown }> {
   let status = 0, text = ''
-  const req = { method, url: `/orchestrator/api/${path}`, headers: { host: '127.0.0.1:3082', 'x-orchestrator-request': '1' } }
+  const req = { method, url: `/super-personal-agent/api/${path}`, headers: { host: '127.0.0.1:3082', 'x-super-personal-agent-request': '1' } }
   await http(req, { writeHead: (code: number) => { status = code }, end: (data: string) => { text = data } })
   return { status, body: JSON.parse(text) }
 }
@@ -120,9 +120,9 @@ function feishu(id: string, text: string, overrides: Record<string, unknown> = {
   return feishuTrigger({ message_id: `om_${id}`, chat_id: CHAT, chat_type: 'group', sender_id: MEMBER, sender_type: 'user', content: text, create_time: String(Date.parse('2026-09-09T00:00:00Z') + Number(id.replace(/\D/g, '') || 0) * 1000), mentions: [{ id: 'ou_bot' }], ...overrides }, 'ou_bot', 'cli_bot')!
 }
 const worktreeName = 'fix-regression'
-/** Route one decision with the main Session's orchestrator_route, answering its result; a refused one throws its reason. */
+/** Route one decision with the main Session's personal_agent_route, answering its result; a refused one throws its reason. */
 async function route(item: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const { results } = await runTool(runtime.masterId, 'orchestrator_route', { decisions: [item] }) as { results: Record<string, unknown>[] }
+  const { results } = await runTool(runtime.masterId, 'personal_agent_route', { decisions: [item] }) as { results: Record<string, unknown>[] }
   if (results[0]!.refused) throw new Error(String(results[0]!.refused))
   return results[0]!
 }
@@ -132,7 +132,7 @@ async function acceptedTicket(trigger = feishu('1', '@bot 修一下回归')) {
   const result = await route({ kind: 'accept', trigger_id: trigger.id, title: '修复回归',
     worktree_name: worktreeName, acknowledgement: '收到，修复回归。' })
   const ticket = runtime.store.tickets.get((result.ticket as { ticket_id: string }).ticket_id)!
-  return { trigger, ticket, sessionId: `worker-${ticket.id}` }
+  return { trigger, ticket, sessionId: `spa-worker-${ticket.id}` }
 }
 beforeEach(async () => {
   directory = mkdtempSync(join(tmpdir(), 'orchestrator-runtime-'))
@@ -219,15 +219,15 @@ afterEach(async () => { expect(controller.prompt).not.toHaveBeenCalled(); await 
 it('relays an explicit member mention as a candidate and creates the ticket, acknowledgement, subscription and worker on accept', async () => {
   const { trigger, ticket, sessionId } = await acceptedTicket()
   const candidate = relays(runtime.masterId).find(item => item.kind === 'candidate')!
-  expect(candidate).toMatchObject({ strength: 'explicit', trigger_id: trigger.id, next_action: 'Route it with orchestrator_route as dispatch says: accept, attach, stop or ignore.' })
+  expect(candidate).toMatchObject({ strength: 'explicit', trigger_id: trigger.id, next_action: 'Route it with personal_agent_route as dispatch says: accept, attach, stop or ignore.' })
   expect(ticket).toMatchObject({ title: '修复回归', mandate: { strength: 'explicit', basis: expect.objectContaining({ via: 'addressed', source: 'feishu', sender: 'Alice', addressed: 'mention', scope: expect.objectContaining({ chatId: CHAT }) }) },
     execution: expect.objectContaining({ name: expect.stringMatching(/^fix-regression-/) }), origin: expect.objectContaining({ triggerId: trigger.id }) })
   expect(ticket).not.toHaveProperty('ended')
   // The ticket's execution environment is fixed at accept time: its directory under the execution root, and the Sources' values from its Trigger.
   expect(ticket.execution!.directory).toBe(join(directory, 'work', ticket.execution!.name))
-  expect(Object.fromEntries(runtime.ticketEnvironment(ticket).map(variable => [variable.key, variable.value]))).toMatchObject({ DSH_SUPERAGENT_DIR: ticket.execution!.directory, DSH_SUPERAGENT_NAME: ticket.execution!.name, DSH_SUPERAGENT_TICKET: ticket.id, DSH_SUPERAGENT_FEISHU_CHAT: CHAT, DSH_SUPERAGENT_GITHUB_REPOSITORY: 'acme/widgets', DSH_SUPERAGENT_GITHUB_ACCOUNT: 'agent-bot', DSH_SUPERAGENT_GITHUB_NUMBER: '' })
+  expect(Object.fromEntries(runtime.ticketEnvironment(ticket).map(variable => [variable.key, variable.value]))).toMatchObject({ DSH_SUPER_PERSONAL_AGENT_DIR: ticket.execution!.directory, DSH_SUPER_PERSONAL_AGENT_NAME: ticket.execution!.name, DSH_SUPER_PERSONAL_AGENT_TICKET: ticket.id, DSH_SUPER_PERSONAL_AGENT_FEISHU_CHAT: CHAT, DSH_SUPER_PERSONAL_AGENT_GITHUB_REPOSITORY: 'acme/widgets', DSH_SUPER_PERSONAL_AGENT_GITHUB_ACCOUNT: 'agent-bot', DSH_SUPER_PERSONAL_AGENT_GITHUB_NUMBER: '' })
   expect(ticket.assignments).toEqual([expect.objectContaining({ state: 'running', startedAt: expect.any(String) })])
-  expect(sessionId).toBe(`worker-${ticket.id}`)
+  expect(sessionId).toBe(`spa-worker-${ticket.id}`)
   expect(runtime.store.threads.get(`feishu:${CHAT}:om_1`)?.subscriptions).toEqual([ticket.id])
   expect(runtime.store.replyStatus(key('ack', trigger.id))).toBe('sent')
   const larkCalls = vi.mocked(Commands.prototype.lark).mock.calls.map(([args]) => args)
@@ -251,14 +251,14 @@ it('fans a person\'s later thread message out to the live worker as context and 
   expect(worker[0]).not.toHaveProperty('read')
   // Its resource renders the same, from the ticket; no body of it is stored.
   const resource = `ticket/${ticket.id}/input/${key(runtime.store.tickets.get(ticket.id)!.inputs[0]!.id)}`
-  expect(JSON.parse(((await runTool(sessionId, 'orchestrator_read', { resource })) as { text: string }).text)).toEqual(worker[0])
+  expect(JSON.parse(((await runTool(sessionId, 'personal_agent_read', { resource })) as { text: string }).text)).toEqual(worker[0])
   expect(runtime.store.get(resource)).toBeUndefined()
   expect(runtime.store.tickets.get(ticket.id)!.inputs).toEqual([expect.objectContaining({ kind: 'trigger', triggerId: followup.id })])
   expect(relays(runtime.masterId)).toEqual([{ kind: 'follow_up', trigger_id: followup.id, from: 'ou_guest', thread: `feishu:${CHAT}:om_1`,
     at: followup.at, text: '顺便看看日志', delivered_to: [{ ticket_id: ticket.id, title: '修复回归', state: 'working' }],
       note: expect.stringContaining('worker has it and decides') }])
   expect(runtime.store.decisions.byThread(`feishu:${CHAT}:om_1`).map(decision => decision.triggerIds)).toEqual([[ticket.origin.triggerId]])
-  expect(await runTool(sessionId, 'orchestrator_read', { resource: `trigger/${followup.id}` }))
+  expect(await runTool(sessionId, 'personal_agent_read', { resource: `trigger/${followup.id}` }))
     .toMatchObject({ trigger_id: followup.id, around: { before: expect.objectContaining({ read: `trigger/${key('feishu', 'om_1')}` }) } })
 })
 
@@ -268,28 +268,28 @@ it('assesses a proactive observation in the orchestrator Session and creates the
   const trigger = feishu('3', '这个文案好奇怪，改成“浏览网页”吧', { mentions: [] })
   await receive(trigger)
   const candidate = relays(runtime.masterId).at(-1)!
-  expect(candidate).toMatchObject({ kind: 'candidate', strength: 'inferred', mode: 'observe', next_action: expect.stringContaining('orchestrator_eval') })
+  expect(candidate).toMatchObject({ kind: 'candidate', strength: 'inferred', mode: 'observe', next_action: expect.stringContaining('personal_agent_eval') })
   vi.spyOn(Commands.prototype, 'lark').mockResolvedValue({ items: [{ message_id: 'om_3', chat_id: CHAT }] })
-  const details = await runTool(runtime.masterId, 'orchestrator_eval', { trigger_id: trigger.id })
+  const details = await runTool(runtime.masterId, 'personal_agent_eval', { trigger_id: trigger.id })
   // The rules are in the main Session's Policy section; the context names the Policy version it was built from.
   expect(details).not.toHaveProperty('rules')
   expect(details).toMatchObject({ trigger_id: trigger.id, strength: 'inferred', policy_version: policyVersion(runtime.store.settings()), thread: expect.objectContaining({ complete: true, loaded_messages: 0 }) })
   const decision = (id: string) => ({ trigger_id: id, decision: 'accept', title: '文案修订', worktree_name: 'copy-fix', scope: '改副标题', reason: 'explicit copy change', intent_evidence: 'quoted', acknowledgement: '收到，把副标题改成“浏览网页”。',
     rule_assessments: [{ rule_id: 'copy', matched: true, reason: 'copy change' }, { rule_id: 'visual', matched: false, reason: 'not visual' }],
     direction: { implementation_requested: true, target_basis: 'specified', requires_design_decision: false, evidence: 'the message names the replacement' } })
-  expect(await runTool(runtime.masterId, 'orchestrator_eval_decide', decision(trigger.id))).toMatchObject({ decision: 'ignore', reason: expect.stringContaining('Observe mode') })
+  expect(await runTool(runtime.masterId, 'personal_agent_eval_decide', decision(trigger.id))).toMatchObject({ decision: 'ignore', reason: expect.stringContaining('Observe mode') })
   expect(runtime.store.tickets.list()).toEqual([])
   expect(runtime.store.decisions.byThread(`feishu:${CHAT}:om_3`)[0]!.audit).toMatchObject({ would_accept: true, proposal: { title: '文案修订' } })
   await observe('auto')
   const again = feishu('5', '把副标题改成“浏览网页”', { mentions: [] })
   await receive(again)
-  await runTool(runtime.masterId, 'orchestrator_eval', { trigger_id: again.id })
-  const accepted = await runTool(runtime.masterId, 'orchestrator_eval_decide', decision(again.id))
+  await runTool(runtime.masterId, 'personal_agent_eval', { trigger_id: again.id })
+  const accepted = await runTool(runtime.masterId, 'personal_agent_eval_decide', decision(again.id))
   expect(accepted).toMatchObject({ decision: 'accept', ticket: { ticket_id: expect.any(String) } })
   const ticket = runtime.store.tickets.get((accepted.ticket as { ticket_id: string }).ticket_id)!
   expect(ticket.mandate).toMatchObject({ strength: 'inferred', basis: expect.objectContaining({ via: 'admission', rules: ['copy'], observation: { mode: 'auto' } }) })
   expect(runtime.store.replyStatus(key('ack', again.id))).toBeDefined()
-  expect(await runTool(`worker-${ticket.id}`, 'orchestrator_read', { resource: `ticket/${ticket.id}/assignment` })).toMatchObject({ text: expect.stringContaining('Proactively accepted under copy') })
+  expect(await runTool(`spa-worker-${ticket.id}`, 'personal_agent_read', { resource: `ticket/${ticket.id}/assignment` })).toMatchObject({ text: expect.stringContaining('Proactively accepted under copy') })
 })
 
 it('accepts silently under a rule that says so, gives the worker the rule procedure, and closes it as dropped when nothing is left for a human', async () => {
@@ -299,43 +299,43 @@ it('accepts silently under a rule that says so, gives the worker the rule proced
   const trigger = feishu('20', '切换主题后刷新，图标颜色不对', { mentions: [] })
   await receive(trigger)
   vi.spyOn(Commands.prototype, 'lark').mockResolvedValue({ items: [{ message_id: 'om_20', chat_id: CHAT }] })
-  await runTool(runtime.masterId, 'orchestrator_eval', { trigger_id: trigger.id })
-  const accepted = await runTool(runtime.masterId, 'orchestrator_eval_decide', { trigger_id: trigger.id, decision: 'accept', title: '主题图标颜色', worktree_name: 'theme-icon-color', scope: 'bug', reason: 'reported defect', intent_evidence: 'quoted',
+  await runTool(runtime.masterId, 'personal_agent_eval', { trigger_id: trigger.id })
+  const accepted = await runTool(runtime.masterId, 'personal_agent_eval_decide', { trigger_id: trigger.id, decision: 'accept', title: '主题图标颜色', worktree_name: 'theme-icon-color', scope: 'bug', reason: 'reported defect', intent_evidence: 'quoted',
     rule_assessments: [{ rule_id: 'copy', matched: false, reason: 'no' }, { rule_id: 'visual', matched: false, reason: 'no' }, { rule_id: 'silent-bugfix', matched: true, reason: 'bug report' }],
     direction: { implementation_requested: true, target_basis: 'existing-standard', requires_design_decision: false, evidence: 'expected colour is the light palette' } })
   const ticket = runtime.store.tickets.get((accepted.ticket as { ticket_id: string }).ticket_id)!
   expect(runtime.store.replyStatus(key('ack', trigger.id))).toBeUndefined()
   await runtime.idle()
-  expect(sections.get(`worker-${ticket.id}`)!.text({})).toContain(mandateInstructions({ strength: 'inferred' }))
-  expect(await runTool(`worker-${ticket.id}`, 'orchestrator_read', { resource: `ticket/${ticket.id}/assignment` })).toMatchObject({ text: expect.stringContaining('沉默地复现和修复 (silent-bugfix): Reproduce minimally first; accept silently.') })
-  await expect(runTool(runtime.masterId, 'orchestrator_reply', { ticket_id: ticket.id, purpose: 'result', text: 'x' })).rejects.toThrow('not ready')
-  await runTool(`worker-${ticket.id}`, 'orchestrator_report', { state: 'blocked', summary: 'needs a decision' })
-  await expect(runTool(runtime.masterId, 'orchestrator_reply', { ticket_id: ticket.id, purpose: 'result', text: 'x' })).rejects.toThrow('not ready')
+  expect(sections.get(`spa-worker-${ticket.id}`)!.text({})).toContain(mandateInstructions({ strength: 'inferred' }))
+  expect(await runTool(`spa-worker-${ticket.id}`, 'personal_agent_read', { resource: `ticket/${ticket.id}/assignment` })).toMatchObject({ text: expect.stringContaining('沉默地复现和修复 (silent-bugfix): Reproduce minimally first; accept silently.') })
+  await expect(runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'result', text: 'x' })).rejects.toThrow('not ready')
+  await runTool(`spa-worker-${ticket.id}`, 'personal_agent_report', { state: 'blocked', summary: 'needs a decision' })
+  await expect(runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'result', text: 'x' })).rejects.toThrow('not ready')
   // Nothing left for a human: the ticket closes instead of waiting, and the rule's closing sentence can still be delivered.
-  await runTool(`worker-${ticket.id}`, 'orchestrator_report', { state: 'dropped', summary: 'too complex; recorded in #123' })
+  await runTool(`spa-worker-${ticket.id}`, 'personal_agent_report', { state: 'dropped', summary: 'too complex; recorded in #123' })
   expect(runtime.store.tickets.get(ticket.id)).toMatchObject({ ended: expect.objectContaining({ by: 'executor', outcome: 'dropped' }) })
-  expect(await runTool(runtime.masterId, 'orchestrator_reply', { ticket_id: ticket.id, purpose: 'result', text: '看到这个问题我试了一下，能复现，修复需要较大改动，已记在 #123。' })).toEqual({ status: 'sent' })
+  expect(await runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'result', text: '看到这个问题我试了一下，能复现，修复需要较大改动，已记在 #123。' })).toEqual({ status: 'sent' })
 })
 
 it('records worker reports, binds the task PR, ends the ticket on ready without a PR, and relays attention', async () => {
   const { ticket, sessionId } = await acceptedTicket()
   deliveries.mockClear()
-  expect(await runTool(sessionId, 'orchestrator_report', { state: 'progress', summary: 'started' })).toMatchObject({ notification: 'internal_only' })
+  expect(await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'started' })).toMatchObject({ notification: 'internal_only' })
   expect(relays(runtime.masterId)).toEqual([])
-  await runTool(sessionId, 'orchestrator_report', { state: 'progress', summary: 'need a decision', human_action: 'Desktop too?' })
+  await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'need a decision', human_action: 'Desktop too?' })
   expect(runtime.store.tickets.get(ticket.id)!.attention).toMatchObject({ question: 'Desktop too?' })
   expect(relays(runtime.masterId).at(-1)).toMatchObject({ kind: 'worker_attention', ticket: { ticket_id: ticket.id, attention: { question: 'Desktop too?' } } })
-  await expect(runTool(runtime.masterId, 'orchestrator_reply', { ticket_id: ticket.id, purpose: 'attention', human_action: 'other', text: 'x' })).rejects.toThrow('current attention question')
-  expect(await runTool(runtime.masterId, 'orchestrator_reply', { ticket_id: ticket.id, purpose: 'attention', human_action: 'Desktop too?', text: '要不要也改桌面端？' })).toEqual({ status: 'sent' })
-  await runTool(sessionId, 'orchestrator_report', { state: 'progress', summary: 'pr open', pr_number: 42, human_action: null })
+  await expect(runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'attention', human_action: 'other', text: 'x' })).rejects.toThrow('current attention question')
+  expect(await runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'attention', human_action: 'Desktop too?', text: '要不要也改桌面端？' })).toEqual({ status: 'sent' })
+  await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'pr open', pr_number: 42, human_action: null })
   const bound = runtime.store.tickets.get(ticket.id)!
   expect(pullOf(bound)).toBe(42)
   expect(bound.attention).toBeUndefined()
   expect(runtime.store.threads.get('github:42')?.subscriptions).toEqual([ticket.id])
-  await runTool(sessionId, 'orchestrator_report', { state: 'ready', summary: 'reviewed' })
+  await runTool(sessionId, 'personal_agent_report', { state: 'ready', summary: 'reviewed' })
   expect(runtime.store.tickets.get(ticket.id)!.ended).toBeUndefined()
   expect(relays(runtime.masterId).at(-1)).toMatchObject({ kind: 'worker_report', state: 'ready' })
-  expect(await runTool(runtime.masterId, 'orchestrator_reply', { ticket_id: ticket.id, purpose: 'result', text: '已提交 PR #42，待 review。' })).toEqual({ status: 'sent' })
+  expect(await runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'result', text: '已提交 PR #42，待 review。' })).toEqual({ status: 'sent' })
   const mergedAt = new Date().toISOString()
   const merged = { number: 42, state: 'closed', merged: true, merged_at: mergedAt, html_url: 'https://github.com/acme/widgets/pull/42',
     user: { login: 'agent-bot' }, head: { sha: 'abc', ref: 'agent/x', repo: { full_name: 'acme/widgets' } } }
@@ -352,7 +352,7 @@ it('records worker reports, binds the task PR, ends the ticket on ready without 
 
 it('lists each ticket with the Threads it subscribes to, as their Sources describe them', async () => {
   const { sessionId, ticket } = await acceptedTicket()
-  await runTool(sessionId, 'orchestrator_report', { state: 'progress', summary: 'pr open', pr_number: 42 })
+  await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'pr open', pr_number: 42 })
   const line = () => ticketList(viewsOf(runtime), 'working', 0, 20).items.find(item => item.id === ticket.id)!
   runtime.store.threads.describe('github:42', { label: '#42 Fix the margin', facts: { number: { value: '#42' }, ci: { label: 'CI', value: { zh: '通过', en: 'passed' } } } })
   expect(line()).not.toHaveProperty('prNumber')
@@ -371,9 +371,9 @@ it('shows a message that carries JSON, with or without a label, as its label and
 
 it('ends a ticket on ready when no PR is bound', async () => {
   const { ticket, sessionId } = await acceptedTicket()
-  await runTool(sessionId, 'orchestrator_report', { state: 'ready', summary: 'done locally' })
+  await runTool(sessionId, 'personal_agent_report', { state: 'ready', summary: 'done locally' })
   expect(runtime.store.tickets.get(ticket.id)).toMatchObject({ ended: expect.objectContaining({ outcome: 'completed' }) })
-  await expect(runTool(sessionId, 'orchestrator_report', { state: 'progress', summary: 'late' })).rejects.toThrow('Ticket ended')
+  await expect(runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'late' })).rejects.toThrow('Ticket ended')
 })
 
 it('stops a ticket on a person\'s instruction for good, and resumes an ended one on any person\'s message on its thread', async () => {
@@ -395,7 +395,7 @@ it('stops a ticket on a person\'s instruction for good, and resumes an ended one
   await expect(route({ kind: 'attach', ticket_id: ticket.id, trigger_id: guest.id })).rejects.toThrow('stopped')
   // A ticket that ended by itself resumes on a person's message on its thread, whoever sent it.
   const other = await acceptedTicket(feishu('20', '@bot 修另一个'))
-  await runTool(other.sessionId, 'orchestrator_report', { state: 'dropped', summary: 'not reproduced' })
+  await runTool(other.sessionId, 'personal_agent_report', { state: 'dropped', summary: 'not reproduced' })
   expect(runtime.store.tickets.get(other.ticket.id)!.ended).toBeDefined()
   await receive(feishu('21', '我这边还能复现', { mentions: [], root_id: 'om_20', sender_id: 'ou_guest' }))
   await runtime.pump()
@@ -431,7 +431,7 @@ it('tells live workers about policy changes instead of revoking them and restart
   expect(relays(runtime.masterId).filter(item => item.kind === 'candidate' && item.trigger_id === pending.id)).toHaveLength(1)
 })
 
-it('attaches an event to an existing open task through orchestrator_route', async () => {
+it('attaches an event to an existing open task through personal_agent_route', async () => {
   const { ticket, sessionId } = await acceptedTicket()
   const other = feishu('9', '@bot 顺手把这里也改了', { root_id: undefined })
   await receive(other)
@@ -446,11 +446,11 @@ it('acknowledges a follow-up from the worker once and rejects events outside the
   const { sessionId, ticket } = await acceptedTicket()
   const followup = feishu('10', '还有这个', { mentions: [], root_id: 'om_1' })
   await receive(followup)
-  expect(await runTool(sessionId, 'orchestrator_ack', { trigger_id: followup.id, text: '收到，也处理这个。' })).toMatchObject({ acknowledgement: 'sent', reused: false })
-  expect(await runTool(sessionId, 'orchestrator_ack', { trigger_id: followup.id, text: '不同措辞' })).toMatchObject({ reused: true })
+  expect(await runTool(sessionId, 'personal_agent_ack', { trigger_id: followup.id, text: '收到，也处理这个。' })).toMatchObject({ acknowledgement: 'sent', reused: false })
+  expect(await runTool(sessionId, 'personal_agent_ack', { trigger_id: followup.id, text: '不同措辞' })).toMatchObject({ reused: true })
   const stranger = feishu('11', '无关', { mentions: [], root_id: undefined })
   await receive(stranger)
-  await expect(runTool(sessionId, 'orchestrator_ack', { trigger_id: stranger.id, text: 'x' })).rejects.toThrow('does not belong')
+  await expect(runTool(sessionId, 'personal_agent_ack', { trigger_id: stranger.id, text: 'x' })).rejects.toThrow('does not belong')
   expect(runtime.store.tickets.get(ticket.id)!.inputs.map(input => input.kind)).toEqual(['trigger'])
 })
 
@@ -465,7 +465,7 @@ it('treats GitHub comments through the same gate: mentions by members are explic
   const ticket = runtime.store.tickets.get((result.ticket as { ticket_id: string }).ticket_id)!
   expect(ticket.channels).toEqual([expect.objectContaining({ source: 'github', address: expect.objectContaining({ number: '7' }) })])
   // The PR's head is a variable of the ticket's execution environment; a prepare command may fetch it.
-  expect(Object.fromEntries(runtime.ticketEnvironment(ticket).map(variable => [variable.key, variable.value]))).toMatchObject({ DSH_SUPERAGENT_GITHUB_NUMBER: '7', DSH_SUPERAGENT_GITHUB_PR_HEAD: 'refs/pull/7/head', DSH_SUPERAGENT_FEISHU_CHAT: '' })
+  expect(Object.fromEntries(runtime.ticketEnvironment(ticket).map(variable => [variable.key, variable.value]))).toMatchObject({ DSH_SUPER_PERSONAL_AGENT_GITHUB_NUMBER: '7', DSH_SUPER_PERSONAL_AGENT_GITHUB_PR_HEAD: 'refs/pull/7/head', DSH_SUPER_PERSONAL_AGENT_FEISHU_CHAT: '' })
   const ci = { ...stranger, id: 'ci-1', human: false, text: 'GitHub PR #7 CI: failing', meta: { ci: true } }
   await receive(ci)
   expect(runtime.store.tickets.get(ticket.id)!.inputs).toEqual([expect.objectContaining({ triggerId: 'ci-1' })])
@@ -514,7 +514,7 @@ it('keeps Issue Triggers stored before Issues arrived through notifications read
   runtime.store.triggers.save(stored)
   runtime.store.threads.save({ key: 'github:5', ref: { source: 'github', id: '5' }, createdAt: stored.at, subscriptions: [], correlated: [],
     pending: [], meta: {} })
-  const read = await runTool(runtime.masterId, 'orchestrator_read', { resource: `trigger/${stored.id}` })
+  const read = await runTool(runtime.masterId, 'personal_agent_read', { resource: `trigger/${stored.id}` })
   expect(read).toMatchObject({ trigger_id: stored.id, source: 'github-issue', text: 'Bug\n\ndetails' })
   const thread = (await api('GET', 'threads/github:5')).body
   expect(thread).toMatchObject({ timeline: [expect.objectContaining({ id: stored.id, source: 'github-issue' })] })
@@ -532,7 +532,7 @@ it('relaunches running assignments after a restart with a recovery note', async 
   expect(runtime.store.tickets.get(ticket.id)!.assignments[1]).toMatchObject({ state: 'running' })
   // The new Assignment's message says only what is new, as the Session holds the first; the launch's own pass delivers the
   // recovery note as it reads.
-  expect(relays(`worker-${ticket.id}`)).toEqual([{ ticket_id: ticket.id, assignment: 2 }, { text: expect.stringContaining('host restarted') }])
+  expect(relays(`spa-worker-${ticket.id}`)).toEqual([{ ticket_id: ticket.id, assignment: 2 }, { text: expect.stringContaining('host restarted') }])
 })
 
 it('projects read models for the management page and removes thread subscriptions from the Web surface', async () => {
@@ -540,7 +540,7 @@ it('projects read models for the management page and removes thread subscription
   const threadKeyValue = `feishu:${CHAT}:om_1`
   expect(overviewOf(runtime)).toMatchObject({ person: [], executor: { queued: 0, maxWorkers: 3, idle: 0 }, flow: { received: 0, accepted: 0, judged: 0 } })
   expect(ticketList(viewsOf(runtime), 'working', 0, 20).items).toEqual([expect.objectContaining({ id: ticket.id, stage: 'working' })])
-  expect(ticketList(viewsOf(runtime), 'open', 0, 20).items).toEqual([expect.objectContaining({ id: ticket.id, stage: 'working', sessionId: `worker-${ticket.id}`, strength: 'explicit' })])
+  expect(ticketList(viewsOf(runtime), 'open', 0, 20).items).toEqual([expect.objectContaining({ id: ticket.id, stage: 'working', sessionId: `spa-worker-${ticket.id}`, strength: 'explicit' })])
   expect(ticketDetail(viewsOf(runtime), ticket.id)).toMatchObject({ mandate: { strength: 'explicit' }, decision: { kind: 'accept' }, threads: [expect.objectContaining({ key: threadKeyValue, title: '@bot 修一下回归' })], channels: [expect.objectContaining({ source: 'feishu' })] })
   const follow = feishu('20', '补充：日志在这里', { mentions: [], root_id: 'om_1', sender_id: 'ou_guest' })
   await receive(follow)
@@ -555,7 +555,7 @@ it('projects read models for the management page and removes thread subscription
   runtime.store.threads.describe(thread.key, { label: 'Named by its source' })
   expect(threadList(viewsOf(runtime), 'all', 0, 20).items[0]).toMatchObject({ title: 'Named by its source' })
   expect((await api('GET', 'state')).body).not.toHaveProperty('tickets')
-  // scripts/dsh-superagent and agents read health from GET state (docs/006, Management API); settings and their revisions have their own route.
+  // scripts/dsh-super-personal-agent and agents read health from GET state (docs/006, Management API); settings and their revisions have their own route.
   expect((await api('GET', 'state')).body).toMatchObject({ health: { runtime: { state: expect.any(String) } }, paused: false, load: { maxWorkers: 3 } })
   expect((await api('GET', 'settings')).body).toMatchObject({ sources: expect.arrayContaining([expect.objectContaining({ id: 'github',
     revision: expect.any(Number), value: expect.objectContaining({ enabled: true }) })]), blocks: { policy: { revision: expect.any(Number) } } })
@@ -572,15 +572,15 @@ it('lets an Executor drop only its own ticket from a thread it finds unrelated, 
   subscribe(ticket.id, attached); subscribe(other.ticket.id, attached)
   const inject = agents.get(runtime.masterId)!.inject
   vi.mocked(inject).mockClear()
-  expect(await runTool(sessionId, 'orchestrator_thread_unrelated', { thread: 'feishu:oc_side:om_side', reason: 'It discusses the login page, not this regression.' })).toEqual({ removed: true, thread: 'feishu:oc_side:om_side' })
+  expect(await runTool(sessionId, 'personal_agent_thread_unrelated', { thread: 'feishu:oc_side:om_side', reason: 'It discusses the login page, not this regression.' })).toEqual({ removed: true, thread: 'feishu:oc_side:om_side' })
   expect(runtime.store.threads.get('feishu:oc_side:om_side')!.subscriptions).toEqual([other.ticket.id])
   await vi.waitFor(() => expect(JSON.stringify(vi.mocked(inject).mock.calls)).toContain('thread_unrelated'))
-  await expect(runTool(sessionId, 'orchestrator_thread_unrelated', { thread: 'feishu:oc_side:om_side', reason: 'again' })).rejects.toThrow('does not follow that thread')
-  await expect(runTool(sessionId, 'orchestrator_thread_unrelated', { thread: threadKey(trigger.threads[0]!), reason: 'no' })).rejects.toThrow('the ticket started on')
+  await expect(runTool(sessionId, 'personal_agent_thread_unrelated', { thread: 'feishu:oc_side:om_side', reason: 'again' })).rejects.toThrow('does not follow that thread')
+  await expect(runTool(sessionId, 'personal_agent_thread_unrelated', { thread: threadKey(trigger.threads[0]!), reason: 'no' })).rejects.toThrow('the ticket started on')
   runtime.engine.bindThread(ticket.id, { source: 'github', id: '7' }, true)
-  await expect(runTool(sessionId, 'orchestrator_thread_unrelated', { thread: 'github:7', reason: 'no' })).rejects.toThrow('pull request')
+  await expect(runTool(sessionId, 'personal_agent_thread_unrelated', { thread: 'github:7', reason: 'no' })).rejects.toThrow('pull request')
   // A worker drops only its own ticket: the other ticket's thread is not one this ticket follows.
-  await expect(runTool(sessionId, 'orchestrator_thread_unrelated', { thread: threadKey(other.trigger.threads[0]!), reason: 'no' })).rejects.toThrow('does not follow that thread')
+  await expect(runTool(sessionId, 'personal_agent_thread_unrelated', { thread: threadKey(other.trigger.threads[0]!), reason: 'no' })).rejects.toThrow('does not follow that thread')
 })
 
 it('reports a Source that was switched on as starting until its next pass reports its health', async () => {
@@ -616,14 +616,14 @@ it('records each settings save with its policy change and the open tickets told 
   ])
 })
 
-it('refuses an accept through orchestrator_route for inferred candidates so proactive work always goes through Eval', async () => {
+it('refuses an accept through personal_agent_route for inferred candidates so proactive work always goes through Eval', async () => {
   const observed = feishu('21', '这个文案好奇怪，改成“浏览网页”吧', { mentions: [] })
   await receive(observed)
   await expect(route({ kind: 'accept', trigger_id: observed.id, title: 'x', worktree_name: 'copy-fix', acknowledgement: 'x' })).rejects.toThrow('explicit requests from allowed senders')
   expect(runtime.store.tickets.list()).toEqual([])
 })
 
-it('syncs a Source\'s list once its plugin loads after dsh-superagent started', async () => {
+it('syncs a Source\'s list once its plugin loads after dsh-super-personal-agent started', async () => {
   const next = await restart()
   await next.ready
   vi.mocked(Commands.prototype.lark).mockResolvedValue({ users: [{ member_id: MEMBER, name: 'Alice' }], has_more: false })
@@ -671,10 +671,10 @@ it('retries only a failed, blocked or undelivered ticket with a new assignment, 
   const { ticket } = await acceptedTicket()
   expect(() => runtime.engine.retryTicket(ticket.id)).toThrow(new UserError('notRetryable'))
   const current = runtime.store.tickets.get(ticket.id)!
-  await runTool(`worker-${ticket.id}`, 'orchestrator_report', { state: 'failed', summary: 'LlmError: offline' })
+  await runTool(`spa-worker-${ticket.id}`, 'personal_agent_report', { state: 'failed', summary: 'LlmError: offline' })
   expect(waitsForPerson(runtime.store.tickets.get(ticket.id)!)).toBe(true)
   // A person may continue a failed worker in its Session; only an ended Ticket locks its tools.
-  expect(guards.get(`worker-${ticket.id}`)!()).toBeUndefined()
+  expect(guards.get(`spa-worker-${ticket.id}`)!()).toBeUndefined()
   const retried = await runtime.engine.retryTicket(ticket.id)
   await runtime.idle()
   expect(waitsForPerson(runtime.store.tickets.get(ticket.id)!)).toBe(false)
@@ -682,13 +682,13 @@ it('retries only a failed, blocked or undelivered ticket with a new assignment, 
   expect(retried.assignments.length).toBeGreaterThan(current.assignments.length)
   expect(retried.assignments.at(-2)!.endedReason).toBe('retried')
   // The worker's Session holds the assignment, so the new one says only that a person retried it.
-  expect(relays(`worker-${ticket.id}`).at(-1)).toEqual({ ticket_id: ticket.id, assignment: 2, note: expect.stringContaining('A person retried this ticket') })
+  expect(relays(`spa-worker-${ticket.id}`).at(-1)).toEqual({ ticket_id: ticket.id, assignment: 2, note: expect.stringContaining('A person retried this ticket') })
   // A Session someone deleted gets the whole first message again with the next Assignment.
   runtime.store.atomic(() => { runtime.engine.report(ticket.id, { state: 'failed', summary: 'LlmError: offline' }) })
-  agents.delete(`worker-${ticket.id}`)
+  agents.delete(`spa-worker-${ticket.id}`)
   runtime.engine.retryTicket(ticket.id)
   await runtime.idle()
-  expect(relays(`worker-${ticket.id}`).at(-1)).toMatchObject({ ticket_id: ticket.id, title: '修复回归', trigger: expect.objectContaining({ text: '@bot 修一下回归' }) })
+  expect(relays(`spa-worker-${ticket.id}`).at(-1)).toMatchObject({ ticket_id: ticket.id, title: '修复回归', trigger: expect.objectContaining({ text: '@bot 修一下回归' }) })
   expect(search(viewsOf(runtime), '修复', new TextCache(0)).tickets).toEqual([expect.objectContaining({ id: ticket.id })])
   expect(decisionList(viewsOf(runtime), [], 0, 10, '2999-01-01T00:00:00Z').items).toEqual([])
   const accepted = runtime.store.read.recentDecisions(0, 1)[0]!
@@ -715,9 +715,9 @@ it('retries only a failed, blocked or undelivered ticket with a new assignment, 
 })
 
 it('links Channels and Threads for people, finds tickets by a bare PR number, and keeps ended subscriptions out of the default Thread filter', async () => {
-  const { ticket } = await acceptedTicket(feishu('1', '@_user_1 修一下回归', { mentions: [{ id: 'ou_bot', key: '@_user_1', name: 'dsh-superagent' }] }))
+  const { ticket } = await acceptedTicket(feishu('1', '@_user_1 修一下回归', { mentions: [{ id: 'ou_bot', key: '@_user_1', name: 'dsh-super-personal-agent' }] }))
   const home = `feishu:${CHAT}:om_1`
-  expect(runtime.store.triggers.get(key('feishu', 'om_1'))!.text).toBe('@dsh-superagent 修一下回归')
+  expect(runtime.store.triggers.get(key('feishu', 'om_1'))!.text).toBe('@dsh-super-personal-agent 修一下回归')
   const chatLink = `https://applink.feishu.cn/client/chat/open?openChatId=${CHAT}`
   expect(ticketDetail(viewsOf(runtime), ticket.id)!.channels).toEqual([expect.objectContaining({ source: 'feishu', url: chatLink })])
   expect(threadDetail(viewsOf(runtime), home, undefined, 10)!.url).toBe(chatLink)
@@ -756,15 +756,15 @@ it('asks a question where the human message that raised it was written, not in t
   subscribe(ticket.id, { source: 'github', id: '42' })
   const review = commentTrigger({ id: 5, body: 'Can you add the reason?', user: { login: 'alice' }, html_url: 'https://github.com/acme/widgets/pull/42#pullrequestreview-5', created_at: '2026-09-09T00:02:00Z' }, { number: 42, isPr: true }, 'review', 'agent-bot')
   await receive(review)
-  await expect(runTool(sessionId, 'orchestrator_report', { state: 'progress', summary: 'x', question_for_trigger_id: review.id })).rejects.toThrow('needs the question it raised')
-  await expect(runTool(sessionId, 'orchestrator_report', { state: 'progress', summary: 'x', human_action: 'Keep it?', question_for_trigger_id: 'unknown' })).rejects.toThrow('the person\'s message that raised it')
-  await runTool(sessionId, 'orchestrator_report', { state: 'progress', summary: 'no stop reason is recorded', human_action: 'Keep the PR and record the reason in a follow-up?', question_for_trigger_id: review.id })
+  await expect(runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'x', question_for_trigger_id: review.id })).rejects.toThrow('needs the question it raised')
+  await expect(runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'x', human_action: 'Keep it?', question_for_trigger_id: 'unknown' })).rejects.toThrow('the person\'s message that raised it')
+  await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'no stop reason is recorded', human_action: 'Keep the PR and record the reason in a follow-up?', question_for_trigger_id: review.id })
   const queued = vi.spyOn(runtime.outbox, 'send')
-  await runTool(runtime.masterId, 'orchestrator_reply', { ticket_id: ticket.id, purpose: 'attention', human_action: 'Keep the PR and record the reason in a follow-up?', text: 'Keep the PR and record the reason in a follow-up?' })
+  await runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'attention', human_action: 'Keep the PR and record the reason in a follow-up?', text: 'Keep the PR and record the reason in a follow-up?' })
   expect(queued.mock.calls.at(-1)![0].channel).toEqual(review.channel)
   // A question about the ticket as a whole still goes to where the ticket started.
-  await runTool(sessionId, 'orchestrator_report', { state: 'progress', summary: 'y', human_action: 'Desktop too?' })
-  await runTool(runtime.masterId, 'orchestrator_reply', { ticket_id: ticket.id, purpose: 'attention', human_action: 'Desktop too?', text: '要不要也改桌面端？' })
+  await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'y', human_action: 'Desktop too?' })
+  await runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'attention', human_action: 'Desktop too?', text: '要不要也改桌面端？' })
   expect(queued.mock.calls.at(-1)![0].channel).toEqual(trigger.channel)
 })
 
@@ -783,68 +783,59 @@ it('keeps pages of Source reads, prompt previews and Feishu message links in mem
   await receive(message)
   const link = 'https://applink.feishu.cn/client/message/link/open?token=t30'
   vi.mocked(Commands.prototype.lark).mockResolvedValue({ messages: [{ message_id: 'om_30', chat_id: CHAT, message_app_link: link }] })
-  expect(await runTool(runtime.masterId, 'orchestrator_read', { resource: `trigger/${message.id}` })).toMatchObject({ source_url: link })
-  // An AppLink is found by the links read since dsh-superagent started.
+  expect(await runTool(runtime.masterId, 'personal_agent_read', { resource: `trigger/${message.id}` })).toMatchObject({ source_url: link })
+  // An AppLink is found by the links read since dsh-super-personal-agent started.
   expect((await api('GET', `search?q=${encodeURIComponent(link)}`)).body).toMatchObject({ items: [expect.objectContaining({ id: message.id })] })
   const config = runtime.prompts.current().config
-  const { previews } = await runTool(runtime.masterId, 'orchestrator_prompts_save', { config, preview: true }) as { previews: { read: string }[] }
-  expect(await runTool(runtime.masterId, 'orchestrator_read', { resource: previews[0]!.read, offset: 4000 })).toMatchObject({ offset: 4000 })
+  const { previews } = await runTool(runtime.masterId, 'personal_agent_prompts_save', { config, preview: true }) as { previews: { read: string }[] }
+  expect(await runTool(runtime.masterId, 'personal_agent_read', { resource: previews[0]!.read, offset: 4000 })).toMatchObject({ offset: 4000 })
   expect(runtime.store.keys('').filter(name => /-read:|source-link:|prompt-preview\//.test(name))).toEqual([])
 })
 
 it('reads resources recorded under the pre-vocabulary names', async () => {
   const { ticket, trigger, sessionId } = await acceptedTicket()
-  expect(await runTool(sessionId, 'orchestrator_read', { resource: `event/${trigger.id}` })).toMatchObject({ trigger_id: trigger.id })
-  expect(await runTool(sessionId, 'orchestrator_read', { resource: `task/${ticket.id}/assignment` })).toMatchObject({ resource: `ticket/${ticket.id}/assignment` })
+  expect(await runTool(sessionId, 'personal_agent_read', { resource: `event/${trigger.id}` })).toMatchObject({ trigger_id: trigger.id })
+  expect(await runTool(sessionId, 'personal_agent_read', { resource: `task/${ticket.id}/assignment` })).toMatchObject({ resource: `ticket/${ticket.id}/assignment` })
 })
 
 it('leaves waiting and blocked assignments alone after a restart and keeps blocked workers paused', async () => {
   const { ticket, sessionId } = await acceptedTicket()
-  await runTool(sessionId, 'orchestrator_report', { state: 'blocked', summary: 'need credentials' })
+  await runTool(sessionId, 'personal_agent_report', { state: 'blocked', summary: 'need credentials' })
   runtime.executor.resume()
   expect(runtime.store.tickets.get(ticket.id)!.assignments).toHaveLength(1)
   expect(waitsForPerson(runtime.store.tickets.get(ticket.id)!)).toBe(true)
   const other = await acceptedTicket(feishu('12', '@bot 另一个', { root_id: undefined }))
-  await runTool(other.sessionId, 'orchestrator_report', { state: 'progress', summary: 'midway' })
+  await runTool(other.sessionId, 'personal_agent_report', { state: 'progress', summary: 'midway' })
   runtime.executor.resume()
   expect(runtime.store.tickets.get(other.ticket.id)!.assignments.map(item => item.state)).toEqual(['ended', 'pending'])
 })
 
-it('waits for setup without the agent\'s GitHub CLI: the panel works, and nothing is polled, assessed or dispatched', async () => {
+it('keeps local execution ready when an enabled GitHub Source has no account', async () => {
   const { ticket, sessionId } = await acceptedTicket()
-  await runTool(sessionId, 'orchestrator_report', { state: 'failed', summary: 'crashed' })
-  expect(() => runtime.checkSetup()).toThrow('Setup is complete')
-  controller.create.mockClear(); deliveries.mockClear()
+  await runTool(sessionId, 'personal_agent_report', { state: 'failed', summary: 'crashed' })
   const next = await restart({}, { github: { cli: '' } })
   await next.ready
-  expect(next.configured()).toBe(false)
-  expect(next.setupProblem).toEqual({ place: 'github', code: 'agentCliUnset', values: {}, detail: 'The agent GitHub CLI is not set.' })
-  expect(next.health.runtime).toMatchObject({ state: 'paused', code: 'setupPending' })
-  expect(() => next.deployment).toThrow('dsh-superagent is waiting for setup: The agent GitHub CLI is not set.')
-  expect((await api('GET', 'state')).body).toMatchObject({ setup: { problem: { place: 'github' }, accounts: null, machine: { stateDir: directory } } })
-  expect(overviewOf(next).problems[0]).toEqual({ kind: 'setup', ...next.setupProblem })
-  await receive(feishu('30', '@bot 修一下'), next)
-  // A retry waits for setup instead of launching a worker that cannot run, and no report reaches the orchestrator.
+  expect(next.configured()).toBe(true)
+  expect(next.setupProblem).toBeUndefined()
+  expect(next.githubProblem).toMatchObject({ place: 'github', code: 'agentCliUnset' })
+  expect(next.health.runtime).toMatchObject({ state: 'ready' })
+  expect(next.deployment.github).toBeUndefined()
+  expect(next.context(githubKind).configured()).toBe(true)
+  expect(next.context(githubKind).problem?.code).toBe('agentCliUnset')
+  expect(next.context(feishuKind).configured()).toBe(true)
+  expect((await api('GET', 'state')).body).toMatchObject({ setup: { problem: null, githubProblem: { code: 'agentCliUnset' } } })
   await next.engine.retryTicket(ticket.id)
-  expect(next.store.tickets.get(ticket.id)!.assignments.map(item => item.state)).toEqual(['ended', 'pending'])
-  expect(controller.create).not.toHaveBeenCalled()
-  expect(deliveries).not.toHaveBeenCalled()
-  // A save that changes nothing records nothing; any other save runs setup again, since it may be the fix, and so does a
-  // check after a fix outside dsh-superagent.
-  const revision = next.store.get<number>('settings-revision')
-  expect(await next.settings.save('policy', next.store.settings().policy, next.store.blockRevision('policy'), 'panel')).toMatchObject({ saved: true, restarting: false })
-  expect(next.store.get<number>('settings-revision')).toBe(revision)
-  expect(await next.settings.save('policy', { ...next.store.settings().policy, rules: [] }, next.store.blockRevision('policy'), 'panel')).toMatchObject({ saved: true, restarting: true })
-  await vi.waitFor(() => expect(restarts).toHaveBeenCalledTimes(1))
+  await next.idle()
+  expect(next.store.tickets.get(ticket.id)!.assignments.at(-1)?.state).toBe('running')
   next.checkSetup()
-  await vi.waitFor(() => expect(restarts).toHaveBeenCalledTimes(2))
+  await vi.waitFor(() => expect(restarts).toHaveBeenCalledTimes(1))
 })
 
 it('reports each setup problem where the operator fixes it, and checks the agent CLI the way worker shells run it', async () => {
   const needs = async (place: string, code: string, values: Record<string, string>, accounts: Accounts = {}) => {
     const next = await restart({}, accounts)
     await next.ready
-    expect(next.setupProblem).toMatchObject({ place, code, values })
+    expect(place === 'github' ? next.githubProblem : next.setupProblem).toMatchObject({ place, code, values })
   }
   answers[`${AGENT()} api repos/acme/widgets --jq {name: .full_name, push: .permissions.push}`] = '{"name":"acme/widgets","push":false}\n'
   await needs('github', 'repositoryReadOnly', { account: 'agent-bot', repository: 'acme/widgets' })
@@ -853,11 +844,11 @@ it('reports each setup problem where the operator fixes it, and checks the agent
   const check = subprocess.spawn.mock.calls.map(([spec]) => spec.argv).find(argv => argv.includes(AGENT()))!
   expect(check[0]).toBe('env')
   expect(check[1]!.startsWith('PATH=')).toBe(true)
-  expect(check[1]!.slice('PATH='.length).split(':')).not.toContain(join(directory, 'worker-bin'))
+  expect(check[1]!.slice('PATH='.length).split(':')).not.toContain(join(directory, 'spa-worker-bin'))
   const valid = { ...answers }
   // git older than 2.32 ignores GIT_CONFIG_GLOBAL and reads the operator's configuration.
   answers = { ...valid, [HELPERS]: 'file:/home/me/.gitconfig\0!gh auth git-credential\0' }
-  await needs('deployment', 'gitTooOld', {})
+  await needs('github', 'gitTooOld', {})
   await needs('github', 'repositoryUnset', {}, { github: { repository: '' } })
   // A broken Feishu bot leaves Feishu out and says why; GitHub work goes on.
   answers = { ...valid, [`${BOT()} config strict-mode`]: 'strict-mode: off (source: profile)' }
@@ -871,8 +862,8 @@ it('reports each setup problem where the operator fixes it, and checks the agent
 it('reports a failure to write the agent environment as environmentFailed and leaves this process\'s environment as it was', async () => {
   await runtime.stop()
   // The shim directory cannot be made: a file has its name.
-  rmSync(join(directory, 'worker-bin'), { recursive: true, force: true })
-  writeFileSync(join(directory, 'worker-bin'), '')
+  rmSync(join(directory, 'spa-worker-bin'), { recursive: true, force: true })
+  writeFileSync(join(directory, 'spa-worker-bin'), '')
   const environment = { ...process.env }
   const next = await restart()
   await next.ready
@@ -935,7 +926,7 @@ it('checks a changed account CLI before saving it, restarts after the save, and 
 
 it('lists Tickets that wait on a person with where to answer them, as the overview does', async () => {
   const { ticket, sessionId } = await acceptedTicket()
-  await runTool(sessionId, 'orchestrator_report', { state: 'progress', summary: 'need a decision', human_action: '按钮用哪种颜色？' })
+  await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'need a decision', human_action: '按钮用哪种颜色？' })
   expect(ticketList(viewsOf(runtime), 'person', 0, 20).items).toEqual([expect.objectContaining({ id: ticket.id, stage: 'person', reply: expect.objectContaining({ source: 'feishu' }) })])
 })
 
@@ -950,7 +941,7 @@ it('pauses and resumes processing as its own action, a setting outside every blo
   await runtime.settings.save('executor', { ...draft, maxWorkers: 5 }, revision, 'panel')
   expect(runtime.store.settings()).toMatchObject({ paused: true, executor: { maxWorkers: 5 } })
   // The orchestrator pauses and resumes the same way, through the settings tool's pause block.
-  await runTool(runtime.masterId, 'orchestrator_settings_save', { block: 'pause', value: { paused: false }, revision: 0 })
+  await runTool(runtime.masterId, 'personal_agent_settings_save', { block: 'pause', value: { paused: false }, revision: 0 })
   expect(runtime.store.settings().paused).toBe(false)
 })
 
@@ -965,13 +956,15 @@ it('runs setup again while the Feishu bot check failed, and restores the process
   answers[HELPERS] = 'file:/home/me/.gitconfig\0!gh auth git-credential\0'
   const broken = await restart()
   await broken.ready
-  expect(broken.setupProblem).toMatchObject({ place: 'deployment', code: 'gitTooOld' })
+  expect(broken.githubProblem).toMatchObject({ place: 'github', code: 'gitTooOld' })
+  expect(broken.configured()).toBe(true)
   expect(process.env.GIT_CONFIG_GLOBAL).toBeUndefined()
-  expect(process.env.PATH?.split(':')).not.toContain(join(directory, 'worker-bin'))
+  expect(process.env.PATH?.split(':')).not.toContain(join(directory, 'spa-worker-bin'))
 })
 
-it('writes worker shims and the agent environment from the configuration only, and restores the environment on stop', async () => {
-  const bin = join(directory, 'worker-bin')
+it('writes worker shims without changing the Host process environment', async () => {
+  const environment = { ...process.env }
+  const bin = join(directory, 'spa-worker-bin')
   expect(readdirSync(bin).sort()).toEqual(['gh', 'lark-cli'])
   expect(readFileSync(join(bin, 'lark-cli'), 'utf8')).toContain(`exec '${BOT()}'`)
   runtime.store.saveSettings({ ...runtime.store.settings(), executor: { ...runtime.store.settings().executor, blockedCommands: ['personal-gh'] } })
@@ -982,26 +975,25 @@ it('writes worker shims and the agent environment from the configuration only, a
   expect(readFileSync(join(bin, 'lark-cli'), 'utf8')).toContain('lark-cli is unavailable: this installation has no Feishu bot.')
   expect(readFileSync(join(bin, 'gh'), 'utf8')).toContain(`exec '${AGENT()}'`)
   expect(readFileSync(workerGitConfig(directory), 'utf8')).toContain(`[credential "https://github.com"]\n\thelper = "${credentialHelper(AGENT())}"`)
-  expect(process.env).toMatchObject({ GIT_CONFIG_GLOBAL: workerGitConfig(directory), GIT_CONFIG_NOSYSTEM: '1' })
-  expect(process.env.GIT_AUTHOR_NAME).toBeUndefined()
-  expect(process.env.PATH?.split(':')[0]).toBe(bin)
+  expect(next.execution.environment()).toMatchObject({ GIT_CONFIG_GLOBAL: workerGitConfig(directory), GIT_CONFIG_NOSYSTEM: '1' })
+  expect(next.execution.environment().PATH?.split(':')[0]).toBe(bin)
+  expect(process.env).toEqual(environment)
   await next.stop()
-  expect(process.env.GIT_CONFIG_GLOBAL).toBeUndefined()
-  expect(process.env.PATH?.split(':')).not.toContain(bin)
+  expect(process.env).toEqual(environment)
 })
 
-it('waits for setup when the shim directory holds a file dsh-superagent did not write, and leaves the file alone', async () => {
-  writeFileSync(join(directory, 'worker-bin', 'my-script'), '#!/bin/sh\n')
+it('waits for setup when the shim directory holds a file dsh-super-personal-agent did not write, and leaves the file alone', async () => {
+  writeFileSync(join(directory, 'spa-worker-bin', 'my-script'), '#!/bin/sh\n')
   const next = await restart()
   await next.ready
   expect(next.configured()).toBe(false)
-  expect(next.setupProblem).toMatchObject({ place: 'deployment', code: 'foreignFile', values: { file: join(directory, 'worker-bin', 'my-script') } })
-  expect(readFileSync(join(directory, 'worker-bin', 'my-script'), 'utf8')).toBe('#!/bin/sh\n')
+  expect(next.setupProblem).toMatchObject({ place: 'deployment', code: 'foreignFile', values: { file: join(directory, 'spa-worker-bin', 'my-script') } })
+  expect(readFileSync(join(directory, 'spa-worker-bin', 'my-script'), 'utf8')).toBe('#!/bin/sh\n')
   await next.stop()
 })
 
 it('rewrites the blocked-command shims when the Executor settings change them, without a restart', async () => {
-  const bin = join(directory, 'worker-bin')
+  const bin = join(directory, 'spa-worker-bin')
   const save = (blockedCommands: string[]) => runtime.settings.save('executor', { ...runtime.store.settings().executor, blockedCommands }, runtime.store.blockRevision('executor'), 'panel')
   expect(await save(['personal-gh'])).toMatchObject({ saved: true, restarting: false })
   expect(readdirSync(bin).sort()).toEqual(['gh', 'lark-cli', 'personal-gh'])
@@ -1016,15 +1008,15 @@ it('tells both roles the execution environment through a generated prompt sectio
   const preview = runtime.prompts.preview(runtime.prompts.current().config)
   const section = preview.parts.worker.at(-1)!
   expect(section.name).toBe('runtime/environment')
-  for (const line of ['- DSH_SUPERAGENT_GITHUB_REPOSITORY = "acme/widgets"', '- DSH_SUPERAGENT_GITHUB_ACCOUNT = "agent-bot"', '- DSH_SUPERAGENT_GITHUB_COMMIT_EMAIL = "7+agent-bot@users.noreply.github.com"']) expect(section.text).toContain(line)
+  for (const line of ['- DSH_SUPER_PERSONAL_AGENT_GITHUB_REPOSITORY = "acme/widgets"', '- DSH_SUPER_PERSONAL_AGENT_GITHUB_ACCOUNT = "agent-bot"', '- DSH_SUPER_PERSONAL_AGENT_GITHUB_COMMIT_EMAIL = "7+agent-bot@users.noreply.github.com"']) expect(section.text).toContain(line)
   expect(section.text).not.toContain('MERGE_ACCOUNT')
   // Outside a ticket there is no ticket directory.
-  expect(section.text).not.toContain('DSH_SUPERAGENT_DIR')
+  expect(section.text).not.toContain('DSH_SUPER_PERSONAL_AGENT_DIR')
   // The main Session's Policy section follows it.
   expect(preview.orchestrator).toContain(`${section.text}\n\n## Policy`)
   const { ticket, sessionId } = await acceptedTicket()
-  expect(sections.get(sessionId)!.text({})).toContain(`- DSH_SUPERAGENT_DIR = ${JSON.stringify(ticket.execution!.directory)}`)
-  expect(sections.get(runtime.masterId)!.text({})).not.toContain('DSH_SUPERAGENT_DIR')
+  expect(sections.get(sessionId)!.text({})).toContain(`- DSH_SUPER_PERSONAL_AGENT_DIR = ${JSON.stringify(ticket.execution!.directory)}`)
+  expect(sections.get(runtime.masterId)!.text({})).not.toContain('DSH_SUPER_PERSONAL_AGENT_DIR')
   const next = await restart({}, { feishu: null })
   await next.ready
   expect(Object.keys(next.prompts.preview(next.prompts.current().config).skills)).not.toContain('feishu')
@@ -1035,7 +1027,7 @@ it('lets a worker read the prompt version it works under and the ones it worked 
   const save = () => { const { config, revision } = runtime.prompts.current(); return runtime.prompts.save({ ...config, delivery: `${config.delivery}.` }, revision, 'panel').revision }
   // A model request reads the system prompt, which binds the Session to the version current then.
   const request = () => sections.get(sessionId)!.text({ signal: new AbortController().signal })
-  const read = (resource: string) => runTool(sessionId, 'orchestrator_read', { resource })
+  const read = (resource: string) => runTool(sessionId, 'personal_agent_read', { resource })
   const first = save(), second = save()
   request()
   await expect(read(`prompts/${first}`)).rejects.toThrow('inaccessible prompt version')
@@ -1066,7 +1058,7 @@ it('passes team text with template braces to every Session literally, without re
 
 it('leaves auto-merge to the delivery requirements, with the agent\'s own gh and the line threshold', async () => {
   const { ticket } = await acceptedTicket()
-  expect(runtime.ticketEnvironment(ticket).map(variable => variable.key)).not.toContain('DSH_SUPERAGENT_GITHUB_MERGE_ACCOUNT')
+  expect(runtime.ticketEnvironment(ticket).map(variable => variable.key)).not.toContain('DSH_SUPER_PERSONAL_AGENT_GITHUB_MERGE_ACCOUNT')
   expect(ticket.mandate).not.toHaveProperty('autoMergeLineLimit')
   const delivery = runtime.prompts.current().config.delivery
   expect(delivery).toContain('it changes fewer than 200 lines (additions plus deletions);')
@@ -1079,12 +1071,12 @@ it('leaves auto-merge to the delivery requirements, with the agent\'s own gh and
 it('runs the prepare command once for a new ticket, under the execution root with the ticket\'s environment, and fails the ticket with its output', async () => {
   const prepare = (command: string) => runtime.store.saveSettings({ ...runtime.store.settings(), executor: { ...runtime.store.settings().executor, prepare: command } })
   const runs = () => subprocess.spawn.mock.calls.map(([spec]) => spec as { argv: string[]; cwd: string; env?: Record<string, string> }).filter(spec => spec.argv[0] === 'sh')
-  prepare('git -C /srv/widgets worktree add "$DSH_SUPERAGENT_DIR" -b "agent/$DSH_SUPERAGENT_NAME"')
+  prepare('git -C /srv/widgets worktree add "$DSH_SUPER_PERSONAL_AGENT_DIR" -b "agent/$DSH_SUPER_PERSONAL_AGENT_NAME"')
   const { ticket } = await acceptedTicket()
-  expect(runs()).toEqual([expect.objectContaining({ argv: ['sh', '-c', 'git -C /srv/widgets worktree add "$DSH_SUPERAGENT_DIR" -b "agent/$DSH_SUPERAGENT_NAME"'], cwd: join(directory, 'work'),
-    env: expect.objectContaining({ DSH_SUPERAGENT_DIR: ticket.execution!.directory, DSH_SUPERAGENT_NAME: ticket.execution!.name, DSH_SUPERAGENT_GITHUB_REPOSITORY: 'acme/widgets', DSH_SUPERAGENT_FEISHU_CHAT: CHAT }) })])
+  expect(runs()).toEqual([expect.objectContaining({ argv: ['sh', '-c', 'git -C /srv/widgets worktree add "$DSH_SUPER_PERSONAL_AGENT_DIR" -b "agent/$DSH_SUPER_PERSONAL_AGENT_NAME"'], cwd: join(directory, 'work'),
+    env: expect.objectContaining({ DSH_SUPER_PERSONAL_AGENT_DIR: ticket.execution!.directory, DSH_SUPER_PERSONAL_AGENT_NAME: ticket.execution!.name, DSH_SUPER_PERSONAL_AGENT_GITHUB_REPOSITORY: 'acme/widgets', DSH_SUPER_PERSONAL_AGENT_FEISHU_CHAT: CHAT }) })])
   // A retry reuses the prepared directory.
-  await runTool(`worker-${ticket.id}`, 'orchestrator_report', { state: 'failed', summary: 'offline' })
+  await runTool(`spa-worker-${ticket.id}`, 'personal_agent_report', { state: 'failed', summary: 'offline' })
   await runtime.engine.retryTicket(ticket.id)
   await runtime.idle()
   expect(runs()).toHaveLength(1)
@@ -1098,7 +1090,7 @@ it('runs the prepare command once for a new ticket, under the execution root wit
 
 it('counts a ticket whose directory the host prepared before prepare commands existed as prepared', async () => {
   const { ticket, sessionId } = await acceptedTicket()
-  await runTool(sessionId, 'orchestrator_report', { state: 'failed', summary: 'offline' })
+  await runTool(sessionId, 'personal_agent_report', { state: 'failed', summary: 'offline' })
   // A ticket from before prepare commands has its worktree.
   const stored = runtime.store.tickets.get(ticket.id)!
   runtime.store.tickets.save({ ...stored, execution: { ...stored.execution!, directory } })
@@ -1224,9 +1216,9 @@ it('resumes several ended tickets on one thread from one message without the lau
   // A request on the first ticket's thread becomes a second ticket there once the first's worker hands it back.
   const another = feishu('31', '@bot 另一件事', { root_id: 'om_1' })
   await receive(another)
-  await runTool(first.sessionId, 'orchestrator_trigger_handback', { trigger_id: another.id, reason: 'Another change.' })
+  await runTool(first.sessionId, 'personal_agent_trigger_handback', { trigger_id: another.id, reason: 'Another change.' })
   const second = await acceptedTicket(another)
-  for (const ticket of [first, second]) await runTool(ticket.sessionId, 'orchestrator_report', { state: 'dropped', summary: 'nothing to do' })
+  for (const ticket of [first, second]) await runTool(ticket.sessionId, 'personal_agent_report', { state: 'dropped', summary: 'nothing to do' })
   await receive(feishu('32', '还有问题', { mentions: [], root_id: 'om_1', sender_id: 'ou_guest' }))
   await vi.waitFor(() => expect([first, second].map(ticket => runtime.store.tickets.get(ticket.ticket.id)!.ended)).toEqual([undefined, undefined]), { timeout: 3000 })
   await vi.waitFor(() => expect([first, second].map(ticket => runtime.store.tickets.get(ticket.ticket.id)!.assignments.at(-1)!.state)).toEqual(['running', 'running']), { timeout: 3000 })
@@ -1234,7 +1226,7 @@ it('resumes several ended tickets on one thread from one message without the lau
 
 it('attaches a message to an ended ticket and so resumes it', async () => {
   const { ticket, sessionId } = await acceptedTicket()
-  await runTool(sessionId, 'orchestrator_report', { state: 'dropped', summary: 'nothing to do' })
+  await runTool(sessionId, 'personal_agent_report', { state: 'dropped', summary: 'nothing to do' })
   const other = feishu('40', '@bot 上次那个改动还要改一下', { root_id: undefined })
   await receive(other)
   await route({ kind: 'attach', ticket_id: ticket.id, trigger_id: other.id })
@@ -1291,8 +1283,8 @@ it('reports a dropped acknowledgement as dropped, with its Ticket on the Source 
   const followup = feishu('10', '还有这个', { mentions: [], root_id: 'om_1' })
   await receive(followup)
   vi.mocked(Commands.prototype.lark).mockRejectedValue(new CliError('the message was withdrawn', 230011))
-  expect(await runTool(sessionId, 'orchestrator_ack', { trigger_id: followup.id, text: '收到，也处理这个。' })).toMatchObject({ acknowledgement: 'dropped' })
-  expect(await runTool(runtime.masterId, 'orchestrator_read', { resource: `trigger/${followup.id}` })).toMatchObject({ acknowledgement: 'dropped' })
+  expect(await runTool(sessionId, 'personal_agent_ack', { trigger_id: followup.id, text: '收到，也处理这个。' })).toMatchObject({ acknowledgement: 'dropped' })
+  expect(await runTool(runtime.masterId, 'personal_agent_read', { resource: `trigger/${followup.id}` })).toMatchObject({ acknowledgement: 'dropped' })
   const dropped = ((await api('GET', 'sources')).body as unknown as { dropped: unknown[] }[]).flatMap(source => source.dropped)
   expect(dropped).toMatchObject([{ id: key('ack', followup.id), ticket: { id: ticket.id, title: ticket.title } }])
   expect(overviewOf(runtime).flow.dropped).toBe(1)
@@ -1302,7 +1294,7 @@ it('refuses a settings save with an unknown model or a Source kind that is not i
   const request = async (method: string, path: string, body?: unknown) => {
     let status = 0, text = ''
     const chunks = body === undefined ? [] : [Buffer.from(JSON.stringify(body))]
-    const req = { method, url: `/orchestrator/api/${path}`, headers: { host: '127.0.0.1:3082', 'x-orchestrator-request': '1' }, async *[Symbol.asyncIterator]() { yield* chunks } }
+    const req = { method, url: `/super-personal-agent/api/${path}`, headers: { host: '127.0.0.1:3082', 'x-super-personal-agent-request': '1' }, async *[Symbol.asyncIterator]() { yield* chunks } }
     await http(req, { writeHead: (code: number) => { status = code }, end: (data: string) => { text = data } })
     return { status, body: JSON.parse(text) as Record<string, unknown> }
   }
@@ -1329,12 +1321,12 @@ it('records a report, the PR it binds and its relay together, or none of them', 
   deliveries.mockClear()
   const before = runtime.store.tickets.get(ticket.id)!
   // A report the Engine refuses binds no PR, though the PR itself could be bound.
-  await expect(runTool(sessionId, 'orchestrator_report', { state: 'ready', summary: 'done', pr_number: 42, human_action: 'Ship it?' })).rejects.toThrow()
+  await expect(runTool(sessionId, 'personal_agent_report', { state: 'ready', summary: 'done', pr_number: 42, human_action: 'Ship it?' })).rejects.toThrow()
   // A PR the pull request rules refuse records no report.
   vi.mocked(Commands.prototype.gh).mockImplementation(async args => args[1]?.includes('/pulls/')
     ? { state: 'open', user: { login: 'someone' }, html_url: 'https://github.com/acme/widgets/pull/7', head: { ref: 'feature/other', sha: 'h', repo: { full_name: 'acme/widgets' } } }
     : { default_branch: 'master', permissions: { push: true } })
-  await expect(runTool(sessionId, 'orchestrator_report', { state: 'progress', summary: 'pr open', pr_number: 7, human_action: 'Desktop too?' })).rejects.toThrow()
+  await expect(runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'pr open', pr_number: 7, human_action: 'Desktop too?' })).rejects.toThrow()
   const after = runtime.store.tickets.get(ticket.id)!
   expect(after).not.toHaveProperty('follows')
   expect(after).not.toHaveProperty('attention')
@@ -1358,11 +1350,11 @@ it('tells the main Session of each requeue of the same Trigger', async () => {
 it('keeps replies and acknowledgements to an IM conversation within the IM limit', async () => {
   const { ticket, trigger, sessionId } = await acceptedTicket()
   const long = Array.from({ length: IM_WORDS + 1 }, () => 'word').join(' ')
-  await runTool(sessionId, 'orchestrator_report', { state: 'ready', summary: 'reviewed' })
-  await expect(runTool(runtime.masterId, 'orchestrator_reply', { ticket_id: ticket.id, purpose: 'result', text: long })).rejects.toThrow(`maximum is ${IM_WORDS}`)
+  await runTool(sessionId, 'personal_agent_report', { state: 'ready', summary: 'reviewed' })
+  await expect(runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'result', text: long })).rejects.toThrow(`maximum is ${IM_WORDS}`)
   const follow = feishu('3', '还有一个问题', { mentions: [], root_id: trigger.meta.messageId as string, sender_id: MEMBER })
   await receive(follow)
-  await expect(runTool(sessionId, 'orchestrator_ack', { trigger_id: follow.id, text: long })).rejects.toThrow(`at most ${IM_WORDS} words`)
+  await expect(runTool(sessionId, 'personal_agent_ack', { trigger_id: follow.id, text: long })).rejects.toThrow(`at most ${IM_WORDS} words`)
 })
 
 it('refuses a second process on the same state directory before it opens the database, so it migrates nothing', () => {
@@ -1384,7 +1376,7 @@ it('applies a changed prompt size limit to the next save and request without a r
   const put = async (config: unknown) => {
     let status = 0, text = ''
     const chunks = [Buffer.from(JSON.stringify({ config, baseRevision: next.prompts.current().revision }))]
-    const req = { method: 'PUT', url: '/orchestrator/api/prompts', headers: { host: '127.0.0.1:3082', 'x-orchestrator-request': '1' }, async *[Symbol.asyncIterator]() { yield* chunks } }
+    const req = { method: 'PUT', url: '/super-personal-agent/api/prompts', headers: { host: '127.0.0.1:3082', 'x-super-personal-agent-request': '1' }, async *[Symbol.asyncIterator]() { yield* chunks } }
     await http(req, { writeHead: (code: number) => { status = code }, end: (data: string) => { text = data } })
     return { status, body: JSON.parse(text) as Record<string, unknown> }
   }
@@ -1419,7 +1411,7 @@ it('releases the database and the state directory lock when it fails to start, s
 
 it('tells the conversation that the PR merged when work a restart recovered ends with it later', async () => {
   const { ticket, sessionId } = await acceptedTicket()
-  await runTool(sessionId, 'orchestrator_report', { state: 'progress', summary: 'pr open', pr_number: 42 })
+  await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'pr open', pr_number: 42 })
   // The host restarted with the worker mid-work: its Assignment starts again with a recovery note.
   const before = runtime.store.tickets.get(ticket.id)!
   runtime.engine.assignmentInterrupted(ticket.id, runningAssignment(before)!.id)
@@ -1433,7 +1425,7 @@ it('tells the conversation that the PR merged when work a restart recovered ends
   const id = key('pr-terminal', '42', 'feishu', JSON.stringify({ chatId: CHAT, messageId: 'om_1' }), 'merged')
   expect(runtime.store.replyStatus(id)).toBeUndefined()
   // Its ready report ends the ticket with the PR, and the conversation hears of the merge once.
-  await runTool(sessionId, 'orchestrator_report', { state: 'ready', summary: 'Recovered and verified' })
+  await runTool(sessionId, 'personal_agent_report', { state: 'ready', summary: 'Recovered and verified' })
   expect(runtime.store.tickets.get(ticket.id)!.ended).toMatchObject({ outcome: 'merged' })
   expect(runtime.store.replyStatus(id)).toBeDefined()
   // The report that ended the ticket was the worker's own: its turn is not cancelled inside that tool call.
@@ -1442,7 +1434,7 @@ it('tells the conversation that the PR merged when work a restart recovered ends
 
 it('restarts a worker that was mid-work when the host stopped with the recovery note, and records no end of its turn', async () => {
   const { ticket, sessionId } = await acceptedTicket()
-  await runTool(sessionId, 'orchestrator_report', { state: 'progress', summary: 'halfway' })
+  await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'halfway' })
   // Stopping cancels the worker's turn: it goes idle and reports the abort as an error, which a stopping host takes as no end.
   const agent = agents.get(sessionId)! as { status: string; cancel: ReturnType<typeof vi.fn> }
   const stopping = (runtime as unknown as { ctx: Context }).ctx
@@ -1463,7 +1455,7 @@ it('restarts a worker that was mid-work when the host stopped with the recovery 
 it('keeps the report of a blocked, failed or ready worker whose turn ends, and relays nothing more', async () => {
   for (const state of ['blocked', 'failed', 'ready'] as const) {
     const { ticket, sessionId } = await acceptedTicket(feishu(String(20 + ['blocked', 'failed', 'ready'].indexOf(state)), `@bot 修 ${state}`, { root_id: undefined }))
-    await runTool(sessionId, 'orchestrator_report', { state, summary: `${state} report` })
+    await runTool(sessionId, 'personal_agent_report', { state, summary: `${state} report` })
     const relayed = relays(runtime.masterId).length
     const agent = agents.get(sessionId)! as { status: string }
     agent.status = 'idle'
@@ -1481,7 +1473,7 @@ it('relays the status-request hint when a worker\'s turn ends with no text and n
   ;(runtime as unknown as { ctx: Context }).ctx.emit('agent/status', { agent, status: 'idle' } as never)
   await vi.waitFor(() => expect(runtime.store.tickets.get(ticket.id)!.assignments.at(-1)!.report).toMatchObject({ state: 'waiting' }))
   expect(relays(runtime.masterId).at(-1)).toMatchObject({ kind: 'worker_report', ticket: { ticket_id: ticket.id }, state: 'waiting',
-    summary: expect.stringContaining('orchestrator_ticket_request_status') })
+    summary: expect.stringContaining('personal_agent_ticket_request_status') })
 })
 
 it('fails a ticket at once on a worker error that is not passing, and relays it', async () => {
@@ -1531,7 +1523,7 @@ it('refuses the main Session a bash command that runs sleep and a long job wait,
 
 it('reads the main Session\'s preset from a registry with or without presetForSession, and takes standard\'s caps when it cannot', async () => {
   const watch = { name: 'bash', arguments: { command: 'gh pr checks 7 --watch', description: 'x' } }
-  const route = { name: 'orchestrator_route', arguments: { decisions: [] } }
+  const route = { name: 'personal_agent_route', arguments: { decisions: [] } }
   const guard = async (registry: Record<string, unknown>, projections?: Record<string, unknown>) => {
     services.agentPresets = registry
     if (projections) services.sessionProjections = projections; else delete services.sessionProjections
@@ -1581,7 +1573,7 @@ it('runs a launch that fails for a passing reason again on the launch backoff th
   for (const [index, error] of [Object.assign(new Error('Service Unavailable'), { status: 503 }), Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' })].entries()) {
     let tries = 0
     controller.resolveAgent.mockImplementation(async (id: string) => {
-      if (String(id).startsWith('worker-')) { tries++; throw error }
+      if (String(id).startsWith('spa-worker-')) { tries++; throw error }
       return original(id)
     })
     const { ticket } = await acceptedTicket(feishu(String(30 + index), `@bot 修 ${index}`, { root_id: undefined }))
@@ -1655,7 +1647,7 @@ it('shows the settings history when one revision holds values its Source kind no
 
 it('restarts a worker whose shell job the host stop ended with the recovery note, as a worker mid-work', async () => {
   const { ticket, sessionId } = await acceptedTicket()
-  await runTool(sessionId, 'orchestrator_report', { state: 'progress', summary: 'running the tests' })
+  await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'running the tests' })
   // Its turn ended with a test run in the background, so it is busy, not waiting.
   jobs.run(sessionId)
   const agent = agents.get(sessionId)! as { status: string }
@@ -1675,8 +1667,8 @@ it('restarts a worker whose shell job the host stop ended with the recovery note
 it('creates an Executor Session under the bundle\'s worker preset, and the main Session under its router preset', async () => {
   const { sessionId } = await acceptedTicket()
   const created = controller.create.mock.calls.map(([options]) => options as { sessionId: string; agentPreset: string })
-  expect(created.find(options => options.sessionId === sessionId)).toMatchObject({ agentPreset: 'dsh-superagent-worker' })
-  expect(created.find(options => options.sessionId === runtime.masterId)).toMatchObject({ agentPreset: 'dsh-superagent-router' })
+  expect(created.find(options => options.sessionId === sessionId)).toMatchObject({ agentPreset: 'dsh-super-personal-agent-worker' })
+  expect(created.find(options => options.sessionId === runtime.masterId)).toMatchObject({ agentPreset: 'dsh-super-personal-agent-router' })
 })
 
 it('selects its own preset again for a main Session or worker a person switched before its first turn, and not after it', async () => {
@@ -1692,16 +1684,16 @@ it('selects its own preset again for a main Session or worker a person switched 
   const emit = (sessionId: string, preset: string) => (runtime as unknown as { ctx: Context }).ctx.emit('agent-preset/selected', sessionId, preset)
   // A person opened the blank main Session in DSH's Web UI, which selected the default preset for it.
   emit(runtime.masterId, 'standard')
-  await vi.waitFor(() => expect(presets.select).toHaveBeenCalledWith(agents.get(runtime.masterId), 'dsh-superagent-router'))
+  await vi.waitFor(() => expect(presets.select).toHaveBeenCalledWith(agents.get(runtime.masterId), 'dsh-super-personal-agent-router'))
   // Its own preset, which that selection announces the same way, is left alone.
   presets.select.mockClear()
-  emit(runtime.masterId, 'dsh-superagent-router'); await Promise.resolve()
+  emit(runtime.masterId, 'dsh-super-personal-agent-router'); await Promise.resolve()
   expect(presets.select).not.toHaveBeenCalled()
   emit(sessionId, 'standard')
-  await vi.waitFor(() => expect(presets.select).toHaveBeenCalledWith(agents.get(sessionId), 'dsh-superagent-worker'))
-  // Another Session is not one of dsh-superagent's.
+  await vi.waitFor(() => expect(presets.select).toHaveBeenCalledWith(agents.get(sessionId), 'dsh-super-personal-agent-worker'))
+  // Another Session is not one of dsh-super-personal-agent's.
   presets.select.mockClear()
-  emit('someone-else', 'standard'); emit('worker-nothing', 'standard'); await Promise.resolve()
+  emit('someone-else', 'standard'); emit('spa-worker-nothing', 'standard'); await Promise.resolve()
   expect(presets.select).not.toHaveBeenCalled()
   // After its first turn the registry refuses any selection, which changes nothing and is not an error.
   started.add(runtime.masterId)
@@ -1759,7 +1751,7 @@ it('gives the Assignment a restart starts the messages the replaced one had deli
   expect(sent()).toBe(2)
 })
 
-it('ends the main Session\'s prompt with its Policy section, each rule on one line, and says orchestrator_eval holds no rules', async () => {
+it('ends the main Session\'s prompt with its Policy section, each rule on one line, and says personal_agent_eval holds no rules', async () => {
   const settings = runtime.store.settings()
   const rules = settings.policy.rules.map(rule => rule.id === 'copy'
     ? { ...rule, name: 'Copy\nfixes', instruction: 'Fix typos.\n- Keep the tone.\n\n## Not a heading' } : rule)
@@ -1770,7 +1762,7 @@ it('ends the main Session\'s prompt with its Policy section, each rule on one li
   expect(policy.trimEnd().split('\n').slice(2)).toEqual(runtime.store.settings().policy.rules.filter(rule => rule.enabled)
     .map(rule => rule.id === 'copy' ? '- Copy fixes (copy): Fix typos. - Keep the tone. ## Not a heading' : `- ${rule.name} (${rule.id}): ${rule.instruction}`))
   expect(prompt.indexOf('## Policy')).toBeGreaterThan(prompt.indexOf('Execution environment'))
-  expect((tools.get(runtime.masterId)!.get('orchestrator_eval') as unknown as { description: string }).description).not.toMatch(/rules/)
+  expect((tools.get(runtime.masterId)!.get('personal_agent_eval') as unknown as { description: string }).description).not.toMatch(/rules/)
 })
 
 it('keeps the Policy the main Session judges by in its prompt, after admission and the rest, as the latest save left it', async () => {

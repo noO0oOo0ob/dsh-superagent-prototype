@@ -25,7 +25,7 @@ describe('Source registry', () => {
     const sources = new SourceRegistry(() => settings)
     sources.register(probe); sources.register(githubKind)
     expect(sources.instances()).toEqual([
-      { id: 'github', kind: 'github', enabled: true, config: { repository: '', cli: '', pollSeconds: 60, failuresBeforeError: 3,
+      { id: 'github', kind: 'github', enabled: false, config: { repository: '', cli: '', pollSeconds: 60, failuresBeforeError: 3,
         observeIssues: false, observePulls: false, observeComments: false, observeCi: false }, installed: true },
       { id: 'probe', kind: 'probe', enabled: false, config: { interval: 9 }, installed: true },
       { id: 'retired', kind: 'retired', enabled: true, config: { x: 1 }, installed: false },
@@ -73,7 +73,7 @@ describe('Source registry', () => {
     expect(await sources.send(message('quiet'), commands)).toBe('gone')
     expect(sources.threadContext({ ...trigger, source: 'quiet' })).toBeUndefined()
   })
-  it('refuses a kind that declares a health entry another kind or dsh-superagent itself reports, and gives up its entries at unregister', () => {
+  it('refuses a kind that declares a health entry another kind or dsh-super-personal-agent itself reports, and gives up its entries at unregister', () => {
     const board = new HealthBoard()
     // Pre-claim built-in health entries; sync:* entries are reserved for settings sync.
     for (const name of ['runtime', 'reply']) board.claim(name)
@@ -135,7 +135,7 @@ describe('Source registry', () => {
     expect(sources.policyPart('probe')).toBeUndefined()
   })
   it('allows a reply only on a Channel whose Source still listens to its chat', () => {
-    const settings = SettingsSchema.parse({ sources: { feishu: { enabled: true, config: { chats: [{ chatId: 'oc_team', listen: 'mentions' }], directMessages: false } } } })
+    const settings = SettingsSchema.parse({ sources: { github: { enabled: true, config: {} }, feishu: { enabled: true, config: { chats: [{ chatId: 'oc_team', listen: 'mentions' }], directMessages: false } } } })
     const sources = new SourceRegistry(() => settings)
     expect(sources.channelAllowed({ source: 'feishu', address: { chatId: 'oc_team' } })).toBe(false)
     sources.register(feishuKind); sources.register(githubKind)
@@ -145,8 +145,8 @@ describe('Source registry', () => {
     expect(sources.channelAllowed(feishuChannel('oc_dm', 'om_1', true))).toBe(false)
     expect(sources.channelAllowed({ source: 'github', address: { number: '7' } })).toBe(true)
   })
-  it('delivers a reply to a direct message under the default settings', async () => {
-    const sources = new SourceRegistry(() => SettingsSchema.parse({}))
+  it('delivers a reply to a direct message when explicitly enabled', async () => {
+    const sources = new SourceRegistry(() => SettingsSchema.parse({ sources: { feishu: { enabled: true, config: {} } } }))
     sources.register(feishuKind)
     const trigger = feishuTrigger({ message_id: 'om_dm', chat_id: 'oc_dm', chat_type: 'p2p', sender_id: 'ou_alice', sender_type: 'user',
       content: 'fix it', create_time: '1757376000000' }, 'ou_bot', 'cli_bot')!

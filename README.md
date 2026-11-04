@@ -1,20 +1,16 @@
-# dsh-superagent
+# dsh-super-personal-agent
 
-> **Research prototype for reference only, not an official DeepSeek product.** This code grew out of our team's day-to-day development work, with much of the engineering done by coding agents. Treat it as research code, not production-ready software. It may still contain bugs, and its coding style and engineering practices may be inconsistent. Review and adapt it before using it in your own environment.
->
-> We have adapted it for publication, so it is not identical to our internal version or the implementation described in *Exploring Super-agent Design: Towards a More Autonomous Agent System*. Some designs discussed in the article are directions for future development and are not implemented in this prototype.
+**super-personal-Agent** is a personal-task fork of [DeepSeek's Superagent prototype](https://github.com/deepseek-ai/dsh-superagent-prototype). It is a research prototype, not an official DeepSeek product. The local inbox adapter is adapted from [JHOpenDev/dsh-superagent-inbox](https://github.com/JHOpenDev/dsh-superagent-inbox).
 
-dsh-superagent is a proactive coding agent for one GitHub repository, packaged as a bundle for [DeepSeek Harness](https://www.deepseek.com/en/harness/). It listens to GitHub and, optionally, Feishu. When someone allowed asks the agent for work, it opens a work item, works on it in its own agent session and directory, and answers in the original conversation, for example with a pull request. A web panel shows what needs a person.
+A local message can become a durable Ticket, run in its own worker Session and ordinary directory, and deliver its result back through the main Session and the originating inbox. Research, plans, writing, brainstorming and local coding do not require a GitHub account, repository or PR. GitHub and the existing Feishu adapter remain optional Sources, disabled until configured and enabled.
 
-It is also a way of working with an agent: **take as little human attention as possible, and give as much value as possible.** An agent that can act for a whole team can also waste a whole team's attention, so it acts only when asked or when a rule the team wrote allows it, and speaks only when someone must act or can use a result. [docs/000-philosophy.md](docs/000-philosophy.md) explains the principle and what it asks of the operator.
+The package ID is `dsh-super-personal-agent`. It uses its own service, presets, Sessions, panel, HTTP routes and worker environment so it can share a DSH profile with `dsh-superagent`. Give each plugin a separate state directory. Installing this fork does not migrate the original plugin's data.
 
 ## Setup
 
-Setup has many steps, so an agent does it with you. Ask your coding agent:
+Start with [SETUP.md](SETUP.md), or follow the [phase-one local inbox walkthrough](docs/009-personal-agent.md). The walkthrough needs no external account. [Deployment](docs/006-deployment.md) covers installation alongside the original plugin and optional GitHub configuration.
 
-> Read SETUP.md in this repository and set up dsh-superagent with me.
-
-It asks one short question at a time, shows the full plan once, and then installs and configures everything. [SETUP.md](SETUP.md) is what it follows.
+Phase one does not add IM connectors, Obsidian, cross-channel account linking or multiple instances of a Source kind. The retained GitHub adapter still watches one repository; this no longer limits local tasks or workspace preparation.
 
 ## Documentation
 
@@ -29,6 +25,7 @@ Read the numbered documents in order; each builds only on the ones before it.
 - [006 Deployment](docs/006-deployment.md): manual setup, configuration, upgrades and troubleshooting
 - [007 Architecture](docs/007-architecture.md)
 - [008 Cookbook](docs/008-cookbook.md): adding a Source
+- [009 Personal Agent](docs/009-personal-agent.md): first local task, metadata and coexistence
 
 ## Development
 

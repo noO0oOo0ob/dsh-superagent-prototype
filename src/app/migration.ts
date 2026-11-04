@@ -178,7 +178,7 @@ function settingsAsVersions(store: Store): void {
 
 /** Settings save origin names recorded by versions before schema 11, mapped to current `SettingsOrigin` values. */
 const ORIGINS: Readonly<Record<string, SettingsOrigin>> = { web: 'panel', 'orchestrator-tool': 'tool', 'policy-sync': 'sync', 'member-sync': 'sync' }
-/** Source kinds removed from dsh-superagent; the unified `github` Source now ingests Issues via notifications. */
+/** Source kinds removed from dsh-super-personal-agent; the unified `github` Source now ingests Issues via notifications. */
 const REMOVED_SOURCES: readonly string[] = ['github-issue']
 /**
  * Upgrade current and historical settings records to the schema 11 structure: strip removed source kinds from active
@@ -240,7 +240,7 @@ function withoutRemovedFields(value: Stored): Stored {
     return [id, 'config' in fields ? { ...fields, config: withoutMerge(id, fields.config) } : fields]
   })) : undefined
   // Rewrite environment variable prefixes from the project's earlier names in `prepare` commands.
-  if (typeof kept.prepare === 'string') kept.prepare = kept.prepare.replace(/\bDSH_(?:TAG|GO|FREELANCER)_/g, 'DSH_SUPERAGENT_')
+  if (typeof kept.prepare === 'string') kept.prepare = kept.prepare.replace(/\bDSH_(?:TAG|GO|FREELANCER)_/g, 'DSH_SUPER_PERSONAL_AGENT_')
   return { ...rest, ...(typeof paused === 'boolean' ? { paused } : {}), ...(executor ? { executor: kept } : {}),
     ...(instances ? { sources: instances } : {}),
     ...(policy ? { policy: { ...policyRest, ...(rules ? { rules } : {}), ...(parts ? { sources: parts } : {}) } } : {}) }
@@ -252,33 +252,33 @@ const LegacyPromptConfigSchema = z.object({ shared: z.string(), orchestrator: z.
 const LEGACY_FIXED = new Set(['cli', 'subscriptions', 'replies', 'reviews', 'dispatch', 'work', 'feishu', 'github'])
 /** Tool names used in saved prompts before the domain vocabulary rename, paired with what replaces them now. */
 const RENAMED_TOOLS: readonly (readonly [string, string])[] = [
-  ['orchestrator_subscription_remove', 'orchestrator_thread_unsubscribe'], ['orchestrator_subscriptions', 'orchestrator_threads'],
-  ['orchestrator_create_task', 'orchestrator_route (kind accept)'], ['orchestrator_send_task', 'orchestrator_route (kind attach)'],
-  ['orchestrator_reopen_task', 'orchestrator_route (kind attach)'], ['orchestrator_ticket_reopen', 'orchestrator_route (kind attach)'],
-  ['orchestrator_stop_task', 'orchestrator_route (kind stop)'], ['orchestrator_ignore_event', 'orchestrator_route (kind ignore)'],
-  ['orchestrator_request_status', 'orchestrator_ticket_request_status'], ['orchestrator_inspect_task', 'orchestrator_ticket_inspect'],
-  ['orchestrator_observations', 'orchestrator_decisions'], ['orchestrator_event_replay', 'orchestrator_trigger_requeue'],
-  ['orchestrator_tasks', 'orchestrator_tickets'], ['orchestrator_assess', 'orchestrator_eval'], ['admission_read', 'orchestrator_eval_read'],
-  ['admission_decide', 'orchestrator_eval_decide'],
+  ['personal_agent_subscription_remove', 'personal_agent_thread_unsubscribe'], ['personal_agent_subscriptions', 'personal_agent_threads'],
+  ['personal_agent_create_task', 'personal_agent_route (kind accept)'], ['personal_agent_send_task', 'personal_agent_route (kind attach)'],
+  ['personal_agent_reopen_task', 'personal_agent_route (kind attach)'], ['personal_agent_ticket_reopen', 'personal_agent_route (kind attach)'],
+  ['personal_agent_stop_task', 'personal_agent_route (kind stop)'], ['personal_agent_ignore_event', 'personal_agent_route (kind ignore)'],
+  ['personal_agent_request_status', 'personal_agent_ticket_request_status'], ['personal_agent_inspect_task', 'personal_agent_ticket_inspect'],
+  ['personal_agent_observations', 'personal_agent_decisions'], ['personal_agent_event_replay', 'personal_agent_trigger_requeue'],
+  ['personal_agent_tasks', 'personal_agent_tickets'], ['personal_agent_assess', 'personal_agent_eval'], ['admission_read', 'personal_agent_eval_read'],
+  ['admission_decide', 'personal_agent_eval_decide'],
 ]
-/** Read-only tools replaced by `orchestrator_read <resource>`, mapped to their resource paths. */
-const READ_TOOLS: Readonly<Record<string, string>> = { orchestrator_tickets: 'tickets', orchestrator_threads: 'threads', orchestrator_decisions: 'decisions',
-  orchestrator_settings_read: 'settings', orchestrator_prompts_read: 'prompts', orchestrator_models: 'models', orchestrator_ticket_inspect: 'ticket/<id>' }
+/** Read-only tools replaced by `personal_agent_read <resource>`, mapped to their resource paths. */
+const READ_TOOLS: Readonly<Record<string, string>> = { personal_agent_tickets: 'tickets', personal_agent_threads: 'threads', personal_agent_decisions: 'decisions',
+  personal_agent_settings_read: 'settings', personal_agent_prompts_read: 'prompts', personal_agent_models: 'models', personal_agent_ticket_inspect: 'ticket/<id>' }
 /**
  * Rewrites skill and variable prefixes from the project's earlier names (`dsh-tag`, `dsh-go`, `dsh-freelancer`), replaces retired
- * read tools with `orchestrator_read`, and the four routing tools with `orchestrator_route` and their kind.
+ * read tools with `personal_agent_read`, and the four routing tools with `personal_agent_route` and their kind.
  */
-const currentNames = (value: string): string => value.replace(/\bdsh-(?:tag|go|freelancer)-/g, 'dsh-superagent-').replace(/\bDSH_(?:TAG|GO|FREELANCER)_/g, 'DSH_SUPERAGENT_')
-  .replace(/\borchestrator_(?:tickets|threads|decisions|settings_read|prompts_read|models|ticket_inspect)\b/g, name => `orchestrator_read ${READ_TOOLS[name]}`)
-  .replace(/\borchestrator_(?:ticket_(accept|attach|stop)|trigger_(ignore))\b/g, (_name, ticket?: string, trigger?: string) =>
-    `orchestrator_route (kind ${ticket ?? trigger ?? ''})`)
+const currentNames = (value: string): string => value.replace(/\bdsh-(?:tag|go|freelancer)-/g, 'dsh-super-personal-agent-').replace(/\bDSH_(?:TAG|GO|FREELANCER)_/g, 'DSH_SUPER_PERSONAL_AGENT_')
+  .replace(/\bpersonal_agent_(?:tickets|threads|decisions|settings_read|prompts_read|models|ticket_inspect)\b/g, name => `personal_agent_read ${READ_TOOLS[name]}`)
+  .replace(/\bpersonal_agent_(?:ticket_(accept|attach|stop)|trigger_(ignore))\b/g, (_name, ticket?: string, trigger?: string) =>
+    `personal_agent_route (kind ${ticket ?? trigger ?? ''})`)
 /** Rewrites a legacy skill body to current tool, argument, resource, section, skill, and variable names. */
 function legacyText(value: string): string {
   let result = value
   for (const [from, to] of RENAMED_TOOLS) result = result.replace(new RegExp(`\\b${from}\\b`, 'g'), to)
   return currentNames(result.replaceAll('reply_to_event_id', 'reply_to_trigger_id').replace(/\bevent_id\b/g, 'trigger_id').replace(/\btask_id\b/g, 'ticket_id')
     .replaceAll('related_tasks', 'related_tickets').replace(/(?<![\w/-])event\//g, 'trigger/').replace(/(?<![\w/-])task\//g, 'ticket/').replaceAll('<event-id>', '<trigger-id>')
-    .replace(/\bguide\/([a-z][a-z0-9-]*)\b/g, (_match, name: string) => LEGACY_FIXED.has(name) ? `the ${name} section` : `skill dsh-superagent-${name}`))
+    .replace(/\bguide\/([a-z][a-z0-9-]*)\b/g, (_match, name: string) => LEGACY_FIXED.has(name) ? `the ${name} section` : `skill dsh-super-personal-agent-${name}`))
 }
 /**
  * Upgrade a stored prompt configuration to current sections, tool names, and skill references; legacy configurations take

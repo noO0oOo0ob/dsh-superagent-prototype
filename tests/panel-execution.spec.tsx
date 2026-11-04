@@ -13,21 +13,21 @@ it('lists Tickets under Execution by who they wait on, with the Executor state a
       value: { zh: '已开启', en: 'on' } } } }] })]
   await mount()
   await click(zh['tab.execution'])
-  expect(document.querySelector('.dt-status-title')?.textContent).toBe(zh.statusTitle)
+  expect(document.querySelector('.spa-status-title')?.textContent).toBe(zh.statusTitle)
   expect(server.requests.some(request => request.path === 'tickets?state=open&limit=20')).toBe(true)
   expect(text()).toContain(zh.executorRunning)
-  expect(all('.dt-chip').map(chip => chip.textContent)).toContain('GitHub#7自动合并已开启')
+  expect(all('.spa-chip').map(chip => chip.textContent)).toContain('GitHub#7自动合并已开启')
   await click(zh.idleLabel)
   expect(server.requests.some(request => request.path === 'tickets?state=idle&limit=20')).toBe(true)
   expect(text()).toContain('执行器结束了当前回合')
   await click(zh['ticket.ended'])
   expect(text()).toContain('旧工单')
   expect(text()).toContain(zh['outcome.stopped'])
-  expect(all('.dt-status-line .dt-lv').map(item => item.textContent)).toEqual(['执行中 2 / 3', '排队 0'])
+  expect(all('.spa-status-line .spa-lv').map(item => item.textContent)).toEqual(['执行中 2 / 3', '排队 0'])
   // The pause is its own action: an Execution settings draft started before it still saves.
-  await click(find(zh['tab.settings'], '.dt-status-head button'))
+  await click(find(zh['tab.settings'], '.spa-status-head button'))
   expect(tab(zh['tab.settings']).getAttribute('aria-selected')).toBe('true')
-  expect(document.querySelector('.dt-settings-link[aria-current="page"]')?.textContent).toBe(zh['promptPart.runtime/work'])
+  expect(document.querySelector('.spa-settings-link[aria-current="page"]')?.textContent).toBe(zh['promptPart.runtime/work'])
   await type(field<HTMLInputElement>(zh.maxWorkers), '4')
   await click(tab(zh['tab.execution']))
   await click(zh.pauseProcessing)
@@ -52,33 +52,33 @@ it('stops an open Ticket from its page after confirmation', async () => {
 
 it('shows a Ticket with its stage, its Mandate details with the Trigger and Decision behind it, its Threads, and the rest behind disclosures', async () => {
   await mount()
-  await click(all('.dt-open').find(button => button.textContent === '修复回归')!)
-  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('修复回归')
+  await click(all('.spa-open').find(button => button.textContent === '修复回归')!)
+  expect(document.querySelector('.spa-page-title h2')?.textContent).toBe('修复回归')
   // Progress is in the Channels and the Session, so the page has no report section.
-  expect(all('.dt-section-title').map(title => title.querySelector('.dt-section-name')?.textContent)).toEqual(['授权详情', '未送达的输入', '订阅的线程'])
-  expect(document.querySelector('.dt-status-line .dt-stage')?.textContent).toBe(zh.executingLabel)
-  expect(document.querySelector('.dt-status-line .dt-stage .dt-spinner')).not.toBeNull()
+  expect(all('.spa-section-title').map(title => title.querySelector('.spa-section-name')?.textContent)).toEqual(['授权详情', '未送达的输入', '订阅的线程'])
+  expect(document.querySelector('.spa-status-line .spa-stage')?.textContent).toBe(zh.executingLabel)
+  expect(document.querySelector('.spa-status-line .spa-stage .spa-spinner')).not.toBeNull()
   // A Thread this Ticket follows reads as subscribed on its page, though no other Ticket follows it.
-  expect(all('.dt-list .dt-ticket .dt-stage').map(stage => stage.textContent)).toContain(zh.threadSubscribed)
-  expect(all('.dt-list .dt-ticket .dt-stage').map(stage => stage.textContent)).not.toContain(zh.threadUnsubscribed)
-  expect(all('.dt-status-line .dt-lv').map(item => item.textContent)).toEqual(['授权 明确', '发起 飞书 · Alice', expect.stringMatching(/^更新 /)])
+  expect(all('.spa-list .spa-ticket .spa-stage').map(stage => stage.textContent)).toContain(zh.threadSubscribed)
+  expect(all('.spa-list .spa-ticket .spa-stage').map(stage => stage.textContent)).not.toContain(zh.threadUnsubscribed)
+  expect(all('.spa-status-line .spa-lv').map(item => item.textContent)).toEqual(['授权 明确', '发起 飞书 · Alice', expect.stringMatching(/^更新 /)])
   for (const expected of ['修复登录页回归', '点名方式@ 智能体', '名单里的人明确请求，由主 Session 接单', '未送达：等待派工运行',
     'Alice：顺便改标题']) expect(text()).toContain(expected)
-  expect(all('.dt-chip').map(chip => chip.textContent)).toContain('飞书团队群')
+  expect(all('.spa-chip').map(chip => chip.textContent)).toContain('飞书团队群')
   await click(zh['term.channel'])
-  expect(all('.dt-disclosure-body a').map(link => [link.textContent, link.getAttribute('href')])).toEqual([['飞书消息',
+  expect(all('.spa-disclosure-body a').map(link => [link.textContent, link.getAttribute('href')])).toEqual([['飞书消息',
     'https://applink.feishu.cn/client/chat/open?openChatId=oc_1'], ['GitHub #42', 'https://github.com/acme/widgets/issues/42']])
   await click(zh['term.environment'])
-  expect(all('.dt-disclosure-body .dt-table tr').map(row => row.textContent)).toEqual(['DSH_SUPERAGENT_DIR/w/t1',
-    'DSH_SUPERAGENT_GITHUB_NUMBER—'])
-  await click(document.querySelector<HTMLElement>('.dt-trigger-link')!)
+  expect(all('.spa-disclosure-body .spa-table tr').map(row => row.textContent)).toEqual(['DSH_SUPER_PERSONAL_AGENT_DIR/w/t1',
+    'DSH_SUPER_PERSONAL_AGENT_GITHUB_NUMBER—'])
+  await click(document.querySelector<HTMLElement>('.spa-trigger-link')!)
   expect(tab(zh['tab.trigger']).getAttribute('aria-selected')).toBe('true')
 })
 
 it('reports a missing Ticket instead of rendering an empty page', async () => {
   at({ page: 'execution', id: 'missing' })
   await mount()
-  expect(document.querySelector('.dt-hint')?.textContent).toBe(zh.ticketNotFound)
+  expect(document.querySelector('.spa-hint')?.textContent).toBe(zh.ticketNotFound)
 })
 
 it('links a question to its Channel, folds consecutive automated messages among Inputs, and shows field explanations in a hover tooltip',
@@ -90,20 +90,20 @@ it('links a question to its Channel, folds consecutive automated messages among 
   server.ticketDetails.t1 = { ...t1, stage: 'person', action: 'answer', attention: { id: 'q1', question: '需要确认按钮颜色' }, inputs: [ci('i3',
     '2026-09-22T00:06:00Z', 1), ci('i2', '2026-09-22T00:05:00Z', 0)] }
   await mount()
-  await click(all('.dt-open').find(button => button.textContent === '修复回归')!)
-  expect(all('.dt-banner a').map(link => [link.textContent, link.getAttribute('href')])).toEqual([['去飞书回答',
+  await click(all('.spa-open').find(button => button.textContent === '修复回归')!)
+  expect(all('.spa-banner a').map(link => [link.textContent, link.getAttribute('href')])).toEqual([['去飞书回答',
     'https://applink.feishu.cn/client/chat/open?openChatId=oc_1']])
   await click('已送达的输入 · 2')
-  expect(all('.dt-disclosure-body .dt-row-title').map(title => title.textContent)).toEqual(['自动通知：CI of PR #42 at abc1234: 10 checks, 1 failed, 0 running.'])
+  expect(all('.spa-disclosure-body .spa-row-title').map(title => title.textContent)).toEqual(['自动通知：CI of PR #42 at abc1234: 10 checks, 1 failed, 0 running.'])
   await click('同一发送者之前还有 1 条自动消息')
   expect(text()).toContain('CI of PR #42 at abc1234: 10 checks, 0 failed, 0 running.')
   await click(zh['tab.eval'])
-  await click(find(zh['tab.settings'], '.dt-status-head button'))
+  await click(find(zh['tab.settings'], '.spa-status-head button'))
   expect(text()).not.toContain('到期后记为未完成')
-  const tip = field(zh.evalTimeout).closest('.dt-field')!.querySelector<HTMLElement>('.dt-info')!
+  const tip = field(zh.evalTimeout).closest('.spa-field')!.querySelector<HTMLElement>('.spa-info')!
   await act(async () => { tip.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })) })
   expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('到期后记为未完成')
-  expect(tip.closest('.dt-field')!.textContent).not.toContain('到期后记为未完成')
+  expect(tip.closest('.spa-field')!.textContent).not.toContain('到期后记为未完成')
   await act(async () => { tip.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })) })
   expect(document.querySelector('[role="tooltip"]')).toBeNull()
 })
@@ -114,15 +114,15 @@ it('offers a Ticket awaiting review its review place and Session in the page hea
     { ...threadSummary({ key: 'github:42', source: 'github', title: '#42 Fix login' }), url: 'https://github.com/acme/widgets/pull/42' }] }
   at({ page: 'execution', id: 't1' })
   await mount()
-  expect(document.querySelector('.dt-status-line .dt-stage')?.textContent).toBe(zh['stage.review'])
-  expect(all('.dt-page-head a').map(link => [link.textContent, link.getAttribute('href')])).toEqual([['打开 GitHub 原文',
+  expect(document.querySelector('.spa-status-line .spa-stage')?.textContent).toBe(zh['stage.review'])
+  expect(all('.spa-page-head a').map(link => [link.textContent, link.getAttribute('href')])).toEqual([['打开 GitHub 原文',
     'https://github.com/acme/widgets/pull/42']])
 })
 
 it('keeps what a person types in the Execution settings, converting it once on save', async () => {
   await mount()
   await click(zh['tab.execution'])
-  await click(find(zh['tab.settings'], '.dt-status-head button'))
+  await click(find(zh['tab.settings'], '.spa-status-head button'))
   const blocked = () => field<HTMLInputElement>(zh.blockedCommands), root = () => field<HTMLInputElement>(zh.executionDirectory),
     workers = () => field<HTMLInputElement>(zh.maxWorkers)
   // A separator typed before the next command, a space inside a path and a cleared number stay as typed.
@@ -144,23 +144,23 @@ it('says why an Input was not delivered on its Ticket\'s page, in either languag
   server.ticketDetails.t1 = { ...t1, stage: 'person', action: 'delivery', deliveryError: 'feishu: message recalled' }
   at({ page: 'execution', id: 't1' })
   await mount()
-  expect(document.querySelector('.dt-status-line .dt-stage')?.textContent).toBe(zh['stage.delivery'])
-  expect(document.querySelector('.dt-banner.dt-danger')?.textContent).toBe(`${zh.deliveryFailedPrefix}feishu: message recalled`)
+  expect(document.querySelector('.spa-status-line .spa-stage')?.textContent).toBe(zh['stage.delivery'])
+  expect(document.querySelector('.spa-banner.spa-danger')?.textContent).toBe(`${zh.deliveryFailedPrefix}feishu: message recalled`)
   expect(text()).toContain(zh.inputRetryHint)
   expect(text()).not.toContain(zh.inputWaitingHint)
-  expect(document.querySelector('.dt-status-line')?.textContent).toMatch(/9月\d+日/)
+  expect(document.querySelector('.spa-status-line')?.textContent).toMatch(/9月\d+日/)
   await remount(en)
-  expect(document.querySelector('.dt-status-line')?.textContent).toMatch(/Sep \d+/)
-  expect(document.querySelector('.dt-status-line .dt-stage')?.textContent).toBe(en['stage.delivery'])
-  expect(document.querySelector('.dt-banner.dt-danger')?.textContent).toBe(`${en.deliveryFailedPrefix}feishu: message recalled`)
+  expect(document.querySelector('.spa-status-line')?.textContent).toMatch(/Sep \d+/)
+  expect(document.querySelector('.spa-status-line .spa-stage')?.textContent).toBe(en['stage.delivery'])
+  expect(document.querySelector('.spa-banner.spa-danger')?.textContent).toBe(`${en.deliveryFailedPrefix}feishu: message recalled`)
   expect(text()).toContain(en.inputRetryHint)
 })
 
-it('tells a Ticket or Thread that does not exist from a dsh-superagent that is not answering', async () => {
+it('tells a Ticket or Thread that does not exist from a dsh-super-personal-agent that is not answering', async () => {
   at({ page: 'execution', id: 't9' })
   await mount()
   expect(text()).toContain(zh.ticketNotFound)
-  // While dsh-superagent restarts, DSH's web server answers every route with an empty 404.
+  // While dsh-super-personal-agent restarts, DSH's web server answers every route with an empty 404.
   at({ page: 'execution', id: 't1' })
   server.down = true
   await remount()
@@ -183,14 +183,14 @@ it('gives a Ticket a bot\'s message started its basis, marks a Thread it follows
     thread: 'feishu:oc_1:om_root', handback: { reason: 'Asks for a new page', at: '2026-09-22T00:05:00Z' } } }] }
   at({ page: 'execution', id: 't1' })
   await mount()
-  const facts = () => all('.dt-kv > div').map(row => [row.querySelector('dt')?.textContent, row.querySelector('dd')?.textContent])
+  const facts = () => all('.spa-kv > div').map(row => [row.querySelector('dt')?.textContent, row.querySelector('dd')?.textContent])
   expect(facts()).toEqual(expect.arrayContaining([[zh['basis.sender'], '评审机器人'], [zh['basis.bot'], zh.yes], [zh['basis.mode'], zh['mode.auto']]]))
-  expect(all('.dt-list .dt-ticket').map(row => row.querySelector('.dt-tag')?.textContent)).toEqual([undefined, zh.contextOnly])
+  expect(all('.spa-list .spa-ticket').map(row => row.querySelector('.spa-tag')?.textContent)).toEqual([undefined, zh.contextOnly])
   await click(zh.deliveredInputs.replace('{count}', '1'))
   expect(text()).toContain('已交回评估：Asks for a new page')
   await remount(en)
   expect(facts()).toEqual(expect.arrayContaining([[en['basis.bot'], en.yes]]))
-  expect(all('.dt-list .dt-ticket').map(row => row.querySelector('.dt-tag')?.textContent)).toEqual([undefined, en.contextOnly])
+  expect(all('.spa-list .spa-ticket').map(row => row.querySelector('.spa-tag')?.textContent)).toEqual([undefined, en.contextOnly])
   await click(en.deliveredInputs.replace('{count}', '1'))
   expect(text()).toContain('Handed back for an Eval: Asks for a new page')
 })
@@ -203,15 +203,15 @@ it('words an ended Ticket by its outcome, on its row and its page, with a person
   await mount()
   await click(zh['tab.execution'])
   await click(zh['ticket.ended'])
-  expect(all('.dt-ticket-stage').map(stage => stage.textContent)).toEqual([zh['outcome.merged'], zh['outcome.stopped']])
+  expect(all('.spa-ticket-stage').map(stage => stage.textContent)).toEqual([zh['outcome.merged'], zh['outcome.stopped']])
   await click('已合并的工单')
-  expect(document.querySelector('.dt-status-line .dt-stage')?.textContent).toBe(zh['outcome.merged'])
+  expect(document.querySelector('.spa-status-line .spa-stage')?.textContent).toBe(zh['outcome.merged'])
   expect(text()).toContain(zh['outcome.merged'])
   expect(text()).not.toContain('执行器结束')
   server.ticketDetails.t3 = { ...server.ticketDetails.t3, ended: { at: '2026-09-21T00:00:00Z', by: 'human', outcome: 'stopped',
     reason: '不需要了' } }
   await remount(en)
-  expect(all('.dt-hint').map(hint => hint.textContent).find(line => line?.includes(en['outcome.stopped']))).toMatch(/Stopped by a person: 不需要了$/)
+  expect(all('.spa-hint').map(hint => hint.textContent).find(line => line?.includes(en['outcome.stopped']))).toMatch(/Stopped by a person: 不需要了$/)
 })
 
 it('sends one stop for a double click on Confirm', async () => {

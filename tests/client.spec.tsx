@@ -41,7 +41,7 @@ const openMaster = async (container: HTMLElement) => {
   for (let i = 0; i < 5; i++) await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
 }
 const serve = () => vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-  const path = new URL(url, 'http://127.0.0.1').pathname.replace('/orchestrator/api/', '')
+  const path = new URL(url, 'http://127.0.0.1').pathname.replace('/super-personal-agent/api/', '')
   if (path === 'overview') return Response.json({ problems: [], person: [], executor: { running: 0, queued: 0, maxWorkers: 3, idle: 0 }, flow: { triggers: 0, filtered: 0, judged: 0, accepted: 0, evaluating: 0 }, policyVersion: 'v' })
   if (path === 'state') return Response.json({ masterId: 'master', settings: SettingsSchema.parse({}), revisions: { policy: 0, eval: 0, executor: 0 }, sources: [], policy_version: 'v', health: {}, outgoing: [], load: { running: 0, queued: 0 },
     setup: { machine: { stateDir: '/srv/state', worktreeRoot: '/srv/state/worktrees', blockedCommands: [], promptMaxChars: 100000, admissionContextMaxPages: 10, admissionContextTimeoutMs: 15000 }, problem: null, feishuProblem: null, accounts: null } })
@@ -52,11 +52,11 @@ afterEach(() => { vi.unstubAllGlobals() })
 it('registers a localized main panel, sidebar entry and Plugin Manager row page, and no settings section', () => {
   const { entries, dictionaries, main, nav } = fixture([])
   expect(entries.map(entry => entry.options.name)).toEqual(['main', 'sidebar.panellist', 'plugins.row.config'])
-  expect(entries[2]!.options).toMatchObject({ key: 'dsh-superagent#dsh-superagent', locale: 'dshSuperagent' })
-  expect(Object.keys(dictionaries)).toEqual(['dshSuperagent'])
-  expect(main.options).toMatchObject({ key: 'dsh-superagent', locale: 'dshSuperagent' })
-  expect(nav.options).toMatchObject({ id: 'dsh-superagent', order: 10, locale: 'dshSuperagent' })
-  expect(nav.options.label?.()).toBe('Superagent')
+  expect(entries[2]!.options).toMatchObject({ key: 'dsh-super-personal-agent#dsh-super-personal-agent', locale: 'dshSuperPersonalAgent' })
+  expect(Object.keys(dictionaries)).toEqual(['dshSuperPersonalAgent'])
+  expect(main.options).toMatchObject({ key: 'dsh-super-personal-agent', locale: 'dshSuperPersonalAgent' })
+  expect(nav.options).toMatchObject({ id: 'dsh-super-personal-agent', order: 10, locale: 'dshSuperPersonalAgent' })
+  expect(nav.options.label?.()).toBe('super-personal-Agent')
 })
 
 it('opens a listed Session through the workspace from the main panel', async () => {
@@ -120,7 +120,7 @@ it('polls one request at a time, keeps the data while new dependencies load, and
   vi.useRealTimers()
 })
 
-it('tells a dsh-superagent that does not answer from a record it does not have, and words each failure by what failed', async () => {
+it('tells a dsh-super-personal-agent that does not answer from a record it does not have, and words each failure by what failed', async () => {
   const messages = { offline: 'offline', notRunning: 'not running', serverError: (status: number) => `server ${status}`,
     requestFailed: (status: number) => `request ${status}`, setup: () => 'setup', user: ({ code }: { code: string }) => `user ${code}` }
   const call = caller(() => messages)
@@ -133,7 +133,7 @@ it('tells a dsh-superagent that does not answer from a record it does not have, 
   }
   expect(await failure(async () => { throw new TypeError('Failed to fetch') })).toEqual({ message: 'offline', status: 0, missing: false,
     unreachable: true })
-  // DSH's web server answers an empty 404 while dsh-superagent's routes are unregistered.
+  // DSH's web server answers an empty 404 while dsh-super-personal-agent's routes are unregistered.
   expect(await failure(async () => new Response(null, { status: 404 }))).toEqual({ message: 'not running', status: 404, missing: false,
     unreachable: true })
   expect(await failure(async () => new Response(null, { status: 502 }))).toEqual({ message: 'server 502', status: 502, missing: false,

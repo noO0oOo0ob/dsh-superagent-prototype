@@ -85,12 +85,16 @@ export interface TriggerContext {
 export interface SourceKind<C extends Record<string, unknown> = Record<string, unknown>> {
   /** Stable ID; a default instance with the same ID exists when none is stored. */
   kind: string
+  /** Whether an unconfigured installation enables this kind. */
+  defaultEnabled?: boolean
   title: Localized
   description: Localized
   /** Read-only status facts derived from `deployment` (undefined while waiting for setup), keyed by field key. */
   facts?(deployment: Deployment | undefined): Record<string, Localized | string>
   /** Validates stored and submitted configuration and fills defaults. */
   schema: z.ZodType<C>
+  /** Additional requirements for enabling a configured Source. */
+  validateEnabled?(config: C): void
   fields: FieldSpec[]
   /** Health entry names owned by this kind under `health[...]`; no other kind or core loop may report them. */
   health: string[]

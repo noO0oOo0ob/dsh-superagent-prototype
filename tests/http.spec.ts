@@ -17,9 +17,9 @@ function serve(runtime: Partial<Record<keyof HttpHost, unknown>>, host = '127.0.
   return async (method: string, path: string, body?: unknown, headers: Headers = {}) => {
     let status = 0, text = ''
     const chunks = body === undefined ? [] : [Buffer.from(typeof body === 'string' ? body : JSON.stringify(body))]
-    const sent = Object.fromEntries(Object.entries({ host: '127.0.0.1:3082', 'x-orchestrator-request': '1', ...headers }).filter(([,
+    const sent = Object.fromEntries(Object.entries({ host: '127.0.0.1:3082', 'x-super-personal-agent-request': '1', ...headers }).filter(([,
       value]) => value !== undefined))
-    const req = { method, url: `/orchestrator/api/${path}`, headers: sent, async *[Symbol.asyncIterator]() { yield* chunks } }
+    const req = { method, url: `/super-personal-agent/api/${path}`, headers: sent, async *[Symbol.asyncIterator]() { yield* chunks } }
     await handler(req, { writeHead: (code: number) => { status = code }, end: (data: string) => { text = data } })
     return { status, body: JSON.parse(text) as Record<string, unknown> }
   }
@@ -70,7 +70,7 @@ it('decodes path parameters and parses each route\'s query', async () => {
 it('answers only a same-origin request from the panel on the loopback address', async () => {
   const call = serve({ sessions: { delivery: async () => 'injected' }, engine: { unsubscribe: () => true } })
   const post = (headers: Headers) => call('POST', 'threads/github%3A1/unsubscribe', undefined, headers)
-  for (const headers of [{ 'x-orchestrator-request': undefined }, { host: 'evil.example:3082' }, { host: '127.0.0.1:9999' },
+  for (const headers of [{ 'x-super-personal-agent-request': undefined }, { host: 'evil.example:3082' }, { host: '127.0.0.1:9999' },
     { origin: 'http://evil.example' }, { host: 'localhost:3082', origin: 'http://127.0.0.1:3082' }]) {
     expect(await post(headers), JSON.stringify(headers)).toEqual({ status: 403,
       body: { error: 'Same-origin management request required' } })

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { expect, it } from 'vitest'
 import { ROUTER_PRESET, WORKER_PRESET } from '../src/app/sessions.ts'
 
-interface Row { id?: string; name: string; disabled?: unknown; config?: Record<string, unknown> & { plugins?: Row[] } | Row[] }
+interface Row { isolate?: Record<string, boolean>; id?: string; name: string; disabled?: unknown; config?: Record<string, unknown> & { plugins?: Row[] } | Row[] }
 /** The patch as DSH reads it: Cordis's include plugin parses `!!js` scalars, and applies the inserts to an entry list. */
 async function patched(): Promise<Row[]> {
   const cordis = createRequire(createRequire(import.meta.url).resolve('@deepseek-ai/cordis/package.json'))
@@ -28,8 +28,8 @@ const presetOf = (rows: readonly Row[], id: string) => rows.map(row => row.confi
 
 it('defines the worker preset Executor Sessions run under, with a shell that moves long commands to the background', async () => {
   const rows = await patched()
-  expect(rows.map(row => row.id)).toEqual(['dsh-superagent', 'dsh-superagent-github', 'dsh-superagent-feishu', 'dsh-superagent-worker-preset',
-    'dsh-superagent-router-preset'])
+  expect(rows.map(row => row.id)).toEqual(['dsh-super-personal-agent', 'dsh-super-personal-agent-github', 'dsh-super-personal-agent-inbox', 'dsh-super-personal-agent-feishu', 'dsh-super-personal-agent-worker-preset',
+    'dsh-super-personal-agent-router-preset'])
   const preset = presetOf(rows, WORKER_PRESET)
   expect(preset.id).toBe(WORKER_PRESET)
   const plugins = flat(preset.plugins)
@@ -38,9 +38,8 @@ it('defines the worker preset Executor Sessions run under, with a shell that mov
   expect(named('@deepseek-ai/dsh-pwsh-sandbox')).toEqual([{ timeoutMs: 5000, maxTimeoutMs: 5000 }])
   expect(named('@deepseek-ai/dsh-tool-jobs')).toEqual([{ waitTimeoutMs: 5000, maxWaitTimeoutMs: 5000 }])
   expect(named('@deepseek-ai/dsh-tool-web')).toEqual([expect.objectContaining({ fetch: false })])
-  // Spawned subagents run under standard, whose shell moves a command to the background only after 60 s; forked ones, which would run under
-  // this preset, are left out.
-  expect(named('@deepseek-ai/dsh-tool-subagent')).toEqual([expect.objectContaining({ provider: 'spawn', agentPreset: 'standard' })])
+  // Spawned subagents retain the scoped environment of Personal Agent workers.
+  expect(named('@deepseek-ai/dsh-tool-subagent')).toEqual([expect.objectContaining({ provider: 'spawn', agentPreset: WORKER_PRESET })])
   // What a worker needs, and none of what asks a person, presents, plans, changes the profile, schedules, sets goals or runs workflows.
   for (const name of ['@deepseek-ai/dsh-tool-fs', '@deepseek-ai/dsh-tool-fs-search', '@deepseek-ai/dsh-tool-bash', '@deepseek-ai/dsh-tool-skill',
     '@deepseek-ai/dsh-tool-todo', '@deepseek-ai/dsh-tool-subagent', '@deepseek-ai/dsh-tool-subagent-control', '@deepseek-ai/dsh-compaction-basic',
@@ -70,4 +69,14 @@ it('defines the router preset the main Session runs under: the worker\'s 5-secon
     '@deepseek-ai/dsh-tool-todo', '@deepseek-ai/dsh-tool-ask-user', '@deepseek-ai/dsh-tool-present', '@deepseek-ai/dsh-plan-mode',
     '@deepseek-ai/dsh-plugin-manager/tools', '@deepseek-ai/dsh-plugin-market/tools', '@deepseek-ai/dsh-tool-schedule', '@deepseek-ai/dsh-tool-goal',
     '@deepseek-ai/dsh-command-goal', '@deepseek-ai/dsh-tool-workflow', '@deepseek-ai/dsh-workflow-ptc']) expect(names, name).not.toContain(name)
+})
+
+it('isolates subprocess providers in both presets without replacing the Host provider', async () => {
+  const rows = await patched()
+  for (const id of [ROUTER_PRESET, WORKER_PRESET]) {
+    const shell = presetOf(rows, id).plugins.find(row => row.id === 'shell')!
+    expect(shell.isolate).toMatchObject({ shell: true, subprocess: true })
+    expect(flat([shell]).filter(row => row.name === 'dsh-super-personal-agent/execution-environment')).toHaveLength(1)
+  }
+  expect(rows.some(row => row.name === 'dsh-super-personal-agent/execution-environment')).toBe(false)
 })

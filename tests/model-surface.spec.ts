@@ -42,7 +42,7 @@ const PROMPTS = 'prompts/, skills/', TOOLS = 'src/app/tools/', SESSIONS = 'src/a
 const NOTICES = 'src/app/notices.ts', LINKS = 'src/app/links.ts', ASSESSMENT = 'src/app/assessment.ts'
 const EXECUTOR = 'src/executor/dsh.ts', ERRORS = 'src/core/errors.ts'
 const TICKETS = 'src/core/tickets.ts', ASSIGNMENTS = 'src/core/assignments.ts'
-/** Regex patterns compiled from `orchestrator_read` resource templates (`<…>` matches one path segment; `…` matches the rest). */
+/** Regex patterns compiled from `personal_agent_read` resource templates (`<…>` matches one path segment; `…` matches the rest). */
 const RESOURCE_NAMES = RESOURCES.map(({ name }) => new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/<[^>]+>/g, '[^/\\s]+').replace('…', '.+')}$`))
 /** Report and assignment states, which text names as such; a ticket or a worker is in one of the card states (TICKET_STATES). */
 const REPORT_WORDS = /^(ready|waiting|blocked|failed|progress|running|queued)$/
@@ -54,7 +54,7 @@ const BANNED: [rule: string, where: RegExp, phrase: RegExp][] = [
   ['An out-of-scope proactive ticket ends as dropped', /^worker (prompt from the runtime|input assignment \(inferred\))$/, /report blocked/i],
   ['A question goes back where the person who raised it wrote', /./, /always returns to the original|ask(?: promptly)? in the original ticket conversation/i],
   ['The main Session has no tool that messages a worker', /./, /request the answer through the worker/i],
-  ['A stop goes through orchestrator_route, not through an assessment', /^assessment instructions$/, /decision=stop/i],
+  ['A stop goes through personal_agent_route, not through an assessment', /^assessment instructions$/, /decision=stop/i],
 ]
 /** Known failures tolerated for now, by the file that owns the text; keep empty. */
 const KNOWN_FAILURES: [owner: string, failure: string][] = []
@@ -163,7 +163,7 @@ async function drive(host: Host) {
   // channel, a proactive candidate whose card shows it touches no rule, which it ignores from its card.
   const request = feishu('1', '@bot 修一下回归'), thanks = feishu('3', '@bot 谢谢'), chat = feishu('4', '中午吃什么', { mentions: [] })
   await runtime.receive(request); await runtime.receive(thanks); await runtime.receive(chat)
-  const routed = await run(master, 'orchestrator_route', { decisions: [
+  const routed = await run(master, 'personal_agent_route', { decisions: [
     { kind: 'accept', trigger_id: request.id, title: '修复回归', worktree_name: 'fix-regression', acknowledgement: '收到，修复回归。' },
     { kind: 'ignore', trigger_id: thanks.id, reason: 'Thanks only.' }, { kind: 'ignore', trigger_id: chat.id, reason: 'Lunch chat.' }] }) as
     { results: { decision?: string; reason?: string; ticket?: { ticket_id: string } }[] }
@@ -171,34 +171,34 @@ async function drive(host: Host) {
   expect(routed.results[2]!.reason).toMatch(/^Ignored from its card/)
   const a = routed.results[0]!.ticket!.ticket_id
   const answer = { trigger_id: request.id, purpose: 'answer', text: '是配置。' }
-  const refusal = await run(master, 'orchestrator_reply', answer).then(() => '', (error: Error) => error.message)
+  const refusal = await run(master, 'personal_agent_reply', answer).then(() => '', (error: Error) => error.message)
   const proposal = feishu('5', '把副标题改成“浏览网页”', { mentions: [] })
   await runtime.receive(proposal)
   vi.spyOn(Commands.prototype, 'lark').mockResolvedValue({ items: [{ message_id: 'om_5', chat_id: CHAT }] })
-  await run(master, 'orchestrator_eval', { trigger_id: proposal.id })
-  const proactive = (await run(master, 'orchestrator_eval_decide', { trigger_id: proposal.id, decision: 'accept', title: '文案修订', worktree_name: 'copy-fix',
+  await run(master, 'personal_agent_eval', { trigger_id: proposal.id })
+  const proactive = (await run(master, 'personal_agent_eval_decide', { trigger_id: proposal.id, decision: 'accept', title: '文案修订', worktree_name: 'copy-fix',
     scope: '改副标题', reason: 'explicit copy change', intent_evidence: 'quoted', acknowledgement: '收到，把副标题改成“浏览网页”。',
     rule_assessments: [{ rule_id: 'copy', matched: true, reason: 'copy change' }, { rule_id: 'visual', matched: false, reason: 'not visual' }],
     direction: { implementation_requested: true, target_basis: 'specified', requires_design_decision: false, evidence: 'it names the text' } })).ticket as { ticket_id: string }
   const b = proactive.ticket_id
   await runtime.idle()
   const [workerA, workerB] = [a, b].map(workerSessionId) as [string, string]
-  await run(workerA, 'orchestrator_report', { state: 'progress', summary: 'Needs a decision.', human_action: 'Desktop too?' })
-  await run(workerA, 'orchestrator_report', { state: 'progress', summary: 'It reads the config.', human_action: null, reply_to_trigger_id: request.id })
+  await run(workerA, 'personal_agent_report', { state: 'progress', summary: 'Needs a decision.', human_action: 'Desktop too?' })
+  await run(workerA, 'personal_agent_report', { state: 'progress', summary: 'It reads the config.', human_action: null, reply_to_trigger_id: request.id })
   const other = feishu('9', '@bot 顺便看看这个')
   await runtime.receive(other)
-  await run(master, 'orchestrator_route', { decisions: [{ kind: 'attach', ticket_id: a, trigger_id: other.id }] })
-  await run(workerA, 'orchestrator_thread_unrelated', { thread: `feishu:${CHAT}:om_9`, reason: 'It asks for something else.' })
-  await run(workerA, 'orchestrator_thread_follow', { thread: `feishu:${CHAT}:om_7`, reason: 'The same settings page.' })
+  await run(master, 'personal_agent_route', { decisions: [{ kind: 'attach', ticket_id: a, trigger_id: other.id }] })
+  await run(workerA, 'personal_agent_thread_unrelated', { thread: `feishu:${CHAT}:om_9`, reason: 'It asks for something else.' })
+  await run(workerA, 'personal_agent_thread_follow', { thread: `feishu:${CHAT}:om_7`, reason: 'The same settings page.' })
   await runtime.receive(feishu('7', '@bot 这个页面的按钮也改一下'))
   const beyond = feishu('8', '另外把导出也做了', { mentions: [], root_id: 'om_1' })
   await runtime.receive(beyond)
   await runtime.idle()
-  await run(workerA, 'orchestrator_trigger_handback', { trigger_id: beyond.id, reason: 'It asks for an export feature.' })
-  await run(master, 'orchestrator_ticket_note', { ticket_id: a, text: 'Ticket B changes the same settings page.' })
+  await run(workerA, 'personal_agent_trigger_handback', { trigger_id: beyond.id, reason: 'It asks for an export feature.' })
+  await run(master, 'personal_agent_ticket_note', { ticket_id: a, text: 'Ticket B changes the same settings page.' })
   await runtime.pump()
   await runtime.idle()
-  await run(workerA, 'orchestrator_report', { state: 'ready', summary: 'Done.' })
+  await run(workerA, 'personal_agent_report', { state: 'ready', summary: 'Done.' })
   await runtime.receive(feishu('2', '再加一个按钮', { mentions: [], root_id: 'om_1' }))
   await vi.waitFor(async () => {
     await runtime.pump()
@@ -260,7 +260,7 @@ function collect(host: Host, { a, b, workerA, workerB, refusal }: Awaited<Return
   for (const { name, description, content } of host.skills.get(runtime.masterId)!) {
     surfaces.push({ where: `skill ${name}`, owner: PROMPTS, role: 'both', text: `${description}\n${content}` })
   }
-  surfaces.push({ where: 'orchestrator tool orchestrator_reply error', owner: ERRORS, role: 'orchestrator', text: refusal })
+  surfaces.push({ where: 'orchestrator tool personal_agent_reply error', owner: ERRORS, role: 'orchestrator', text: refusal })
   for (const { text } of host.inputs.filter(input => input.sessionId === runtime.masterId)) {
     const value = JSON.parse(text) as Record<string, unknown>
     const kind = String(value.kind ?? Object.keys(value)[0])
@@ -311,7 +311,7 @@ function failures(): Map<string, string> {
   const variables = new Set(host.runtime.ticketEnvironment(host.runtime.store.tickets.get(sessions.a)!).map(variable => variable.key))
   for (const { where, owner, role, text } of surfaces) {
     const fail = (problem: string) => found.set(`${where}: ${problem}`, owner)
-    for (const [token] of text.matchAll(/\borchestrator_[a-z_]+/g)) if (!registered(token)) fail(`${token} is not a tool`)
+    for (const [token] of text.matchAll(/\bpersonal_agent_[a-z_]+/g)) if (!registered(token)) fail(`${token} is not a tool`)
     for (const [, name, values] of text.matchAll(/\b([a-z_]+)[=:] ?([a-z][a-z/-]*)/g)) {
       for (const value of options.has(name!) ? values!.split('/') : []) {
         if (!options.get(name!)!.has(value)) fail(`${name}=${value} is not an option`)
@@ -319,7 +319,7 @@ function failures(): Map<string, string> {
     }
     for (const [word, pattern] of LEGACY) if (pattern.test(text)) fail(`legacy word "${word}"`)
     for (const [rule, scope, phrase] of BANNED) if (scope.test(where) && phrase.test(text)) fail(`breaks "${rule}"`)
-    for (const [name] of text.matchAll(/\bDSH_SUPERAGENT_[A-Z][A-Z_]*[A-Z]\b/g)) if (!variables.has(name)) fail(`${name} is not a variable`)
+    for (const [name] of text.matchAll(/\bDSH_SUPER_PERSONAL_AGENT_[A-Z][A-Z_]*[A-Z]\b/g)) if (!variables.has(name)) fail(`${name} is not a variable`)
     // A ticket's or worker's state is a card state; a report state is named with the word report.
     const states = [...text.matchAll(/\b([a-z]+(?:\/[a-z]+)*) (?:tickets?|workers?)\b/g), ...text.matchAll(/\b(?:tickets?|workers?) (?:is|are)(?: still)? ([a-z]+)\b/g)]
     for (const [phrase, word] of states) {
@@ -328,7 +328,7 @@ function failures(): Map<string, string> {
     for (const [phrase] of text.matchAll(/\bwait(?:ing)? for (?:ready|waiting|blocked|failed)\b(?! report)/g)) fail(`"${phrase}" names a report state without report`)
     for (const [found] of text.matchAll(/\b(?:ticket|trigger|decision|prompts|prompt-preview|models|feishu|github)\/[^\s"'`,;)\]]*/g)) {
       const name = found.replace(/[.:]+$/, '')
-      if (!RESOURCE_NAMES.some(pattern => pattern.test(name))) fail(`${name} is not a resource orchestrator_read reads`)
+      if (!RESOURCE_NAMES.some(pattern => pattern.test(name))) fail(`${name} is not a resource personal_agent_read reads`)
     }
     // Text only one role reads names the other role's tools only in a sentence that says the other role uses them.
     const other = role === 'orchestrator' ? 'worker' : role === 'worker' ? 'orchestrator' : undefined
@@ -338,7 +338,7 @@ function failures(): Map<string, string> {
         const limit = /routing/i.test(sentence) ? NOTE_WORDS : IM_WORDS
         if (Number(count) !== limit) fail(`"${count} words" is not ${limit}`)
       }
-      for (const [token] of other && !names.test(sentence) ? sentence.matchAll(/\borchestrator_[a-z_]+/g) : []) {
+      for (const [token] of other && !names.test(sentence) ? sentence.matchAll(/\bpersonal_agent_[a-z_]+/g) : []) {
         if (!registered(token) || tools[role as Role].has(token)) continue
         fail(`tells the ${role} to use ${token}, which only the ${other} has`)
       }
@@ -348,21 +348,21 @@ function failures(): Map<string, string> {
 }
 
 it('collects both roles\' tools, prompts, skills and inputs', () => {
-  expect([...toolsOf('worker').keys()].sort()).toEqual(['orchestrator_ack', 'orchestrator_read', 'orchestrator_report',
-    'orchestrator_thread_follow',
-    'orchestrator_thread_unrelated', 'orchestrator_trigger_handback'])
-  expect([...toolsOf('orchestrator').keys()]).toEqual(expect.arrayContaining(['orchestrator_route', 'orchestrator_eval_decide', 'orchestrator_reply']))
+  expect([...toolsOf('worker').keys()].sort()).toEqual(['personal_agent_ack', 'personal_agent_read', 'personal_agent_report',
+    'personal_agent_thread_follow',
+    'personal_agent_thread_unrelated', 'personal_agent_trigger_handback'])
+  expect([...toolsOf('orchestrator').keys()]).toEqual(expect.arrayContaining(['personal_agent_route', 'personal_agent_eval_decide', 'personal_agent_reply']))
   // The one routing tool takes the place of four.
-  for (const name of ['orchestrator_ticket_accept', 'orchestrator_ticket_attach', 'orchestrator_ticket_stop', 'orchestrator_trigger_ignore']) {
+  for (const name of ['personal_agent_ticket_accept', 'personal_agent_ticket_attach', 'personal_agent_ticket_stop', 'personal_agent_trigger_ignore']) {
     expect(toolsOf('orchestrator').has(name)).toBe(false)
   }
   const wheres = new Set(surfaces.map(surface => surface.where))
-  for (const where of ['orchestrator prompt runtime/dispatch', 'worker prompt runtime/work', 'skill dsh-superagent-github', 'skill dsh-superagent-feishu',
+  for (const where of ['orchestrator prompt runtime/dispatch', 'worker prompt runtime/work', 'skill dsh-super-personal-agent-github', 'skill dsh-super-personal-agent-feishu',
     'orchestrator prompt runtime/admission', 'orchestrator input candidate', 'orchestrator input worker_attention', 'orchestrator input worker_report',
     'orchestrator input thread_unrelated', 'orchestrator input ticket_ended', 'orchestrator input settings_saved', 'worker input assignment (explicit)',
     'worker input assignment (inferred)', 'worker input policy-changed', 'worker input resumed', 'worker input status',
     'worker input recovery', 'worker input note', 'worker input trigger (context)', 'orchestrator input follow_up',
-    'orchestrator input thread_followed', 'orchestrator tool orchestrator_reply error']) expect(wheres).toContain(where)
+    'orchestrator input thread_followed', 'orchestrator tool personal_agent_reply error']) expect(wheres).toContain(where)
   expect(sessions.refusal).not.toBe('')
 })
 
@@ -378,7 +378,7 @@ it('enforces the word limits the text states', async () => {
   expect(checkedImText(words(IM_WORDS))).toBe(words(IM_WORDS))
   expect(() => checkedImText(words(IM_WORDS + 1))).toThrow(`maximum is ${IM_WORDS}`)
   const attach = (note: string) =>
-    host.run(host.runtime.masterId, 'orchestrator_route', { decisions: [{ kind: 'attach', ticket_id: 'unknown', trigger_id: 'unknown', note }] })
+    host.run(host.runtime.masterId, 'personal_agent_route', { decisions: [{ kind: 'attach', ticket_id: 'unknown', trigger_id: 'unknown', note }] })
   // A note over the limit refuses its item alone; one at the limit goes on to the Engine, which knows no such ticket.
   expect(await attach(words(NOTE_WORDS + 1))).toEqual({ results: [expect.objectContaining({ refused: expect.stringContaining(`${NOTE_WORDS} words`) })] })
   expect(await attach(words(NOTE_WORDS))).toEqual({ results: [expect.objectContaining({ refused: expect.stringMatching(/Unknown (ticket|trigger)/) })] })
@@ -397,10 +397,10 @@ it.each(['orchestrator', 'worker'] as const)('keeps the %s within its character 
 })
 
 it('keeps the routing rules in dispatch, which says the main Session may accept the rest of a stop message as new work', () => {
-  const route = toolsOf('orchestrator').get('orchestrator_route')!.description
+  const route = toolsOf('orchestrator').get('personal_agent_route')!.description
   const dispatch = surfaces.find(surface => surface.where === 'orchestrator prompt runtime/dispatch')!.text
   expect(dispatch).toContain('you may accept the rest of the message as new work')
-  expect(dispatch).toContain('decide those whose card already settles them in one orchestrator_route call')
+  expect(dispatch).toContain('decide those whose card already settles them in one personal_agent_route call')
   expect(route).not.toMatch(/needs a new ticket on another explicit instruction/)
 })
 

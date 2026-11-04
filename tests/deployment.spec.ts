@@ -24,12 +24,12 @@ const setupError = (place: string, code: string, values: Record<string, unknown>
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'deployment-'))
-  mkdirSync(join(dir, 'bin')); mkdirSync(join(dir, 'state', 'worker-bin'), { recursive: true }); mkdirSync(join(dir, 'widgets', 'src'), { recursive: true })
-  path = [join(dir, 'state-link', 'worker-bin'), `${join(dir, 'state', 'worker-bin')}/`, join(dir, 'bin'), '/usr/bin', '/bin'].join(':')
+  mkdirSync(join(dir, 'bin')); mkdirSync(join(dir, 'state', 'spa-worker-bin'), { recursive: true }); mkdirSync(join(dir, 'widgets', 'src'), { recursive: true })
+  path = [join(dir, 'state-link', 'spa-worker-bin'), `${join(dir, 'state', 'spa-worker-bin')}/`, join(dir, 'bin'), '/usr/bin', '/bin'].join(':')
   gh(join(dir, 'bin', 'gh'), 'Agent-Bot')
   program(join(dir, 'bin', 'lark-cli'), lark({ appId: 'cli_bot', brand: 'lark', identities: { bot: { status: 'ready' } } }))
   // Stale worker shims with the same binary name must be skipped regardless of PATH normalization or symlinks.
-  program(join(dir, 'state', 'worker-bin', 'gh'))
+  program(join(dir, 'state', 'spa-worker-bin', 'gh'))
   symlinkSync(join(dir, 'state'), join(dir, 'state-link'))
   await exec('git', ['init', '-q', join(dir, 'widgets')], { env: gitEnv() })
   await exec('git', ['-C', join(dir, 'widgets'), 'remote', 'add', 'origin', 'git@github.com:acme/widgets.git'], { env: gitEnv() })

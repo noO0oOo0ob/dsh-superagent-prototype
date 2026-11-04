@@ -10,7 +10,7 @@ export interface UserFailure { code: UserErrorCode; values: Record<string, strin
 /**
  * Represents a failed management API request with a localized message and structured diagnostic details.
  * Thrown by API callers and inspected by UI views and draft state to distinguish validation issues, missing records,
- * and unreachable hosts (`details.unreachable` is set when `dsh-superagent` did not answer at all, such as during a restart,
+ * and unreachable hosts (`details.unreachable` is set when `dsh-super-personal-agent` did not answer at all, such as during a restart,
  * in which case a 404 does not mean a record is missing).
  */
 export class ApiError extends Error {
@@ -29,12 +29,12 @@ export interface ApiMessages {
 }
 const isUserError = (code: unknown): code is UserErrorCode => typeof code === 'string' && Object.hasOwn(USER_ERRORS, code)
 
-/** Calls one management endpoint; the `x-orchestrator-request` header marks the request as originating from this page. */
+/** Calls one management endpoint; the `x-super-personal-agent-request` header marks the request as originating from this page. */
 async function api<T>(messages: ApiMessages, path: string, method: string, body?: unknown): Promise<T> {
   let response: Response
   const json = body === undefined ? {} : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
   try {
-    response = await fetch(`/orchestrator/api/${path}`, { method, ...json, headers: { 'x-orchestrator-request': '1', ...json.headers } })
+    response = await fetch(`/super-personal-agent/api/${path}`, { method, ...json, headers: { 'x-super-personal-agent-request': '1', ...json.headers } })
   } catch {
     throw new ApiError(messages.offline, 0, { unreachable: true })
   }
@@ -46,7 +46,7 @@ async function api<T>(messages: ApiMessages, path: string, method: string, body?
       values?: Record<string, string> }
     const issues = Array.isArray(failure.issues) ? failure.issues as { path: string; message: string }[] : []
     const user = isUserError(failure.code) ? { code: failure.code, values: failure.values ?? {} } : undefined
-    // dsh-superagent always responds with a body; an empty 404 comes from the DSH web server when dsh-superagent routes are unmounted during startup or restart.
+    // dsh-super-personal-agent always responds with a body; an empty 404 comes from the DSH web server when dsh-super-personal-agent routes are unmounted during startup or restart.
     const { status } = response
     const message = failure.setup ? messages.setup(failure.setup) : user ? messages.user(user)
       : typeof failure.error === 'string' ? failure.error : !text && status === 404 ? messages.notRunning

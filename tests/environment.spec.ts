@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SENSITIVE_ENV_PATTERN, type SubprocessRuntime } from '@deepseek-ai/dsh-subprocess'
-import { GIT_LOCATION, agentVariables, credentialHelper, runAsWorker, verifyDirectory, withoutDirectory, workerBin, workerGitConfig, writeEnvironment }
+import { GIT_LOCATION, agentVariables, cleanWorkerPath, credentialHelper, runAsWorker, verifyDirectory, withoutDirectory, workerBin, workerGitConfig, writeEnvironment }
   from '../src/infra/environment.ts'
 import { CliError } from '../src/infra/commands.ts'
 import { testDeployment } from './fixtures/deployment.ts'
@@ -46,28 +46,28 @@ describe('worker shims', () => {
     expect([(await exec(join(bin, 'gh'), ['api', 'user'])).stdout, (await exec(join(bin, 'lark-cli'), ['im'])).stdout]).toEqual(['gh api user\n', 'lark im\n'])
     expect(readdirSync(bin)).not.toContain('git')
   })
-  it('replace only what dsh-superagent wrote and refuse anything else in its places', async () => {
+  it('replace only what dsh-super-personal-agent wrote and refuse anything else in its places', async () => {
     await writeEnvironment(testDeployment({ stateDir: dir }), ['old-cli'])
     await writeEnvironment(testDeployment({ stateDir: dir }), [])
     expect(readdirSync(workerBin(dir)).sort()).toEqual(['gh', 'lark-cli'])
     // A file that merely contains the marker on a later line, a symlink to a shim, and a foreign gitconfig are all rejected.
     writeFileSync(join(workerBin(dir), 'notes'), `notes\nmore\n${readFileSync(join(workerBin(dir), 'gh'), 'utf8').split('\n')[1]}\n`)
-    await expect(writeEnvironment(testDeployment({ stateDir: dir }), [])).rejects.toThrow(`${join(workerBin(dir), 'notes')} was not written by dsh-superagent`)
+    await expect(writeEnvironment(testDeployment({ stateDir: dir }), [])).rejects.toThrow(`${join(workerBin(dir), 'notes')} was not written by dsh-super-personal-agent`)
     rmSync(join(workerBin(dir), 'notes'))
     symlinkSync(join(workerBin(dir), 'gh'), join(workerBin(dir), 'link'))
-    await expect(writeEnvironment(testDeployment({ stateDir: dir }), [])).rejects.toThrow('link was not written by dsh-superagent')
+    await expect(writeEnvironment(testDeployment({ stateDir: dir }), [])).rejects.toThrow('link was not written by dsh-super-personal-agent')
     rmSync(join(workerBin(dir), 'link'))
     writeFileSync(workerGitConfig(dir), '[user]\n\tname = someone\n')
-    await expect(writeEnvironment(testDeployment({ stateDir: dir }), [])).rejects.toThrow(`${workerGitConfig(dir)} was not written by dsh-superagent`)
+    await expect(writeEnvironment(testDeployment({ stateDir: dir }), [])).rejects.toThrow(`${workerGitConfig(dir)} was not written by dsh-super-personal-agent`)
     expect(readFileSync(workerGitConfig(dir), 'utf8')).toBe('[user]\n\tname = someone\n')
   })
-  it('replaces the files it wrote under the project\'s earlier names', async () => {
-    await writeEnvironment(testDeployment({ stateDir: dir }), ['old-cli', 'older-cli'])
-    const legacy = (file: string, name: string) => writeFileSync(file, readFileSync(file, 'utf8').replace('Written by dsh-superagent', `Written by ${name}`))
-    legacy(join(workerBin(dir), 'old-cli'), 'dsh-tag'); legacy(join(workerBin(dir), 'older-cli'), 'dsh-freelancer'); legacy(workerGitConfig(dir), 'dsh-go')
+  it('refuses to overwrite files marked as belonging to the original plugin', async () => {
     await writeEnvironment(testDeployment({ stateDir: dir }), [])
-    expect(readdirSync(workerBin(dir)).sort()).toEqual(['gh', 'lark-cli'])
-    expect(readFileSync(workerGitConfig(dir), 'utf8')).toContain('Written by dsh-superagent')
+    const file = join(workerBin(dir), 'gh')
+    const upstream = readFileSync(file, 'utf8').replace('Written by dsh-super-personal-agent', 'Written by dsh-superagent')
+    writeFileSync(file, upstream)
+    await expect(writeEnvironment(testDeployment({ stateDir: dir }), [])).rejects.toThrow('was not written by dsh-super-personal-agent')
+    expect(readFileSync(file, 'utf8')).toBe(upstream)
   })
 })
 
@@ -79,7 +79,7 @@ describe('agent git configuration', () => {
     const deployment = testDeployment({ stateDir: dir, github: { ...testDeployment().github, cli: '/opt/agent tools/gh' } })
     await writeEnvironment(deployment, [])
     // Operator identity variables and git's fallback from the OS username must not apply to worker commits.
-    const env = workerEnv({ PATH: process.env.PATH, HOME: home, GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.abbrev', GIT_CONFIG_VALUE_0: '12', GIT_AUTHOR_NAME: 'Operator', GIT_COMMITTER_EMAIL: 'operator@example.com', ...agentVariables(dir) })
+    const env = workerEnv({ PATH: process.env.PATH, LC_ALL: 'C', HOME: home, GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.abbrev', GIT_CONFIG_VALUE_0: '12', GIT_AUTHOR_NAME: 'Operator', GIT_COMMITTER_EMAIL: 'operator@example.com', ...agentVariables(dir) })
     const git = async (...args: string[]): Promise<string> => (await exec('git', args, { cwd: dir, env })).stdout.trim()
     await git('init', '-q', 'repo')
     await exec('git', ['-C', 'repo', 'remote', 'add', 'origin', 'git@github.com:acme/widgets.git'], { cwd: dir, env })
@@ -112,10 +112,10 @@ it('fails instead of asking the operator\'s askpass helpers when the agent\'s cr
 })
 
 it('removes every spelling of a directory from PATH and keeps the other entries', () => {
-  mkdirSync(join(dir, 'state', 'worker-bin'), { recursive: true })
+  mkdirSync(join(dir, 'state', 'spa-worker-bin'), { recursive: true })
   symlinkSync(join(dir, 'state'), join(dir, 'link'))
-  const bin = join(dir, 'state', 'worker-bin')
-  expect(withoutDirectory([`${bin}/`, join(dir, 'link', 'worker-bin'), '/usr/bin', 'node_modules/.bin'].join(':'), bin)).toBe('/usr/bin:node_modules/.bin')
+  const bin = join(dir, 'state', 'spa-worker-bin')
+  expect(withoutDirectory([`${bin}/`, join(dir, 'link', 'spa-worker-bin'), '/usr/bin', 'node_modules/.bin'].join(':'), bin)).toBe('/usr/bin:node_modules/.bin')
 })
 
 /** Minimal SubprocessRuntime backed by child_process.spawn with an isolated global git config. */
@@ -183,4 +183,23 @@ describe('the repository the host\'s environment names', () => {
       expect(env.GIT_CEILING_DIRECTORIES).toBe(dir)
     } finally { vi.unstubAllEnvs() }
   })
+})
+
+it('removes original and new plugin shims from a captured PATH without touching their files', () => {
+  const original = join(dir, 'original'), personal = join(dir, 'personal')
+  mkdirSync(original); mkdirSync(personal)
+  const marker = (name: string) => `#!/bin/sh\n# Written by ${name} on every start; edits are lost.\nexit 1\n`
+  writeFileSync(join(original, 'gh'), marker('dsh-superagent'))
+  writeFileSync(join(personal, 'gh'), marker('dsh-super-personal-agent'))
+  symlinkSync(original, join(dir, 'original-link'))
+  expect(cleanWorkerPath([original, personal, join(dir, 'original-link'), join(dir, 'real'), '/usr/bin'].join(':')))
+    .toBe([join(dir, 'real'), '/usr/bin'].join(':'))
+  expect(readFileSync(join(original, 'gh'), 'utf8')).toBe(marker('dsh-superagent'))
+})
+
+it('writes an account-free environment without GitHub URL rewrites or an ambient gh fallback', async () => {
+  await writeEnvironment({ stateDir: dir }, [])
+  const config = readFileSync(workerGitConfig(dir), 'utf8')
+  expect(config).not.toContain('github.com')
+  await expect(exec(join(workerBin(dir), 'gh'), ['api', 'user'])).rejects.toMatchObject({ stderr: expect.stringContaining('no GitHub account') })
 })

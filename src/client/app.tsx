@@ -6,7 +6,7 @@ import type { DeploymentForm } from './deployment.tsx'
 import { EvalStatus } from './eval.tsx'
 import { ExecutionStatus } from './execution.tsx'
 import { ticketMark } from './marks.ts'
-import { GLOSSARY, GLOSSARY_VALUES, en, zh, type DshSuperagentKey } from './locales.ts'
+import { GLOSSARY, GLOSSARY_VALUES, en, zh, type DshSuperPersonalAgentKey } from './locales.ts'
 import { OverviewPage } from './overview.tsx'
 import { PanelProvider, usePanel, usePanelData } from './provider.tsx'
 import { HOME, TABS, initialLocation, lastSettingsGroup, remember, routeLabel, settingsRoute, type Location, type Route,
@@ -29,25 +29,25 @@ function Glossary({ open, onClose }: { open: boolean; onClose: () => void }) {
   const chinese = t('tab.overview') === zh['tab.overview']
   const [own, other] = chinese ? [zh, en] : [en, zh]
   const heading = (group: keyof typeof GLOSSARY) => t(group === 'roles' ? 'glossaryGroup.roles' : `tab.${group}`)
-  return <Modal className="dt-glossary-modal" open={open} onClose={onClose} title={t('glossary')} closeLabel={t('close')}
+  return <Modal className="spa-glossary-modal" open={open} onClose={onClose} title={t('glossary')} closeLabel={t('close')}
     description={t('glossaryIntro')} footer={<Button variant="primary" onClick={onClose}>{t('close')}</Button>}>
-    <div className="dt-glossary-body">
-      <table className="dt-glossary">
+    <div className="spa-glossary-body">
+      <table className="spa-glossary">
         <thead><tr>
           <th>{t(chinese ? 'glossaryChinese' : 'glossaryEnglish')}</th><th>{t(chinese ? 'glossaryEnglish' : 'glossaryChinese')}</th>
           <th>{t('glossaryMeaning')}</th>
         </tr></thead>
         {Object.entries(GLOSSARY).map(([group, keys]) => <tbody key={group}>
-          <tr><th colSpan={3} scope="rowgroup" className="dt-glossary-group">{heading(group as keyof typeof GLOSSARY)}</th></tr>
+          <tr><th colSpan={3} scope="rowgroup" className="spa-glossary-group">{heading(group as keyof typeof GLOSSARY)}</th></tr>
           {keys.map(key => <tr key={key}><td>{own[`term.${key}`]}</td><td>{other[`term.${key}`]}</td><td>{own[`meaning.${key}`]}</td></tr>)}
         </tbody>)}
       </table>
-      <p className="dt-legend-title">{t('legendTitle')}</p>
-      <ul className="dt-legend">{(['done', 'ongoing', 'warning', 'error', 'idle'] as const).map(state => <li key={state}>
+      <p className="spa-legend-title">{t('legendTitle')}</p>
+      <ul className="spa-legend">{(['done', 'ongoing', 'warning', 'error', 'idle'] as const).map(state => <li key={state}>
         <Dot state={state} /><span>{t(`legend.${state}`)}</span>
       </li>)}</ul>
-      <dl className="dt-values">{Object.entries(GLOSSARY_VALUES).map(([group, values]) => <div key={group} style={{ display: 'contents' }}>
-        <dt>{own[`term.${group}` as DshSuperagentKey]}</dt>
+      <dl className="spa-values">{Object.entries(GLOSSARY_VALUES).map(([group, values]) => <div key={group} style={{ display: 'contents' }}>
+        <dt>{own[`term.${group}` as DshSuperPersonalAgentKey]}</dt>
         <dd>{values.map(key => `${own[key]} ${other[key]}`).join(' · ')}</dd>
       </div>)}</dl>
     </div>
@@ -57,12 +57,12 @@ function Glossary({ open, onClose }: { open: boolean; onClose: () => void }) {
 function Highlight({ text, query }: { text: string; query: string }) {
   const index = query ? text.toLowerCase().indexOf(query.toLowerCase()) : -1
   if (index < 0) return <>{text}</>
-  return <>{text.slice(0, index)}<mark className="dt-mark">{text.slice(index, index + query.length)}</mark>{text.slice(index + query.length)}</>
+  return <>{text.slice(0, index)}<mark className="spa-mark">{text.slice(index, index + query.length)}</mark>{text.slice(index + query.length)}</>
 }
 function Result({ name, open, children }: { name: ReactNode; open: (() => void) | undefined; children: ReactNode }) {
-  return <li className="dt-row dt-link"><div className="dt-row-main">
-    <div className="dt-row-title">{open ? <button type="button" className="dt-open" onClick={open}>{name}</button> : name}</div>
-    <div className="dt-row-meta">{children}</div>
+  return <li className="spa-row spa-link"><div className="spa-row-main">
+    <div className="spa-row-title">{open ? <button type="button" className="spa-open" onClick={open}>{name}</button> : name}</div>
+    <div className="spa-row-meta">{children}</div>
   </div></li>
 }
 function SearchResults({ result, query, onClose }: { result: SearchView; query: string; onClose: () => void }) {
@@ -71,13 +71,13 @@ function SearchResults({ result, query, onClose }: { result: SearchView; query: 
   const empty = !result.items.length && !result.threads.length && !result.tickets.length
   const counts = { tickets: result.tickets.length, threads: result.threads.length, items: result.items.length }
   const go = (route: Route) => () => { onClose(); navigate(route) }
-  return <div className="dt-search-results" role="region" aria-label={t('searchLabel')}>
-    <div className="dt-search-head">
-      <span className="dt-hint">{empty ? t(setup?.accounts?.feishu ? 'searchNone' : 'searchNoneGithub')
+  return <div className="spa-search-results" role="region" aria-label={t('searchLabel')}>
+    <div className="spa-search-head">
+      <span className="spa-hint">{empty ? t(setup?.accounts?.feishu ? 'searchNone' : 'searchNoneGithub')
         : t(result.items.length >= 20 ? 'searchFoundCapped' : 'searchFound', counts)}</span>
       <Button variant="ghost" size="sm" icon={<Icon name="close" size={14} />} aria-label={t('close')} onClick={onClose} />
     </div>
-    {!empty && <ul className="dt-list">
+    {!empty && <ul className="spa-list">
       {result.tickets.map(ticket => <Result key={ticket.id} name={<Highlight text={ticket.title} query={query} />}
         open={go({ page: 'execution', id: ticket.id })}>
         <span>{t('term.ticket')}</span><span>{ticket.stage === 'ended' ? t('ticket.ended') : ticketMark(t, ticket).label}</span>
@@ -91,7 +91,7 @@ function SearchResults({ result, query, onClose }: { result: SearchView; query: 
         query={query} />}
         open={item.filtered === undefined ? go({ page: 'trigger', id: item.threads[0]!, query: { trigger: item.id } }) : undefined}>
         <span>{valueLabel(t, 'source', item.source)}</span><span>{actorName(t, item.actor)}</span><When at={item.at} />
-        {item.threadTitle && <span className="dt-ellipsis">{t('inThread', { thread: readableMarkers(t, item.threadTitle) })}</span>}
+        {item.threadTitle && <span className="spa-ellipsis">{t('inThread', { thread: readableMarkers(t, item.threadTitle) })}</span>}
         {item.filtered !== undefined && <span>{t('searchFiltered', { reason: reasonLabel(t, item.filtered) })}</span>}
       </Result>)}
     </ul>}
@@ -121,10 +121,10 @@ function Header({ masterId }: { masterId: string | undefined }) {
     call('GET search', { query: { q: text } }).then(value => { if (request === latest.current) setResult({ query: text, value }) },
       failure => { if (request === latest.current) notify(errorText(failure)) })
   }
-  return <header className="dt-head">
-    <div className="dt-head-title"><h1 className="dt-title">{t('title')}</h1></div>
-    <div className="dt-toolbar">
-      <form ref={search} className="dt-search" role="search" onSubmit={submit} onKeyDown={event => { if (event.key === 'Escape') show() }}>
+  return <header className="spa-head">
+    <div className="spa-head-title"><h1 className="spa-title">{t('title')}</h1></div>
+    <div className="spa-toolbar">
+      <form ref={search} className="spa-search" role="search" onSubmit={submit} onKeyDown={event => { if (event.key === 'Escape') show() }}>
         <Input type="search" icon={<Icon name="search" />} value={query} placeholder={t('searchPlaceholder')} aria-label={t('searchLabel')}
           onChange={event => { setQuery(event.target.value); if (!event.target.value) show() }} />
         {result && <SearchResults result={result.value} query={result.query} onClose={() => { show() }} />}
@@ -142,8 +142,8 @@ function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab
   const { t } = usePanel()
   const { state, error, reload } = usePanelData()
   // Keep the active tab scrolled into view on narrow screens when routes change via links.
-  useEffect(() => { document.getElementById(`dt-tab-${route.page}`)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }) }, [route.page])
-  const waiting = error ? <p className="dt-error" role="alert">{error.message}</p> : <p className="dt-hint">{t('loading')}</p>
+  useEffect(() => { document.getElementById(`spa-tab-${route.page}`)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }) }, [route.page])
+  const waiting = error ? <p className="spa-error" role="alert">{error.message}</p> : <p className="spa-hint">{t('loading')}</p>
   const page = (() => {
     switch (route.page) {
       case 'overview': return <OverviewPage />
@@ -158,13 +158,13 @@ function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab
         deploymentForm={deploymentForm} /> : waiting
     }
   })()
-  return <div className="dt-page">
-    <div className="dt-column">
+  return <div className="spa-page">
+    <div className="spa-column">
       <Header masterId={state?.masterId} />
-      {error && state && <p className="dt-error" role="status">{error.message}</p>}
-      <SegmentedTabs className="dt-tabs" label={t('pagesLabel')} value={route.page} onChange={openTab}
-        items={TABS.map(value => ({ value, label: t(`tab.${value}`), id: `dt-tab-${value}`, panelId: 'dt-page' }))} />
-      <main id="dt-page" role="tabpanel" aria-labelledby={`dt-tab-${route.page}`} className="dt-main">{page}</main>
+      {error && state && <p className="spa-error" role="status">{error.message}</p>}
+      <SegmentedTabs className="spa-tabs" label={t('pagesLabel')} value={route.page} onChange={openTab}
+        items={TABS.map(value => ({ value, label: t(`tab.${value}`), id: `spa-tab-${value}`, panelId: 'spa-page' }))} />
+      <main id="spa-page" role="tabpanel" aria-labelledby={`spa-tab-${route.page}`} className="spa-main">{page}</main>
     </div>
   </div>
 }

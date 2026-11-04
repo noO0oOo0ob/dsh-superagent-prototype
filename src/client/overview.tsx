@@ -12,20 +12,20 @@ function ProblemLine({ problem, onChanged }: { problem: Problem; onChanged: () =
   const { t, call, navigate } = usePanel()
   const post = useAction((request: () => Promise<unknown>) => request(), { reload: onChanged })
   const row = (title: string, detail: ReactNode, route: Route | undefined, hint?: string, actions?: ReactNode) => <li
-    className="dt-row dt-link dt-att dt-att-error">
-    <div className="dt-row-main">
-      <div className="dt-att-what">{route ? <button type="button" className="dt-open dt-open-wrap"
+    className="spa-row spa-link spa-att spa-att-error">
+    <div className="spa-row-main">
+      <div className="spa-att-what">{route ? <button type="button" className="spa-open spa-open-wrap"
         onClick={() => navigate(route)}>{title}</button> : title}</div>
-      {detail}{hint && <Hint>{hint}</Hint>}{actions && <div className="dt-row-meta dt-row-buttons">{actions}</div>}
+      {detail}{hint && <Hint>{hint}</Hint>}{actions && <div className="spa-row-meta spa-row-buttons">{actions}</div>}
     </div>
   </li>
   const go = (label: string, route: Route) => <Button variant="outline" size="sm" icon={<Icon name="settings"
     size={14} />} onClick={() => navigate(route)}>{label}</Button>
-  const raw = (text: string | undefined) => text && <p className="dt-error dt-clamp dt-mono">{text}</p>
-  const worded = (text: string) => <p className="dt-error">{text}</p>
+  const raw = (text: string | undefined) => text && <p className="spa-error spa-clamp spa-mono">{text}</p>
+  const worded = (text: string) => <p className="spa-error">{text}</p>
   switch (problem.kind) {
     // A failed Feishu bot check pauses only the Feishu Source; other setup problems halt the entire service.
-    case 'setup': return row(t(problem.place === 'feishu' ? 'problemSetupFeishu' : 'problemSetup'), <p className="dt-error"><SetupMessage
+    case 'setup': return row(t(problem.place === 'feishu' ? 'problemSetupFeishu' : 'problemSetup'), <p className="spa-error"><SetupMessage
       problem={problem} /></p>,
       setupPage(problem.place), t(`problemSetupFix.${problem.place}`), <CheckSetupButton />)
     case 'no-source': return row(t('problemNoSource'), undefined, settingsRoute('source'), undefined, go(t('actionOpenSources'),
@@ -63,27 +63,27 @@ export function OverviewPage() {
   const { setup } = usePanelData()
   const { data, error, reload } = usePoll(() => call('GET overview'), [])
   if (!data) return <LoadState error={error} loading />
-  const stat = (label: string, value: ReactNode, route?: Route) => <span className="dt-stat">
-    <span className="dt-stat-label">{label}</span>
-    {route ? <button type="button" className="dt-textlink dt-stat-value" onClick={() => navigate(route)}>{value}</button> : <span
-      className="dt-stat-value">{value}</span>}
+  const stat = (label: string, value: ReactNode, route?: Route) => <span className="spa-stat">
+    <span className="spa-stat-label">{label}</span>
+    {route ? <button type="button" className="spa-textlink spa-stat-value" onClick={() => navigate(route)}>{value}</button> : <span
+      className="spa-stat-value">{value}</span>}
   </span>
-  const more = (route: Route) => <button type="button" className="dt-textlink dt-more-link"
+  const more = (route: Route) => <button type="button" className="spa-textlink spa-more-link"
     onClick={() => navigate(route)}>{t('details')}</button>
   return <>
     {error && <LoadState error={error} loading={false} />}
     <Section title={t('pendingTickets')} count={data.person.length}>
-      {data.person.length ? <ul className="dt-list dt-cards">{data.person.map(ticket => <TicketLine key={ticket.id} ticket={ticket} question
+      {data.person.length ? <ul className="spa-list spa-cards">{data.person.map(ticket => <TicketLine key={ticket.id} ticket={ticket} question
         onChanged={reload} />)}</ul>
         : <Hint>{t('needsYouNone')}</Hint>}
     </Section>
     {data.problems.length > 0 && <Section title={t('problems')} count={data.problems.length}>
-      <ul className="dt-list dt-cards">{data.problems.map((problem, index) => <ProblemLine key={index} problem={problem}
+      <ul className="spa-list spa-cards">{data.problems.map((problem, index) => <ProblemLine key={index} problem={problem}
         onChanged={reload} />)}</ul>
     </Section>}
     <Section title={t('lastDay')} action={more({ page: 'trigger', query: { filter: 'recent' } })}>
       {/* Received and evaluated counts operate on Triggers rather than Threads or Decisions, so they do not link to filtered views. */}
-      <div className="dt-stats">
+      <div className="spa-stats">
         {stat(t('flowReceivedLabel'), data.flow.received)}
         {stat(t('flowFilteredLabel'), data.flow.filtered, data.flow.filtered ? { page: 'source' } : undefined)}
         {stat(t('flowJudgedLabel'), data.flow.judged)}
@@ -93,7 +93,7 @@ export function OverviewPage() {
     </Section>
     <Section title={t('term.executor')} action={more({ page: 'execution' })}>
       {/* Pauses surface in `problems` above, so Executor counts render the same in both states; while setup waits, nothing runs. */}
-      {setup?.problem ? <Hint>{t('executorWaitingSetup')}</Hint> : <div className="dt-stats">
+      {setup?.problem ? <Hint>{t('executorWaitingSetup')}</Hint> : <div className="spa-stats">
         {stat(t('executingLabel'), `${data.executor.running} / ${data.executor.maxWorkers}`)}
         {stat(t('queuedLabel'), data.executor.queued)}
         {stat(t('idleLabel'), data.executor.idle)}

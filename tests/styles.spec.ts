@@ -7,10 +7,10 @@ const css = readFileSync(join(dir, 'client.css'), 'utf8')
 const code = readdirSync(dir).filter(name => /\.tsx?$/.test(name)).map(name => readFileSync(join(dir, name), 'utf8')).join('\n')
 
 it('styles only classes a component uses', () => {
-  // Template literals like `dt-btn-${variant}` match any class with that prefix.
-  const prefixes = [...code.matchAll(/(dt-[\w-]*-)\$\{/g)].map(match => match[1]!)
+  // Template literals like `spa-btn-${variant}` match any class with that prefix.
+  const prefixes = [...code.matchAll(/(spa-[\w-]*-)\$\{/g)].map(match => match[1]!)
   const used = (name: string) => new RegExp(`(?<![\\w-])${name}(?![\\w-])`).test(code) || prefixes.some(prefix => name.startsWith(prefix))
-  const classes = new Set([...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.(dt-[\w-]+)/g)].map(match => match[1]!))
+  const classes = new Set([...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.(spa-[\w-]+)/g)].map(match => match[1]!))
   expect([...classes].filter(name => !used(name))).toEqual([])
 })
 

@@ -17,13 +17,13 @@ import { en, zh } from './locales.ts'
 import type { T } from './text.ts'
 
 type ClientContext = Context & { sessions: ISessions }
-const NS = 'dshSuperagent'
-const PANEL_ID = 'dsh-superagent' as MainPanelId
-const ENTRY = 'dsh-superagent'
+const NS = 'dshSuperPersonalAgent'
+const PANEL_ID = 'dsh-super-personal-agent' as MainPanelId
+const ENTRY = 'dsh-super-personal-agent'
 
-function HammerIcon({ size }: SidebarPanelIconOwnerProps) {
+function PersonalAgentIcon({ size }: SidebarPanelIconOwnerProps) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <path d="M6 3.5h9l3.5 1.75v2.5L15 9.5H6a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1z" /><path d="M10 9.5v10.25a1.75 1.75 0 0 0 3.5 0V9.5" /><path d="M10 15.5h3.5" />
+    <circle cx="9" cy="7" r="3" /><path d="M3 20v-2a6 6 0 0 1 12 0v2M18 3l1.2 3.8L23 8l-3.8 1.2L18 13l-1.2-3.8L13 8l3.8-1.2z" />
   </svg>
 }
 
@@ -48,11 +48,11 @@ function Mounted({ ctx, t }: { ctx: ClientContext; t: T }) {
 export const inject = ['slots', 'locale', 'sessions', 'uiWorkspace']
 /** Registers the panel, sidebar icon, and Plugin Manager config view; `configForms` is optional (without it, machine settings are read-only). */
 export function apply(ctx: ClientContext): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-superagent: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-super-personal-agent: dictionaries')
   const t = ctx.locale.bind(NS)
   ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL_ID, locale: NS, inject: () => ({}) },
     (props: { t: T }) => <Mounted ctx={ctx} t={props.t} />))
-  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: PANEL_ID, order: 10, label: () => t('panel'), locale: NS }, HammerIcon))
+  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: PANEL_ID, order: 10, label: () => t('panel'), locale: NS }, PersonalAgentIcon))
   ctx.slots.inject('plugins.row.config', () => ctx.slots.register({ name: 'plugins.row.config', key: `${ENTRY}#${ENTRY}`, locale: NS },
     (props: PluginConfigViewProps & { t: T }) => <PluginConfig t={props.t} view={props.view} form={props.form} />))
 }

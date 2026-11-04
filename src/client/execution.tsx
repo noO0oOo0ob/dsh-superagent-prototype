@@ -26,8 +26,8 @@ export function ExecutionStatus({ filter: current, state, reload }: {
   const action = paused ? 'resumeProcessing' : 'pauseProcessing'
   return <>
     <StatusHead hint={t('executionStatusIntro')} settings="execution" />
-    <div className="dt-row-meta dt-status-line">
-      <span className="dt-status-text" data-state={status.tone}>{status.label}</span>
+    <div className="spa-row-meta spa-status-line">
+      <span className="spa-status-text" data-state={status.tone}>{status.label}</span>
       {!state.setup.problem && <>
         <LabelValue label={t('executingLabel')}
           value={`${state.load.running} / ${maxWorkers}`} /><LabelValue label={t('queuedLabel')} value={state.load.queued} />
@@ -36,14 +36,14 @@ export function ExecutionStatus({ filter: current, state, reload }: {
         ? 'resumeProcessingConfirm' : 'pauseProcessingConfirm')}
         onConfirm={pause} />
     </div>
-    <div className="dt-filters">
+    <div className="spa-filters">
       {TICKET_FILTERS.map(value => <Pill key={value} active={current === value}
         onClick={() => { setLimit(20); navigate({ page: 'execution', query: value === 'open' ? {} : { filter: value } },
           true) }}>{t(`ticketFilter.${value}`)}</Pill>)}
     </div>
     {current === 'idle' && <Hint>{t('idleHint')}</Hint>}
     <LoadState error={error} loading={!data} />
-    {data && (data.items.length ? <ul className="dt-list">{data.items.map(ticket => ticket.stage === 'person'
+    {data && (data.items.length ? <ul className="spa-list">{data.items.map(ticket => ticket.stage === 'person'
       ? <TicketLine key={ticket.id} ticket={ticket} question
         onChanged={reloadTickets} /> : <TicketLine key={ticket.id} ticket={ticket} />)}</ul> : <Hint>{t('none')}</Hint>)}
     {data?.next_offset != null && <LoadMore onMore={() => setLimit(limit + 20)} />}
@@ -57,16 +57,16 @@ function EnvironmentVariables({ groups, sources,
   const [open, setOpen] = useState(false)
   const owner = (id: string) => id === 'executor' ? t('term.executor') : localized(t, sources.find(source => source.id === id)?.title ?? id)
   const count = groups.reduce((sum, group) => sum + group.variables.length, 0)
-  return <DisclosureRow icon={<Icon name="hash" />} title={<>{t('environmentVariables')} <span className="dt-count">{count}</span></>}
+  return <DisclosureRow icon={<Icon name="hash" />} title={<>{t('environmentVariables')} <span className="spa-count">{count}</span></>}
     open={open} onToggle={() => setOpen(!open)}>
-    <div className="dt-disclosure-body">
+    <div className="spa-disclosure-body">
       <Hint>{t('environmentPick')}</Hint>
-      <table className="dt-table">
+      <table className="spa-table">
         <thead><tr><th>{t('environmentKey')}</th><th>{t('environmentDescription')}</th><th>{t('environmentOwner')}</th></tr></thead>
         <tbody>{groups.flatMap(group => group.variables.map(variable => <tr key={variable.key}>
-          <td><button type="button" className="dt-textlink dt-mono" onClick={() => onPick(variable.key)}>{variable.key}</button></td>
+          <td><button type="button" className="spa-textlink spa-mono" onClick={() => onPick(variable.key)}>{variable.key}</button></td>
           <td title={localized(t, variable.description)}>{firstSentence(localized(t, variable.description))}</td>
-          <td>{owner(group.owner)}{!group.enabled && <span className="dt-hint"> · {t('sourceOff')}</span>}</td>
+          <td>{owner(group.owner)}{!group.enabled && <span className="spa-hint"> · {t('sourceOff')}</span>}</td>
         </tr>))}</tbody>
       </table>
     </div>
@@ -89,33 +89,33 @@ export function ExecutionSettings() {
     edit({ prepare: `${value.prepare.slice(0, at)}"$${key}"${value.prepare.slice(to)}` })
     requestAnimationFrame(() => { field?.focus(); const caret = at + key.length + 3; field?.setSelectionRange(caret, caret) })
   }
-  return <div className="dt-form">
-    <form className="dt-form" onSubmit={event => { void draft.submit(event) }}>
+  return <div className="spa-form">
+    <form className="spa-form" onSubmit={event => { void draft.submit(event) }}>
       <Fields disabled={draft.busy}>
-        <div className="dt-form dt-block">
-          <h2 className="dt-block-title">{t('term.executor')}<InfoTip text={t('executorIntro')} /></h2>
-          <Section title={t('executorModel')} hint={t('executorModelHint')}><ModelField id="dt-worker-model" value={value.model}
+        <div className="spa-form spa-block">
+          <h2 className="spa-block-title">{t('term.executor')}<InfoTip text={t('executorIntro')} /></h2>
+          <Section title={t('executorModel')} hint={t('executorModelHint')}><ModelField id="spa-worker-model" value={value.model}
             onChange={model => edit({ model })} /></Section>
           <Field label={t('maxWorkers')} hint={t('maxWorkersHint')}>
             <Input type="number" min={LIMITS.maxWorkers.min} max={LIMITS.maxWorkers.max} required value={value.maxWorkers}
               onChange={event => edit({ maxWorkers: event.target.value })} />
           </Field>
         </div>
-        <div className="dt-form dt-block">
-          <h2 className="dt-block-title">{t('term.environment')}<InfoTip text={t('environmentIntro')} /></h2>
+        <div className="spa-form spa-block">
+          <h2 className="spa-block-title">{t('term.environment')}<InfoTip text={t('environmentIntro')} /></h2>
           <Field label={t('executionDirectory')} hint={t('executionDirectoryHint')} note={value.directory ? undefined
             : t('executionDirectoryDefault', { root: environment.root })}>
-            <Input className="dt-mono" value={value.directory} placeholder={t('executionDirectoryEmpty')} spellCheck={false} pattern="/.*"
+            <Input className="spa-mono" value={value.directory} placeholder={t('executionDirectoryEmpty')} spellCheck={false} pattern="/.*"
               onChange={event => edit({ directory: event.target.value })} />
           </Field>
           <Field label={t('prepareCommand')} hint={t('prepareCommandHint')}>
-            <textarea ref={prepare} className="dt-textarea dt-mono" rows={3} maxLength={LIMITS.prepareCommand} spellCheck={false}
+            <textarea ref={prepare} className="spa-textarea spa-mono" rows={3} maxLength={LIMITS.prepareCommand} spellCheck={false}
               placeholder={t('prepareCommandEmpty')} value={value.prepare}
               onChange={event => edit({ prepare: event.target.value })} />
           </Field>
           <EnvironmentVariables groups={environment.variables} sources={sources} onPick={insert} />
           <Field label={t('blockedCommands')} hint={t('blockedCommandsHint')}>
-            <Input className="dt-mono" value={value.blockedCommands} placeholder={t('blockedCommandsNone')} spellCheck={false}
+            <Input className="spa-mono" value={value.blockedCommands} placeholder={t('blockedCommandsNone')} spellCheck={false}
               onChange={event => edit({ blockedCommands: event.target.value })} />
           </Field>
         </div>

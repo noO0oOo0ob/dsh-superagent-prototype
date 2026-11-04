@@ -15,7 +15,7 @@ it('states why a filtered search result has no Thread instead of opening an empt
   await type(field<HTMLInputElement>(zh.searchLabel), 'issue')
   await act(async () => { field<HTMLInputElement>(zh.searchLabel).closest('form')!.requestSubmit() }); await settle()
   expect(text()).toContain('被来源过滤：来源已停用')
-  expect(all('.dt-search-results button').some(button => button.textContent === 'issue text')).toBe(false)
+  expect(all('.spa-search-results button').some(button => button.textContent === 'issue text')).toBe(false)
 })
 
 it('opens a search result older than the newest page around its Trigger', async () => {
@@ -24,9 +24,9 @@ it('opens a search result older than the newest page around its Trigger', async 
   await type(field<HTMLInputElement>(zh.searchLabel), 'message')
   await act(async () => { field<HTMLInputElement>(zh.searchLabel).closest('form')!.requestSubmit() }); await settle()
   expect(text()).toContain('找到 0 个工单、0 个线程、1 条触发')
-  await click(all('.dt-search-results button').find(button => button.textContent === 'message e1')!)
+  await click(all('.spa-search-results button').find(button => button.textContent === 'message e1')!)
   expect(server.requests.some(request => request.path.includes('around=e1'))).toBe(true)
-  expect(document.querySelector('.dt-highlight')?.textContent).toContain('message e1')
+  expect(document.querySelector('.spa-highlight')?.textContent).toContain('message e1')
 })
 
 it('explains what can be searched when nothing matches', async () => {
@@ -40,7 +40,7 @@ it('returns to the exact page after a remount of the main panel', async () => {
   await mount()
   await click('修复回归')
   await remount()
-  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('修复回归')
+  expect(document.querySelector('.spa-page-title h2')?.textContent).toBe('修复回归')
 })
 
 it('shows domain terms in the interface language only and lists both languages in the (?) glossary', async () => {
@@ -52,12 +52,12 @@ it('shows domain terms in the interface language only and lists both languages i
   expect([...row.querySelectorAll('td')].map(cell => cell.textContent)).toEqual(['Ticket', '工单', 'An authorized unit of work'])
   expect(dialog.textContent).toContain('Accept 接单')
   // Terms are grouped the way the tabs follow the flow, after the roles that act in it.
-  expect([...dialog.querySelectorAll('th.dt-glossary-group')].map(cell => cell.textContent)).toEqual(['Roles', 'Source', 'Trigger', 'Eval',
+  expect([...dialog.querySelectorAll('th.spa-glossary-group')].map(cell => cell.textContent)).toEqual(['Roles', 'Source', 'Trigger', 'Eval',
     'Execution'])
   expect([...dialog.querySelectorAll('tr')].find(item => item.textContent?.startsWith('Main Session'))!.textContent).toContain('prompts call it the orchestrator')
 })
 
-it('says dsh-superagent is not answering when its routes are gone, as while it restarts', async () => {
+it('says dsh-super-personal-agent is not answering when its routes are gone, as while it restarts', async () => {
   server.down = true
   await mount()
   expect(text()).toContain(zh.hostNotRunning)
@@ -70,12 +70,12 @@ it('closes search results on Escape and on a click outside the search', async ()
   const submit = async () => { await type(search,
     'nothing'); await act(async () => { search.closest('form')!.requestSubmit() }); await settle() }
   await submit()
-  expect(document.querySelector('.dt-search-results')).not.toBeNull()
+  expect(document.querySelector('.spa-search-results')).not.toBeNull()
   await act(async () => { search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
-  expect(document.querySelector('.dt-search-results')).toBeNull()
+  expect(document.querySelector('.spa-search-results')).toBeNull()
   await submit()
   await act(async () => { document.querySelector('main')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })) })
-  expect(document.querySelector('.dt-search-results')).toBeNull()
+  expect(document.querySelector('.spa-search-results')).toBeNull()
 })
 
 it('shows the answer to the latest search only', async () => {
@@ -87,7 +87,7 @@ it('shows the answer to the latest search only', async () => {
   const search = field<HTMLInputElement>(zh.searchLabel)
   for (const query of ['old', 'new']) { await type(search,
     query); await act(async () => { search.closest('form')!.requestSubmit() }); await settle() }
-  expect(all('.dt-search-results .dt-row-title').map(title => title.textContent)).toEqual(['new message'])
+  expect(all('.spa-search-results .spa-row-title').map(title => title.textContent)).toEqual(['new message'])
   await act(async () => { release() }); await settle()
-  expect(all('.dt-search-results .dt-row-title').map(title => title.textContent)).toEqual(['new message'])
+  expect(all('.spa-search-results .spa-row-title').map(title => title.textContent)).toEqual(['new message'])
 })

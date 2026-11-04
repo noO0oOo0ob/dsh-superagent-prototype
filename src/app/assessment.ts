@@ -17,7 +17,7 @@ import type { Effects } from './effects.ts'
 
 /** Schema for a short lowercase kebab-case English ticket worktree name (1–4 words, at most 32 characters). */
 export const WorktreeNameSchema = z.string().max(32).regex(/^[a-z]+(?:-[a-z0-9]+){0,3}$/, 'Use 1–4 short English words in lowercase kebab-case, at most 32 characters').describe('Meaningful short English ticket name, e.g. fix-plan-color. Translate Chinese titles into English; no Chinese, pinyin or generic ticket names. 1–4 lowercase words in kebab-case, at most 32 characters.')
-/** Schema for the main Session's proactive candidate assessment decision (`orchestrator_eval_decide`). */
+/** Schema for the main Session's proactive candidate assessment decision (`personal_agent_eval_decide`). */
 export const AssessmentSchema = z.object({
   decision: z.enum(['accept', 'ignore', 'unavailable']),
   rule_assessments: z.array(RuleAssessmentSchema)
@@ -36,7 +36,7 @@ export const AssessmentSchema = z.object({
 /** Character limits in the initial thread window: for the trigger itself, its two nearest neighbours, other window messages, and stub previews. */
 const TRIGGER_CHARS = 4000, NEAR_CHARS = 1200, WINDOW_CHARS = 400, STUB_CHARS = 50
 const FINISHED = 'This assessment has finished: it was decided, timed out or restarted'
-const EXPLICIT = 'This is an explicit request, which is routed instead of assessed: use orchestrator_route with its trigger_id and kind accept, attach, stop or ignore'
+const EXPLICIT = 'This is an explicit request, which is routed instead of assessed: use personal_agent_route with its trigger_id and kind accept, attach, stop or ignore'
 type AssessmentContext = Awaited<ReturnType<typeof admissionContext>>
 type ReadCache = {
   snapshots: Map<string, string>; images: Map<string, { id: string; text: string }>; messages: Map<string, string>; cursors: Set<string>
@@ -63,9 +63,9 @@ export interface AssessorHost {
   candidateCard(candidate: Candidate): Promise<Record<string, unknown>>
 }
 
-/** Schema for bounded context or repository read requests during an active evaluation (`orchestrator_eval_read`). */
+/** Schema for bounded context or repository read requests during an active evaluation (`personal_agent_eval_read`). */
 export const EvalReadSchema = z.object({
-  trigger_id: z.string().min(1).describe('Original candidate ID returned by orchestrator_eval; every reference is scoped to this trigger.'),
+  trigger_id: z.string().min(1).describe('Original candidate ID returned by personal_agent_eval; every reference is scoped to this trigger.'),
   resource: z.enum(['message', 'root', 'parent', 'thread', 'file', 'directory', 'image']),
   path: z.string().optional().describe('Repository-relative path, only for file/directory.'),
   message_id: z.string().optional().describe('Only for message: omit for the trigger, or the id of a window message or stub.'),
@@ -84,7 +84,7 @@ export type EvalRead = z.infer<typeof EvalReadSchema>
 /**
  * Implements the `Engine` `Assessor` port for proactive candidate evaluation in the main Session.
  * Relays each evaluation's candidate card to the main Session through the durable `assessment` effect, serves bounded `TriggerContext` and repository reads while the evaluation runs, and converts the main Session's assessment into an `AssessmentOutcome` for `Engine.decide`.
- * Depends on `SourceRegistry` (via `AssessorHost`) for source-specific thread context and on `Sessions` for deduplicated candidate delivery; the main Session's `orchestrator_eval*` tools call `context`, `read`, and `decide`.
+ * Depends on `SourceRegistry` (via `AssessorHost`) for source-specific thread context and on `Sessions` for deduplicated candidate delivery; the main Session's `personal_agent_eval*` tools call `context`, `read`, and `decide`.
  */
 export class MasterAssessor implements Assessor {
   /** Per-evaluation read caches and thread contexts, keyed by `evalId`. */
@@ -163,7 +163,7 @@ export class MasterAssessor implements Assessor {
           }
         } catch (error) {
           caller?.throwIfAborted()
-          if (current()) reads.error = `Thread context unavailable: ${String(error).slice(0, 300)}. Use orchestrator_eval_read before deciding based on missing context.`
+          if (current()) reads.error = `Thread context unavailable: ${String(error).slice(0, 300)}. Use personal_agent_eval_read before deciding based on missing context.`
         }
       }).finally(() => { if (current()) delete reads.loading })
       reads.loading = loading
@@ -173,10 +173,10 @@ export class MasterAssessor implements Assessor {
     if (!this.live(evalId, trigger)) throw new Error(FINISHED)
   }
   /**
-   * Returns the `orchestrator_eval` payload: the trigger's text once (up to `TRIGGER_CHARS`), batch peers, related tickets
+   * Returns the `personal_agent_eval` payload: the trigger's text once (up to `TRIGGER_CHARS`), batch peers, related tickets
    * on the thread, the Policy version its Eval was built from, and the initial thread window (first five messages and five
    * on either side of the trigger, truncated to `WINDOW_CHARS` or `NEAR_CHARS` for its two nearest neighbours with total
-   * length and image IDs, plus other loaded messages as `STUB_CHARS` previews; `orchestrator_eval_read` reads any message
+   * length and image IDs, plus other loaded messages as `STUB_CHARS` previews; `personal_agent_eval_read` reads any message
    * in full by ID).
    * Assessment instructions live in the main Session's prompt (`prompts/admission.md`), not in this payload.
    */
@@ -203,7 +203,7 @@ export class MasterAssessor implements Assessor {
       })
       return { complete: context.complete, loaded_messages: context.messages.length, source_found: context.window.source_found,
         ...context.next ? { next_cursor: context.next } : {}, messages }
-    })() : { error: error ?? 'Call orchestrator_eval to load initial context', complete: false }
+    })() : { error: error ?? 'Call personal_agent_eval to load initial context', complete: false }
     const settings = this.host.settings()
     const others = candidate.triggers.filter(item => item.id !== trigger.id)
     return { trigger_id: trigger.id, strength: candidate.strength, mode: settings.eval.mode,
@@ -220,7 +220,7 @@ export class MasterAssessor implements Assessor {
   }
   /**
    * Serves bounded paginated text or image attachments from the evaluation's thread context or repository for
-   * `orchestrator_eval_read`; `agent` is the main Session, which receives images as attachments.
+   * `personal_agent_eval_read`; `agent` is the main Session, which receives images as attachments.
    */
   async read(agent: Agent, read: EvalRead, signal: AbortSignal) {
       const { candidate, trigger } = this.evalFor(read.trigger_id)

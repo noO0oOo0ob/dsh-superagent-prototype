@@ -139,7 +139,7 @@ export class Store implements Repositories {
    */
   atomic<T>(operation: () => T): T {
     const level = this.depth++
-    const name = `orchestrator_atomic_${level}`
+    const name = `personal_agent_atomic_${level}`
     this.committed[level] = []
     this.db.exec(`SAVEPOINT ${name}`)
     let value: T

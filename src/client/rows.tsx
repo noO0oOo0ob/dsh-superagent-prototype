@@ -15,20 +15,20 @@ export function TicketLine({ ticket, question, onChanged, context }: {
   const after = async (request: Promise<unknown>) => { await request; await onChanged?.() }
   const note = question && ticket.note && { ...ticket.note, text: readableMarkers(t, ticket.note.text) }
   const answer = ticket.reply && ticket.stage === 'person' && ticket.action === 'answer' ? ticket.reply : undefined
-  return <li className="dt-row dt-link dt-ticket" data-state={question ? status.dot : undefined}>
-    <div className="dt-ticket-stage"><StageMark state={status.dot} icon={status.icon} label={status.label} /></div>
-    <div className="dt-ticket-body">
-      <div className="dt-row-title"><button type="button" className="dt-open" onClick={() => navigate({ page: 'execution',
+  return <li className="spa-row spa-link spa-ticket" data-state={question ? status.dot : undefined}>
+    <div className="spa-ticket-stage"><StageMark state={status.dot} icon={status.icon} label={status.label} /></div>
+    <div className="spa-ticket-body">
+      <div className="spa-row-title"><button type="button" className="spa-open" onClick={() => navigate({ page: 'execution',
         id: ticket.id })}>{ticket.title}</button></div>
-      <div className="dt-row-meta dt-ticket-meta">
+      <div className="spa-row-meta spa-ticket-meta">
         {ticket.threads.map(thread => <ThreadChip key={thread.key} thread={thread} />)}
         {context && <ContextTag />}
         {ticket.undelivered > 0 && <LabelValue label={t('ticketUndeliveredLabel')} value={ticket.undelivered} />}
-        {note ? <span className={note.error ? 'dt-ticket-note dt-ticket-note-error' : 'dt-ticket-note'} title={note.text}>{note.text}</span>
+        {note ? <span className={note.error ? 'spa-ticket-note spa-ticket-note-error' : 'spa-ticket-note'} title={note.text}>{note.text}</span>
           : <When at={ticket.updatedAt} />}
       </div>
       {/* Always render the actions container so every Ticket row keeps a uniform three-line height. */}
-      <div className="dt-ticket-actions">{onChanged && <>
+      <div className="spa-ticket-actions">{onChanged && <>
         {answer && <ActionLink href={answer.url} icon="message">{t('answerIn', { source: valueLabel(t, 'source',
           answer.source) })}</ActionLink>}
         {ticket.actions.retry && <ConfirmButton variant="outline" icon="refresh" label={t('retry')} title={t('retryTitle')}
@@ -53,21 +53,21 @@ export function ThreadLine({ thread, ticketId, context }: { thread: ThreadRow; t
   const live = thread.tickets.filter(ticket => ticket.state === 'open' && ticket.id !== ticketId)
   const { dot, icon, label } = threadMark(t, thread)
   const reaches = live.length > 0 && `${live[0]!.title}${live.length > 1 ? t('andMore', { count: live.length - 1 }) : ''}`
-  return <li className="dt-row dt-link dt-ticket">
-    <div className="dt-ticket-stage"><StageMark state={dot} icon={icon} label={label} /></div>
-    <div className="dt-ticket-body">
-      <div className="dt-row-title">
-        <button type="button" className="dt-open" title={thread.pollError} onClick={() => navigate({ page: 'trigger',
+  return <li className="spa-row spa-link spa-ticket">
+    <div className="spa-ticket-stage"><StageMark state={dot} icon={icon} label={label} /></div>
+    <div className="spa-ticket-body">
+      <div className="spa-row-title">
+        <button type="button" className="spa-open" title={thread.pollError} onClick={() => navigate({ page: 'trigger',
           id: thread.key })}>{readableMarkers(t, thread.title)}</button>
       </div>
-      <div className="dt-row-quote dt-line">
+      <div className="spa-row-quote spa-line">
         {thread.latest && <>{actorName(t, thread.latest.actor)}{t('labelSeparator')}{readableMarkers(t, thread.latest.preview)
           || t('empty')}</>}
       </div>
-      <div className="dt-row-meta dt-line">
+      <div className="spa-row-meta spa-line">
         <ThreadChip thread={thread} />
         {context && <ContextTag />}
-        {thread.pollError ? <span className="dt-line-text dt-error-text">{thread.pollError}</span> : reaches && <LabelValue
+        {thread.pollError ? <span className="spa-line-text spa-error-text">{thread.pollError}</span> : reaches && <LabelValue
           label={t('fanoutTo')} value={reaches} />}
         <When at={thread.lastAt} />
       </div>
@@ -83,17 +83,17 @@ export function DecisionLine({ decision }: { decision: DecisionRow }) {
   const reason = decision.reason ? reasonLabel(t, decision.reason) : ''
   const open = () => decision.ticketId ? navigate({ page: 'execution', id: decision.ticketId })
     : navigate({ page: 'trigger', id: decision.thread, query: { trigger: decision.triggerIds[0] ?? '' } })
-  return <li className="dt-row dt-link dt-ticket">
-    <div className="dt-ticket-stage"><StageMark state={mark.dot} icon={mark.icon} label={mark.label} /></div>
-    <div className="dt-ticket-body">
-      <div className="dt-row-title">
-        <button type="button" className="dt-open" title={reason || undefined} onClick={open}>
+  return <li className="spa-row spa-link spa-ticket">
+    <div className="spa-ticket-stage"><StageMark state={mark.dot} icon={mark.icon} label={mark.label} /></div>
+    <div className="spa-ticket-body">
+      <div className="spa-row-title">
+        <button type="button" className="spa-open" title={reason || undefined} onClick={open}>
           {decision.ticketTitle ?? (decision.threadTitle ? readableMarkers(t, decision.threadTitle) : preview || t('empty'))}
         </button>
       </div>
-      <div className="dt-row-quote dt-line">{preview}</div>
-      <div className="dt-row-meta dt-line">
-        {reason && <span className="dt-line-text">{reason}</span>}
+      <div className="spa-row-quote spa-line">{preview}</div>
+      <div className="spa-row-meta spa-line">
+        {reason && <span className="spa-line-text">{reason}</span>}
         {matched.length > 0 && <LabelValue label={t('ruleLabel')} value={matched.join(t('listSeparator'))} />}
         <When at={decision.at} />
       </div>
@@ -104,15 +104,15 @@ export function DecisionLine({ decision }: { decision: DecisionRow }) {
 function ThreadChip({ thread }: { thread: Pick<ThreadFacts, 'source' | 'facts' | 'url' | 'title'> }) {
   const { t } = usePanel()
   const cells = <>
-    <span className="dt-chip-source">{valueLabel(t, 'source', thread.source)}</span>
-    {Object.entries(thread.facts).map(([id, fact]) => <span key={id} className={fact.problem ? 'dt-chip-fact dt-chip-problem'
-      : 'dt-chip-fact'}>
-      {fact.label && <span className="dt-chip-label">{localized(t, fact.label)}</span>}{localized(t, fact.value)}
+    <span className="spa-chip-source">{valueLabel(t, 'source', thread.source)}</span>
+    {Object.entries(thread.facts).map(([id, fact]) => <span key={id} className={fact.problem ? 'spa-chip-fact spa-chip-problem'
+      : 'spa-chip-fact'}>
+      {fact.label && <span className="spa-chip-label">{localized(t, fact.label)}</span>}{localized(t, fact.value)}
     </span>)}
   </>
-  return thread.url ? <a className="dt-chip dt-chip-link" href={thread.url} target="_blank" rel="noopener noreferrer" title={thread.title}>
-    {cells}<span className="dt-chip-open"><Icon name="external" size={11} /></span>
-  </a> : <span className="dt-chip">{cells}</span>
+  return thread.url ? <a className="spa-chip spa-chip-link" href={thread.url} target="_blank" rel="noopener noreferrer" title={thread.title}>
+    {cells}<span className="spa-chip-open"><Icon name="external" size={11} /></span>
+  </a> : <span className="spa-chip">{cells}</span>
 }
 
 type Run<I> = { item: I; earlier: I[] }
@@ -131,10 +131,10 @@ export function Earlier({ items }: { items: { id: string; at: string; preview: s
   const [open, setOpen] = useState(false)
   if (!items.length) return null
   return <div>
-    <button type="button" className="dt-textlink" aria-expanded={open} onClick={() => setOpen(!open)}>
+    <button type="button" className="spa-textlink" aria-expanded={open} onClick={() => setOpen(!open)}>
       {open ? t('collapse') : t('automatedEarlier', { count: items.length })}
     </button>
-    {open && <ul className="dt-plain-list dt-hint">{items.map(item => <li key={item.id}><When
+    {open && <ul className="spa-plain-list spa-hint">{items.map(item => <li key={item.id}><When
       at={item.at} /> · {readableMarkers(t, item.preview) || t('empty')}</li>)}</ul>}
   </div>
 }

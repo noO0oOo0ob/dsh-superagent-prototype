@@ -35,19 +35,19 @@ function TriggerItem({ trigger, earlier, target, subscribed, requeue }: {
     if (element && target === trigger.id
       && !element.dataset.scrolled) { element.dataset.scrolled = '1'; element.scrollIntoView?.({ block: 'center' }) }
   }
-  return <li id={`trigger-${trigger.id}`} className={`dt-event${target === trigger.id ? ' dt-highlight' : ''}${trigger.human ? ''
-    : ' dt-event-quiet'}`} ref={scroll}>
-    <div className="dt-event-foot"><strong className="dt-event-actor">{actorName(t, trigger.actor)}</strong><When
+  return <li id={`trigger-${trigger.id}`} className={`spa-event${target === trigger.id ? ' spa-highlight' : ''}${trigger.human ? ''
+    : ' spa-event-quiet'}`} ref={scroll}>
+    <div className="spa-event-foot"><strong className="spa-event-actor">{actorName(t, trigger.actor)}</strong><When
       at={trigger.at} /></div>
     <ClampText text={readableMarkers(t, trigger.text || trigger.preview)} />
     <Earlier items={earlier} />
     {trigger.disposition.handbacks.map(item => <Hint key={item.ticketId}>{t('handedBack', { ticket: item.title,
       reason: item.reason })}</Hint>)}
-    <div className="dt-event-foot">
+    <div className="spa-event-foot">
       {triggerTags(t, trigger, subscribed)}
-      {ticketId && !subscribed.has(ticketId) && <button type="button" className="dt-textlink dt-icon-link"
+      {ticketId && !subscribed.has(ticketId) && <button type="button" className="spa-textlink spa-icon-link"
         onClick={() => navigate({ page: 'execution', id: ticketId })}>{t('openTicket')}</button>}
-      {requeue && <button type="button" className="dt-textlink dt-icon-link dt-reveal" disabled={requeue.busy} aria-busy={requeue.busy}
+      {requeue && <button type="button" className="spa-textlink spa-icon-link spa-reveal" disabled={requeue.busy} aria-busy={requeue.busy}
         onClick={requeue.run}>
         <Icon name="refresh" size={13} />{t('requeue')}
       </button>}
@@ -128,33 +128,33 @@ export function ThreadPage({ id, target }: { id: string; target?: string }) {
   return <>
     <PageHead title={readableMarkers(t, data.title)}>{data.url && <ActionLink href={data.url}>{t('openOriginal')}</ActionLink>}</PageHead>
     {error && <LoadState error={error} loading={false} />}
-    <div className="dt-row-meta dt-status-line">
+    <div className="spa-row-meta spa-status-line">
       <span>{valueLabel(t, 'source', data.source)}</span><span>{t('threadLatest',
         { time: when(data.lastAt, t('lang')) })}</span><span>{t('threadCreated', { time: when(data.createdAt, t('lang')) })}</span>
     </div>
-    {data.evaluating && <p className="dt-banner">
+    {data.evaluating && <p className="spa-banner">
       {t('evaluatingBanner', { count: data.evaluating.triggers, strength: valueLabel(t, 'strength', data.evaluating.strength),
         deadline: when(data.evaluating.deadline, t('lang')) })}
     </p>}
-    {data.pollError && <p className="dt-error dt-clamp">{t('pollFailed', { error: data.pollError })}</p>}
+    {data.pollError && <p className="spa-error spa-clamp">{t('pollFailed', { error: data.pollError })}</p>}
     {data.tickets.length > 0 && <Section title={t('subscribedTickets')} count={data.tickets.length}>
-      <ul className="dt-list">{data.tickets.map(ticket => <TicketLine key={ticket.id} ticket={ticket}
+      <ul className="spa-list">{data.tickets.map(ticket => <TicketLine key={ticket.id} ticket={ticket}
         context={data.context.includes(ticket.id)} />)}</ul>
     </Section>}
     {data.decisions.length > 0 && <DisclosureRow icon={<Icon name="decision" />} title={t('threadDecisions',
       { count: data.decisions.length })} open={decisionsOpen}
       onToggle={() => setDecisionsOpen(!decisionsOpen)}>
-      <div className="dt-disclosure-body"><ul className="dt-list">{data.decisions.map(decision => <DecisionLine key={decision.id}
+      <div className="spa-disclosure-body"><ul className="spa-list">{data.decisions.map(decision => <DecisionLine key={decision.id}
         decision={decision} />)}</ul></div>
     </DisclosureRow>}
     {data.correlated.length > 0 && <Section title={t('term.correlation')}>
-      <ul className="dt-plain-list">{data.correlated.map(item => <li key={item.key}>
-        <button type="button" className="dt-textlink" onClick={() => navigate({ page: 'trigger', id: item.key })}>{readableMarkers(t,
+      <ul className="spa-plain-list">{data.correlated.map(item => <li key={item.key}>
+        <button type="button" className="spa-textlink" onClick={() => navigate({ page: 'trigger', id: item.key })}>{readableMarkers(t,
           item.title)}</button>
       </li>)}</ul>
     </Section>}
     <Section title={t('timeline')} count={t('newestFirst')}>
-      {data.timeline.length ? <ol className="dt-timeline">{automatedRuns(data.timeline.slice().reverse(), sender).map(({ item,
+      {data.timeline.length ? <ol className="spa-timeline">{automatedRuns(data.timeline.slice().reverse(), sender).map(({ item,
         earlier: folded }) =>
         <TriggerItem key={item.id} trigger={item} earlier={folded} target={target} subscribed={subscribed}
           requeue={item.actions.requeue ? { busy: requeue.busy, run: () => { void requeue.run(item.id) } } : undefined} />)}</ol>
@@ -166,8 +166,8 @@ export function ThreadPage({ id, target }: { id: string; target?: string }) {
         </Button>
       </div>}
     </Section>
-    {data.tickets.length > 0 && <div className="dt-danger-zone">
-      <span className="dt-hint">{t('unsubscribeHint')}</span>
+    {data.tickets.length > 0 && <div className="spa-danger-zone">
+      <span className="spa-hint">{t('unsubscribeHint')}</span>
       <ConfirmButton variant="outline" icon="unsubscribe" label={t('unsubscribe')} title={t('unsubscribeTitle')}
         message={t('unsubscribeConfirm', { title: data.title })}
         onConfirm={unsubscribe} />

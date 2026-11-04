@@ -32,9 +32,9 @@ export interface SourceContext {
   readonly deployment: Deployment
   readonly commands: Commands
   readonly ready: Promise<void>
-  /** True once setup resolved the repository and accounts; Sources poll only then. */
+  /** True once local runtime setup is ready; each adapter checks its own optional account. */
   configured(): boolean
-  /** Setup problem keeping this Source's account from running; only the Feishu bot check reports one. */
+  /** Setup problem keeping this Source's account from running. */
   readonly problem?: SetupProblem | undefined
   /** Returns a Source's configuration while enabled, or undefined while disabled or uninstalled. */
   config<C extends Record<string, unknown>>(kind: string): C | undefined

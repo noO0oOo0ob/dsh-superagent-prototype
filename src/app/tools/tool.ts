@@ -16,13 +16,13 @@ export const tool = <S extends z.ZodType>(definition: Tool<S>): Tool => definiti
 export const AcknowledgementSchema = z.string().trim().min(1)
   .refine(text => wordCount(text) <= IM_WORDS, `An acknowledgement has at most ${IM_WORDS} words (Chinese uses word segmentation); write one short sentence.`)
 /**
- * Builds the `orchestrator_read` tool, scoping allowed resource patterns to the main Session or to an
+ * Builds the `personal_agent_read` tool, scoping allowed resource patterns to the main Session or to an
  * Executor Session (which may read only its own ticket and messages that reached it).
  */
 export function readTool(description: string, executor: boolean,
   read: (resource: string, offset: number, limit: number | undefined, signal: AbortSignal) => Promise<unknown>): Tool {
   return tool({
-    name: 'orchestrator_read',
+    name: 'personal_agent_read',
     description,
     schema: z.object({
       resource: z.string().min(1).describe(`The resource, one of: ${resourceGrammar(executor)}.`),

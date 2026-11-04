@@ -1,4 +1,4 @@
-/** Serves paginated context resources to orchestrator_read so large bodies stay out of model prompts until requested. */
+/** Serves paginated context resources to personal_agent_read so large bodies stay out of model prompts until requested. */
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { UserError, key, latestReport, reached, runningAssignment, threadKey, type Ticket, type Trigger } from '../core/index.ts'
 import { batchOf, inputMessage, triggerMessage, workerSessionId } from '../executor/dsh.ts'
@@ -20,7 +20,7 @@ import { KV } from '../kv.ts'
 import type { Store } from './store.ts'
 import type { TextCache } from './cache.ts'
 
-/** Resource descriptors exposed via orchestrator_read, marking which resources worker sessions may also read for their own ticket. */
+/** Resource descriptors exposed via personal_agent_read, marking which resources worker sessions may also read for their own ticket. */
 export const RESOURCES: readonly { name: string; holds: string; executor?: true }[] = [
   { name: 'tickets', holds: 'ticket cards, newest first; a card\'s state is person/review after a ready report, person/blocked or person/failed after those reports, person/answer with a question, person/delivery when an input could not reach the worker, working or working/queued while it works, idle once the worker ended its turn without a report, else how the ticket ended' },
   { name: 'triggers', holds: 'trigger cards with where each went, newest first' },
@@ -42,16 +42,16 @@ export const RESOURCES: readonly { name: string; holds: string; executor?: true 
     executor: true },
   { name: 'settings', holds: 'settings by block, each with the revision a save names: the small blocks whole, the Policy and the Source '
     + 'instances summarized' },
-  { name: 'settings/<block>', holds: 'one settings block whole, as orchestrator_settings_save takes it: policy, eval, executor, pause or '
+  { name: 'settings/<block>', holds: 'one settings block whole, as personal_agent_settings_save takes it: policy, eval, executor, pause or '
     + 'source:<id>' },
   { name: 'prompts', holds: 'the prompt revision each Session reads, the skills, and the saved versions' },
   { name: 'prompts/<revision>', holds: 'one prompt version by number, or current, the one the Session works under', executor: true },
   { name: 'prompts/defaults', holds: 'the built-in prompt configuration, and the built-in parts by the key an override names' },
-  { name: 'prompt-preview/<id>', holds: 'a composed prompt that orchestrator_prompts_save previewed' },
+  { name: 'prompt-preview/<id>', holds: 'a composed prompt that personal_agent_prompts_save previewed' },
   { name: 'models', holds: 'model providers, the DSH default and each role\'s model' },
   { name: 'models/<provider>', holds: 'one provider\'s models' },
-  { name: 'feishu/<trigger-id>/…', holds: 'a Feishu original, as the dsh-superagent-feishu skill describes', executor: true },
-  { name: 'github/…', holds: 'a GitHub original, as the dsh-superagent-github skill describes', executor: true },
+  { name: 'feishu/<trigger-id>/…', holds: 'a Feishu original, as the dsh-super-personal-agent-feishu skill describes', executor: true },
+  { name: 'github/…', holds: 'a GitHub original, as the dsh-super-personal-agent-github skill describes', executor: true },
 ]
 export const resourceGrammar = (executor: boolean): string => RESOURCES.filter(resource => !executor || resource.executor)
   .map(resource => `${resource.name}: ${resource.holds}`).join('; ')
@@ -166,8 +166,8 @@ const ROUTES: readonly Route[] = [
     return { revision: status.revision, read: `prompts/${current.revision}`, notification_pending: status.notificationPending,
       ...changed.length ? { default_changed: changed } : {}, ...removed.length ? { removed_parts: removed } : {},
       sessions: status.sessions.map(session => ({ session_id: session.sessionId, revision: session.revision })),
-      skills: { built_in: skills.filter(name => !(name in current.config.skills)).map(name => `dsh-superagent-${name}`),
-        team: Object.keys(current.config.skills).map(name => `dsh-superagent-${name}`) },
+      skills: { built_in: skills.filter(name => !(name in current.config.skills)).map(name => `dsh-super-personal-agent-${name}`),
+        team: Object.keys(current.config.skills).map(name => `dsh-super-personal-agent-${name}`) },
       items: history.revisions.map(({ previousRevision, savedAt, ...version }) =>
         ({ ...version, previous_revision: previousRevision, saved_at: savedAt })),
       next_offset: history.next_offset }
@@ -224,7 +224,7 @@ const ROUTES: readonly Route[] = [
     const repliedTo = shown(parent ? host.store.triggers.get(feishuTriggerId(parent)) : undefined)
     const neighbours = host.store.read.neighbours(threadKey(found.threads[0]!), found.at, found.id)
     const around = { before: shown(neighbours.before), after: shown(neighbours.after) }
-    return { ...card, ...await host.sourceLink(found, signal), acknowledgement: host.store.replyStatus(key('ack', found.id)) ?? 'not_requested',
+    return { ...card, metadata: found.meta, ...await host.sourceLink(found, signal), acknowledgement: host.store.replyStatus(key('ack', found.id)) ?? 'not_requested',
       ...(ref ? { context: feishuReferences(ref) } : {}),
       ...(offset === 0 ? {
         ...repliedTo ? { replied_to: triggerLine(repliedTo) } : {},

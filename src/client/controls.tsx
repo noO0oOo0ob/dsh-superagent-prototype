@@ -54,18 +54,18 @@ export function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
 type ButtonProps = { variant?: 'primary' | 'ghost' | 'outline'; size?: 'md' | 'sm'; icon?: ReactNode; className?: string }
   & ButtonHTMLAttributes<HTMLButtonElement>
 export function Button({ variant = 'ghost', size = 'md', icon, className, children, type = 'button', ...rest }: ButtonProps) {
-  return <button type={type} className={cx('dt-btn', `dt-btn-${variant}`, `dt-btn-${size}`, className)} {...rest}>
-    {icon !== undefined && <span className="dt-btn-icon">{icon}</span>}{children}
+  return <button type={type} className={cx('spa-btn', `spa-btn-${variant}`, `spa-btn-${size}`, className)} {...rest}>
+    {icon !== undefined && <span className="spa-btn-icon">{icon}</span>}{children}
   </button>
 }
 
 export type TagTone = 'outline' | 'neutral' | 'quiet' | 'success' | 'info' | 'warning' | 'danger'
 export function Tag({ tone = 'outline', title, children }: { tone?: TagTone; title?: string; children: ReactNode }) {
-  return <span className="dt-tag" data-tone={tone} title={title}>{children}</span>
+  return <span className="spa-tag" data-tone={tone} title={title}>{children}</span>
 }
 
 export function Pill({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
-  return <button type="button" className={cx('dt-pill', active && 'dt-pill-active')} aria-pressed={active}
+  return <button type="button" className={cx('spa-pill', active && 'spa-pill-active')} aria-pressed={active}
     onClick={onClick}>{children}</button>
 }
 
@@ -102,66 +102,66 @@ export function SegmentedTabs<V extends string>({ items, value, onChange, label,
     for (const tab of list.current.children) observer.observe(tab)
     return () => { observer.disconnect() }
   }, [measure, items.length])
-  return <div ref={list} role="tablist" aria-label={label} className={cx('dt-tabs', className)} data-more={more} onScroll={measure}
+  return <div ref={list} role="tablist" aria-label={label} className={cx('spa-tabs', className)} data-more={more} onScroll={measure}
     style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }} onKeyDown={event => walk(event,
       items.map(item => item.value), value, onChange)}>
     {items.map(item => <button key={item.value} type="button" role="tab" id={item.id} aria-controls={item.panelId}
       aria-selected={item.value === value}
-      tabIndex={item.value === value ? 0 : -1} className="dt-tab" onClick={() => onChange(item.value)}>{item.label}</button>)}
+      tabIndex={item.value === value ? 0 : -1} className="spa-tab" onClick={() => onChange(item.value)}>{item.label}</button>)}
   </div>
 }
 export function SegmentedControl<V extends string>({ options, value, onChange, label, disabled, className }: {
   options: readonly { value: V; label: string; title?: string }[]; value: V; onChange: (next: V) => void; label: string; disabled?: boolean
   className?: string
 }) {
-  return <div role="tablist" aria-label={label} className={cx('dt-segmented', className)}
+  return <div role="tablist" aria-label={label} className={cx('spa-segmented', className)}
     style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
     onKeyDown={event => { if (!disabled) walk(event, options.map(option => option.value), value, onChange) }}>
     {options.map(option => <button key={option.value} type="button" role="tab" aria-selected={option.value === value}
       tabIndex={option.value === value ? 0 : -1}
-      title={option.title} disabled={disabled} className="dt-segment"
+      title={option.title} disabled={disabled} className="spa-segment"
         onClick={() => { if (option.value !== value) onChange(option.value) }}>{option.label}</button>)}
   </div>
 }
 
 export function Input({ icon, className, ...rest }: { icon?: ReactNode; className?: string } & InputHTMLAttributes<HTMLInputElement>) {
-  return <span className={cx('dt-input', className)}>{icon !== undefined && <span
-    className="dt-input-icon">{icon}</span>}<input {...rest} /></span>
+  return <span className={cx('spa-input', className)}>{icon !== undefined && <span
+    className="spa-input-icon">{icon}</span>}<input {...rest} /></span>
 }
 
 export function Switch({ checked, onChange, label,
   className }: { checked: boolean; onChange: (next: boolean) => void; label: string; className?: string }) {
-  return <button type="button" role="switch" aria-checked={checked} aria-label={label} className={cx('dt-switch', className)}
+  return <button type="button" role="switch" aria-checked={checked} aria-label={label} className={cx('spa-switch', className)}
     onClick={() => onChange(!checked)}>
-    <span className="dt-switch-thumb" />
+    <span className="spa-switch-thumb" />
   </button>
 }
 
 export type DotState = 'done' | 'warning' | 'ongoing' | 'error' | 'idle'
 export function StateDot({ state, className }: { state: DotState; className?: string }) {
   if (state === 'ongoing') {
-    return <svg className={cx('dt-spinner', className)} data-state="ongoing" width={14} height={14} viewBox="0 0 24 24" aria-hidden="true">
+    return <svg className={cx('spa-spinner', className)} data-state="ongoing" width={14} height={14} viewBox="0 0 24 24" aria-hidden="true">
       <g><circle cx="12" cy="12" r="9.5" /><circle cx="12" cy="12" r="9.5" /></g>
     </svg>
   }
-  return <span className={cx('dt-state-dot', className)} data-state={state} aria-hidden="true" />
+  return <span className={cx('spa-state-dot', className)} data-state={state} aria-hidden="true" />
 }
 export function Dot({ state, label }: { state: DotState; label?: string }) {
-  const dot = <StateDot className="dt-dot" state={state} />
-  return label ? <span className="dt-dot-wrap" title={label} role="img" aria-label={label}>{dot}</span> : dot
+  const dot = <StateDot className="spa-dot" state={state} />
+  return label ? <span className="spa-dot-wrap" title={label} role="img" aria-label={label}>{dot}</span> : dot
 }
 
 export function DisclosureRow({ icon, title, open, onToggle, collapsedContent, children }: {
   icon: ReactNode; title: ReactNode; open: boolean; onToggle: () => void; collapsedContent?: ReactNode; children?: ReactNode
 }) {
-  return <div className="dt-disclosure" data-open={open || undefined}>
-    <div className="dt-disclosure-row" role="button" tabIndex={0} aria-expanded={open} data-disclosure-row onClick={onToggle}
+  return <div className="spa-disclosure" data-open={open || undefined}>
+    <div className="spa-disclosure-row" role="button" tabIndex={0} aria-expanded={open} data-disclosure-row onClick={onToggle}
       onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle() } }}>
-      <span className="dt-disclosure-lead">
-        <span className="dt-disclosure-icon">{icon}</span>
-        <span className="dt-disclosure-chevron"><Icon name={open ? 'chevron-up' : 'chevron-down'} /></span>
+      <span className="spa-disclosure-lead">
+        <span className="spa-disclosure-icon">{icon}</span>
+        <span className="spa-disclosure-chevron"><Icon name={open ? 'chevron-up' : 'chevron-down'} /></span>
       </span>
-      <span className="dt-disclosure-title">{title}</span>
+      <span className="spa-disclosure-title">{title}</span>
       {!open && collapsedContent}
     </div>
     {open && children}
@@ -200,16 +200,16 @@ export function Modal({ open, onClose, title, closeLabel, description, footer, c
     return () => { document.removeEventListener('keydown', onKeyDown); opener?.focus() }
   }, [open])
   if (!open) return null
-  return createPortal(<div className="dt-modal-root" role="presentation">
-    <div className="dt-modal-mask" aria-hidden="true" onClick={onClose} />
-    <div ref={dialog} className={cx('dt-modal', className)} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>
-      <div className="dt-modal-header">
+  return createPortal(<div className="spa-modal-root" role="presentation">
+    <div className="spa-modal-mask" aria-hidden="true" onClick={onClose} />
+    <div ref={dialog} className={cx('spa-modal', className)} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>
+      <div className="spa-modal-header">
         <h2>{title}</h2>
-        <button type="button" className="dt-modal-close" aria-label={closeLabel} onClick={onClose}><Icon name="close" size={14} /></button>
+        <button type="button" className="spa-modal-close" aria-label={closeLabel} onClick={onClose}><Icon name="close" size={14} /></button>
       </div>
-      {description && <p className="dt-modal-description">{description}</p>}
-      {children !== undefined && <div className="dt-modal-body">{children}</div>}
-      {footer !== undefined && <div className="dt-modal-footer">{footer}</div>}
+      {description && <p className="spa-modal-description">{description}</p>}
+      {children !== undefined && <div className="spa-modal-body">{children}</div>}
+      {footer !== undefined && <div className="spa-modal-footer">{footer}</div>}
     </div>
   </div>, document.body)
 }
@@ -236,7 +236,7 @@ export function InfoTip({ text, icon = 'question', warn }: { text: string; icon?
     return () => { window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close) }
   }, [open])
   return <>
-    <button ref={anchor} type="button" className={warn ? 'dt-info dt-info-warn' : 'dt-info'} aria-label={text}
+    <button ref={anchor} type="button" className={warn ? 'spa-info spa-info-warn' : 'spa-info'} aria-label={text}
       onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)} onBlur={() => setOpen(false)}
       onFocus={event => { if (event.currentTarget.matches(':focus-visible')) setOpen(true) }}
       onKeyDown={event => { if (event.key === 'Escape') setOpen(false) }}
@@ -244,7 +244,7 @@ export function InfoTip({ text, icon = 'question', warn }: { text: string; icon?
       onClick={event => { if (event.detail > 0 && (event.nativeEvent as PointerEvent).pointerType !== 'touch') setOpen(false) }}>
       <Icon name={icon} size={14} />
     </button>
-    {open && createPortal(<span ref={bubble} role="tooltip" className="dt-tooltip" style={{ visibility: 'hidden' }}>{text}</span>,
+    {open && createPortal(<span ref={bubble} role="tooltip" className="spa-tooltip" style={{ visibility: 'hidden' }}>{text}</span>,
       document.body)}
   </>
 }

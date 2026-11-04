@@ -34,7 +34,7 @@ export function useBlockDraft<V>(block: string, saved: V, revision: number, toVa
   const { t, call, notify } = usePanel()
   const { state } = usePanelData()
   const { reload } = useSettings()
-  return useDraft({ key: `dsh-superagent/draft/${state?.masterId ?? ''}/${block}`, saved, revision, reload, save: async (value, from) => {
+  return useDraft({ key: `dsh-super-personal-agent/draft/${state?.masterId ?? ''}/${block}`, saved, revision, reload, save: async (value, from) => {
     const result = await call('PUT settings/:block', { block, body: { value: toValue(value), revision: from } })
     notify(t(result.restarting ? 'savedRestarting' : 'saved'))
     return result
@@ -51,20 +51,20 @@ export function Fields({ disabled, children }: { disabled: boolean; children: Re
     else if (focused.current && (!active
       || active === document.body)) { focused.current.focus({ preventScroll: true }); focused.current = null }
   }, [disabled])
-  return <fieldset ref={set} className="dt-fieldset" disabled={disabled}>{children}</fieldset>
+  return <fieldset ref={set} className="spa-fieldset" disabled={disabled}>{children}</fieldset>
 }
 export function Field({ label, hint, note,
   children }: { label: string; hint?: string | undefined; note?: ReactNode; children: ReactElement<{ id?: string }> }) {
   const id = useId()
-  return <div className="dt-field">
-    <span className="dt-field-head"><label htmlFor={id}>{label}</label>{hint && <InfoTip text={hint} />}</span>{cloneElement(children,
+  return <div className="spa-field">
+    <span className="spa-field-head"><label htmlFor={id}>{label}</label>{hint && <InfoTip text={hint} />}</span>{cloneElement(children,
       { id })}{note && <small>{note}</small>}
   </div>
 }
 function SwitchRow({ label, hint, checked,
   onChange }: { label: string; hint?: string | undefined; checked: boolean; onChange: (next: boolean) => void }) {
-  return <div className="dt-switch-row">
-    <div className="dt-field-head">{label}{hint && <InfoTip text={hint} />}</div><Switch checked={checked} onChange={onChange}
+  return <div className="spa-switch-row">
+    <div className="spa-field-head">{label}{hint && <InfoTip text={hint} />}</div><Switch checked={checked} onChange={onChange}
       label={label} />
   </div>
 }
@@ -85,11 +85,11 @@ export function ModelField({ id, value, onChange }: { id: string; value: RoleMod
     <Input list={`${id}-${name}s`} spellCheck={false} placeholder={placeholder} value={current[name]}
       onChange={event => set({ [name]: event.target.value })} />
   </Field>
-  return <div className="dt-model">
+  return <div className="spa-model">
     <Hint>{fallback ? t('defaultModel', { model: `${fallback.provider} / ${fallback.model}${fallback.reasoningEffort
       ? ` · ${fallback.reasoningEffort}` : ''}` }) : t('defaultModelUnavailable')}</Hint>
-    {error && <p className="dt-error">{t('modelCatalogError', { error })}</p>}
-    <div className="dt-grid3">
+    {error && <p className="spa-error">{t('modelCatalogError', { error })}</p>}
+    <div className="spa-grid3">
       {input('provider', t('modelProvider'), t('modelInherit'))}{input('model', t('modelName'), t('modelInherit'))}{input('effort',
         t('modelEffort'), t('modelEffortDefault'))}
     </div>
@@ -137,20 +137,20 @@ export function ConfigHistory({ blocks, versions, focus }: { blocks: string[]; v
   const scroll = (element: HTMLLIElement | null) => { if (element
     && !element.dataset.scrolled) { element.dataset.scrolled = '1'; element.scrollIntoView?.({ block: 'center' }) } }
   return <DisclosureRow icon={<Icon name="history" />} title={t('configHistory')} open={open} onToggle={() => setOpen(!open)}>
-    <div className="dt-disclosure-body">
-      {error && <p className="dt-error">{error}</p>}
+    <div className="spa-disclosure-body">
+      {error && <p className="spa-error">{error}</p>}
       {data && <>
         <Hint>{t('historyIntro')}</Hint>
         {focus && !target && <Hint>{t('policyVersionUnrecorded', { version: focus.slice(0, 8) })}</Hint>}
-        {items.length ? <ul className="dt-timeline">{items.map(item => <li key={item.revision} className={item === target
-          ? 'dt-event dt-highlight' : 'dt-event'}
+        {items.length ? <ul className="spa-timeline">{items.map(item => <li key={item.revision} className={item === target
+          ? 'spa-event spa-highlight' : 'spa-event'}
           ref={item === target ? scroll : undefined}>
-          <div className="dt-row-title">{t('historyItem', { revision: item.revision, source: valueLabel(t, 'historySource',
+          <div className="spa-row-title">{t('historyItem', { revision: item.revision, source: valueLabel(t, 'historySource',
             item.source) })}</div>
-          <div className="dt-event-foot">{when(item.savedAt, t('lang'))}{item.policyChanged && <> · {t('historyPolicyChanged',
+          <div className="spa-event-foot">{when(item.savedAt, t('lang'))}{item.policyChanged && <> · {t('historyPolicyChanged',
             { version: item.policyVersion.slice(0, 8) })}</>}</div>
           {item.changes === null ? <Hint>{t('historyNoBaseline')}</Hint> : item.changes.length
-            ? <ul className="dt-changes">{item.changes.map((change, index) => <li key={index}>{changeText(t, change, sources)}</li>)}</ul>
+            ? <ul className="spa-changes">{item.changes.map((change, index) => <li key={index}>{changeText(t, change, sources)}</li>)}</ul>
               : <Hint>{t('historyNoChanges')}</Hint>}
           {item.notified.length > 0 && <Hint>{t('historyNotified', { count: item.notified.length,
             titles: item.notified.map(ticket => ticket.title).join(t('listSeparator')) })}</Hint>}
@@ -193,43 +193,43 @@ function RowsField({ field, value, saved, onChange, labels, refreshLabels }: {
   const cell = (row: Row, index: number, column: Column) => {
     const id = row[key.key] ?? '', change = (next: string) => set(index, { ...row, [column.key]: next })
     if (column === key && (savedKeys.has(id) || (!choose && labels[id]))) {
-      return <span key={column.key} className={labels[id] ? 'dt-row-label' : 'dt-row-label dt-mono'} title={id}>{labels[id] ?? id}</span>
+      return <span key={column.key} className={labels[id] ? 'spa-row-label' : 'spa-row-label spa-mono'} title={id}>{labels[id] ?? id}</span>
     }
     if (column === key && choose) {
-      return <select key={column.key} className="dt-select" aria-label={choose} required value={id}
+      return <select key={column.key} className="spa-select" aria-label={choose} required value={id}
         onChange={event => change(event.target.value)}>
         <option value="" disabled>{choose}</option>
         {choices(id).map(([option, name]) => <option key={option} value={option}>{name}</option>)}
       </select>
     }
     if (column.type === 'select') {
-      return <select key={column.key} className="dt-select" aria-label={localized(t, column.label)} value={row[column.key] ?? ''}
+      return <select key={column.key} className="spa-select" aria-label={localized(t, column.label)} value={row[column.key] ?? ''}
         onChange={event => change(event.target.value)}>
         {column.options.map(option => <option key={option.value} value={option.value}>{localized(t, option.label)}</option>)}
       </select>
     }
-    return <Input key={column.key} className={column.optional ? undefined : 'dt-mono'} aria-label={localized(t, column.label)}
+    return <Input key={column.key} className={column.optional ? undefined : 'spa-mono'} aria-label={localized(t, column.label)}
       placeholder={localized(t, column.label)}
       required={!column.optional} pattern={column.pattern} spellCheck={false} value={row[column.key] ?? ''}
         onChange={event => change(event.target.value)} />
   }
-  return <div className="dt-field">
-    <div className="dt-subhead">
-      <span className="dt-field-head">{label}{hint && <InfoTip text={hint} />}<span className="dt-count">{rows.length || ''}</span></span>
-      <span className="dt-subhead-actions">
-        {key.type === 'text' && key.refresh && refreshLabels && <Button variant="ghost" size="sm" className={refresh.busy ? 'dt-btn-busy'
+  return <div className="spa-field">
+    <div className="spa-subhead">
+      <span className="spa-field-head">{label}{hint && <InfoTip text={hint} />}<span className="spa-count">{rows.length || ''}</span></span>
+      <span className="spa-subhead-actions">
+        {key.type === 'text' && key.refresh && refreshLabels && <Button variant="ghost" size="sm" className={refresh.busy ? 'spa-btn-busy'
           : undefined} icon={<Icon name="refresh" />}
           disabled={refresh.busy} aria-busy={refresh.busy} onClick={() => { void refresh.run() }}>{localized(t, key.refresh)}</Button>}
         <Button variant="ghost" size="sm" icon={<Icon name="plus" />} onClick={() => { setOpen(true); onChange([...rows,
           blank]) }}>{t('addRow')}</Button>
       </span>
     </div>
-    {rows.length > ROWS_SHOWN && <button type="button" className="dt-textlink dt-rows-summary" aria-expanded={open}
+    {rows.length > ROWS_SHOWN && <button type="button" className="spa-textlink spa-rows-summary" aria-expanded={open}
       onClick={() => setOpen(!open)}>
       {open ? t('collapse') : rows.map(rowName).join(t('listSeparator'))}
     </button>}
-    {(rows.length <= ROWS_SHOWN || open) && <ul className="dt-rows"
-      style={{ ['--dt-columns' as string]: field.columns.length }}>{rows.map((row, index) => <li key={index} className="dt-rows-item">
+    {(rows.length <= ROWS_SHOWN || open) && <ul className="spa-rows"
+      style={{ ['--spa-columns' as string]: field.columns.length }}>{rows.map((row, index) => <li key={index} className="spa-rows-item">
       {field.columns.map(column => cell(row, index, column))}
       <Button variant="ghost" size="sm" icon={<Icon name="trash" />} aria-label={t('removeRow', { name: labels[row[key.key] ?? '']
         || row[key.key] || label })}
@@ -247,7 +247,7 @@ export function SourceField({ field, value, saved, fact, onChange, labels, refre
   switch (field.type) {
     case 'switch': return <SwitchRow label={label} hint={hint} checked={value === true} onChange={onChange} />
     case 'select': return <Field label={label} hint={hint}>
-      <SegmentedControl className="dt-segmented dt-field-segmented" label={label} value={String(value ?? field.options[0]!.value)}
+      <SegmentedControl className="spa-segmented spa-field-segmented" label={label} value={String(value ?? field.options[0]!.value)}
         options={field.options.map(option => ({ value: option.value, label: localized(t, option.label) }))} onChange={onChange} />
     </Field>
     case 'number': return <Field label={label} hint={hint}>
@@ -256,7 +256,7 @@ export function SourceField({ field, value, saved, fact, onChange, labels, refre
     </Field>
     case 'text': return <Field label={label} hint={hint} note={localized(t, fact)}>
       {field.choose && Object.keys(labels).length
-        ? <select className="dt-select" value={String(value ?? '')} onChange={event => onChange(event.target.value)}>
+        ? <select className="spa-select" value={String(value ?? '')} onChange={event => onChange(event.target.value)}>
           <option value="">{localized(t, field.choose)}</option>
           {value && !labels[String(value)] ? <option value={String(value)}>{String(value)}</option> : null}
           {Object.entries(labels).sort(byName).map(([option, name]) => <option key={option} value={option}>{name}</option>)}
@@ -264,11 +264,11 @@ export function SourceField({ field, value, saved, fact, onChange, labels, refre
         : <Input value={String(value ?? '')} readOnly={field.readonly} pattern={field.pattern} spellCheck={false}
           onChange={event => onChange(event.target.value)} />}
     </Field>
-    case 'fact': return <div className="dt-field">
-      <span className="dt-field-head">{label}{hint && <InfoTip text={hint} />}</span>
-      <span className="dt-mono">{localized(t, fact) || t('empty')}</span>
+    case 'fact': return <div className="spa-field">
+      <span className="spa-field-head">{label}{hint && <InfoTip text={hint} />}</span>
+      <span className="spa-mono">{localized(t, fact) || t('empty')}</span>
       {field.settings && <small>
-        <button type="button" className="dt-textlink"
+        <button type="button" className="spa-textlink"
           onClick={() => navigate(settingsRoute(field.settings!))}>{t(`openSettingsOf.${field.settings}`)}</button>
       </small>}
     </div>

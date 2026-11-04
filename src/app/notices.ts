@@ -77,7 +77,7 @@ export const threadFollowedNotice = (ticketId: string, thread: string, reason: s
 export interface Relay { id: string; text: string }
 /** What a follow-up asks of the main Session: nothing but a stop the person asks for, since its ticket's worker decides it. */
 const FOLLOWUP_NOTE = 'Its ticket\'s worker has it and decides; act only if the person asks to stop the work '
-  + '(orchestrator_route kind stop with this trigger_id).'
+  + '(personal_agent_route kind stop with this trigger_id).'
 /**
  * Builds a steering relay for a human follow-up trigger that reached at least one live ticket (including an ended ticket
  * that resumed on the follow-up), with the trigger rendered as workers read it, the replied-to message, and the open
@@ -106,7 +106,7 @@ export function followupRelay(message: { trigger_id: string },
 }
 /** Formats a worker report relay for the main Session (truncating summaries over 600 characters behind `ticket/<id>/result`); `replyTo` names the human question trigger it answers. */
 export function resultRelay(ticket: Ticket, state: string, text: string, replyTo?: string): Relay {
-  const id = key('worker-result', ticket.id, ticket.updatedAt, text)
+  const id = key('spa-worker-result', ticket.id, ticket.updatedAt, text)
   const summary = text.length > 600 ? { summary: text.slice(0, 600), chars: text.length } : { summary: text }
   const report = { kind: 'worker_report', ticket: brief(ticket), trigger_id: ticket.origin.triggerId, state, ...replyTo ? { answer_to: replyTo } : {},
     ...summary, read: `ticket/${ticket.id}/result` }

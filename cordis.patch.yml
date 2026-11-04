@@ -1,34 +1,35 @@
-# dsh-superagent bundle layer: inserts the plugins without configuration, and the agent presets its Sessions run under. The
-# profile supplies the `dsh-superagent` entry's stateDir (see docs/006-deployment.md and examples/profile.cordis.patch.yml); the plugin
+# dsh-super-personal-agent bundle layer: inserts the plugins without configuration, and the agent presets its Sessions run under. The
+# profile supplies the `dsh-super-personal-agent` entry's stateDir (see docs/006-deployment.md and examples/profile.cordis.patch.yml); the plugin
 # refuses to start without stateDir.
 - insert:
-    - id: dsh-superagent
-      name: dsh-superagent
-    - id: dsh-superagent-github
-      name: dsh-superagent/github-watch
+    - id: dsh-super-personal-agent
+      name: dsh-super-personal-agent
+    - id: dsh-super-personal-agent-github
+      name: dsh-super-personal-agent/github-watch
+    - id: dsh-super-personal-agent-inbox
+      name: dsh-super-personal-agent/inbox-watch
     # Optional Feishu Source; requires configuring a bot CLI after enabling.
-    - id: dsh-superagent-feishu
-      name: dsh-superagent/feishu-watch
+    - id: dsh-super-personal-agent-feishu
+      name: dsh-super-personal-agent/feishu-watch
       disabled: true
     # The agent preset of every Executor Session (WORKER_PRESET in src/app/sessions.ts); the main Session has its own, below.
     # It is DSH's `standard` preset with only what a worker needs, and a shell whose foreground command moves to a background job
     # after 5 seconds, so a long command does not hold back a person's message, which the Session takes at its next step. Left
     # out: questions to a person, presenting, plan mode, the plugin manager and market, scheduling, goals, workflows, web fetch,
-    # and forked subagents, which would run under this preset; spawned subagents run under `standard`, whose shell moves a
-    # command to a background job only after 60 seconds, as a subagent's jobs are killed when it ends. A preset row has no
+    # and forked subagents. Spawned subagents retain this preset and its isolated execution environment. A preset row has no
     # setting that hides it from the preset picker, so its name and description say whom it is for.
-    - id: dsh-superagent-worker-preset
+    - id: dsh-super-personal-agent-worker-preset
       name: '@deepseek-ai/dsh-agent-preset'
       config:
-        id: dsh-superagent-worker
-        name: dsh-superagent 执行器
-        description: dsh-superagent 的执行器 Session 专用，不供手动选择。前台命令超 5 秒转入后台，只含执行工作所需的工具。
+        id: dsh-super-personal-agent-worker
+        name: dsh-super-personal-agent 执行器
+        description: dsh-super-personal-agent 的执行器 Session 专用，不供手动选择。前台命令超 5 秒转入后台，只含执行工作所需的工具。
         order: 90
         plugins:
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              prefix: You are a coding agent powered by the {{model}} model.
+              prefix: You are a personal assistant powered by the {{model}} model. Carry out authorized research, planning, writing and coding tasks.
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
@@ -41,7 +42,10 @@
             group: true
             isolate:
               shell: true
+              subprocess: true
             config:
+              - id: personal-agent-environment
+                name: dsh-super-personal-agent/execution-environment
               - id: bash-sandbox
                 name: '@deepseek-ai/dsh-bash-sandbox'
                 disabled: !!js process.platform === 'win32'
@@ -108,7 +112,7 @@
                   toolName: subagent
                   modelSelection: true
                   modelDiscovery: true
-                  agentPreset: standard
+                  agentPreset: dsh-super-personal-agent-worker
           - id: tool-todo
             name: '@deepseek-ai/dsh-tool-todo'
             config:
@@ -122,12 +126,12 @@
     # only what the main Session uses: no subagents, web, file search or writes, todo list, questions to a person, presenting,
     # plan mode, plugin manager, scheduling, goals or workflows. No persona: the main Session's prompt is complete, so it has
     # no other section.
-    - id: dsh-superagent-router-preset
+    - id: dsh-super-personal-agent-router-preset
       name: '@deepseek-ai/dsh-agent-preset'
       config:
-        id: dsh-superagent-router
-        name: dsh-superagent 主 Session
-        description: dsh-superagent 的主 Session 专用，不供手动选择。前台命令和任务等待超 5 秒转入后台，只含路由所需的工具。
+        id: dsh-super-personal-agent-router
+        name: dsh-super-personal-agent 主 Session
+        description: dsh-super-personal-agent 的主 Session 专用，不供手动选择。前台命令和任务等待超 5 秒转入后台，只含路由所需的工具。
         order: 91
         plugins:
           - id: agent-instructions
@@ -141,7 +145,10 @@
             group: true
             isolate:
               shell: true
+              subprocess: true
             config:
+              - id: personal-agent-environment
+                name: dsh-super-personal-agent/execution-environment
               - id: bash-sandbox
                 name: '@deepseek-ai/dsh-bash-sandbox'
                 disabled: !!js process.platform === 'win32'

@@ -1,4 +1,4 @@
-/** Application composition root and lifecycle manager for dsh-superagent. */
+/** Application composition root and lifecycle manager for dsh-super-personal-agent. */
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
@@ -47,18 +47,19 @@ import type { ResourceHost } from './resources.ts'
 import { mainTools, type MainToolsHost } from './tools/main.ts'
 import { executorTools, type ExecutorToolsHost } from './tools/executor.ts'
 
-// Source plugins interact with dsh-superagent exclusively through the `SourceHost` service interface.
-declare module '@deepseek-ai/cordis' { interface Context { orchestrator: SourceHost } }
+// Source plugins interact with dsh-super-personal-agent exclusively through the `SourceHost` service interface.
+declare module '@deepseek-ai/cordis' { interface Context { superPersonalAgent: SourceHost & { readonly execution: { backend: Context['subprocess']; environment(): NodeJS.ProcessEnv } } } }
 const now = (): string => new Date().toISOString()
 
 /**
- * Composition root of dsh-superagent that connects `Store`, `Setup`, `Engine`, `SourceRegistry`, `Effects`, `Outbox`, `Passes`, `Sessions`, `Settings`, `Prompts`, `DshExecutor`, and `MasterAssessor`.
+ * Composition root of dsh-super-personal-agent that connects `Store`, `Setup`, `Engine`, `SourceRegistry`, `Effects`, `Outbox`, `Passes`, `Sessions`, `Settings`, `Prompts`, `DshExecutor`, and `MasterAssessor`.
  * Exposes the `SourceHost` service on the Cordis context for source plugins and coordinates startup, setup checks, HTTP route registration, and graceful shutdown.
  * Locks the state directory before opening SQLite so concurrent processes cannot corrupt or double-migrate state.
  */
 export class Runtime extends Service implements SourceHost {
   readonly store: Store
   readonly setup: Setup
+  readonly execution: { backend: Context['subprocess']; environment(): NodeJS.ProcessEnv }
   readonly prompts: Prompts
   readonly effects: Effects
   readonly sources: SourceRegistry
@@ -85,7 +86,7 @@ export class Runtime extends Service implements SourceHost {
   /** Non-zero while a main-Session tool is executing an Engine command, suppressing self-triggered domain event notices. */
   private quiet = 0
   constructor(ctx: Context, readonly machine: Machine, restart: () => void) {
-    super(ctx, 'orchestrator')
+    super(ctx, 'superPersonalAgent')
     const runtime = this
     // Lock the state directory before opening the database so another process cannot migrate or write concurrently.
     mkdirSync(machine.stateDir, { recursive: true, mode: 0o700 })
@@ -94,14 +95,15 @@ export class Runtime extends Service implements SourceHost {
     this.releaseLock = async () => { release() }
     let opened: Store | undefined
     try {
-      const report = (error: unknown) => { ctx.logger.warn('dsh-superagent: %s', String(error)) }
+      const report = (error: unknown) => { ctx.logger.warn('dsh-super-personal-agent: %s', String(error)) }
       const store = opened = this.store = new Store(join(machine.stateDir, 'orchestrator.sqlite'), report)
       const setup = this.setup = new Setup({ context: ctx, machine, lifetime: this.lifetime, restart })
+      this.execution = { backend: ctx.subprocess, environment: () => setup.workerEnvironment }
       const deployed = () => setup.configured()
         ? environmentOf({ deployment: setup.deployment, sources: this.sources, settings: store.settings() }) : undefined
       const feishu = () => setup.configured() && !!setup.deployment.feishu
       const prompts = this.prompts = new Prompts(store, () => machine.promptMaxChars.get(), deployed, feishu)
-      const masterId = this.masterId = store.get(KV.runtime.masterId) ?? `orchestrator-${key(machine.stateDir)}`
+      const masterId = this.masterId = store.get(KV.runtime.masterId) ?? `spa-main-${key(machine.stateDir)}`
       store.set(KV.runtime.masterId, masterId)
       const commands = this.commands = new Commands(() => setup.deployment, setup.commandEnvironment, this.lifetime)
       const board = this.board
@@ -126,7 +128,7 @@ export class Runtime extends Service implements SourceHost {
       this.settings = new Settings({ store, sources, engine: { policyChanged }, health: board, context: ctx, lifetime: this.lifetime, sessions,
         sourceHost: this, setup, requestPass: () => { this.passes.request() } })
       this.executor = new DshExecutor({ context: ctx, get engine() { return runtime.engine }, store, effects, health: board.claim('worker'), machine,
-        lifetime: this.lifetime, sessions, closing: () => this.closing(), paused: () => this.paused(), environment, sourceLink: link,
+        lifetime: this.lifetime, sessions, closing: () => this.closing(), paused: () => this.paused(), environment, workerEnvironment: () => setup.workerEnvironment, sourceLink: link,
         repliedTo: trigger => repliedTo({ store, sources }, trigger) })
       this.assessor = new MasterAssessor({ get engine() { return runtime.engine }, commands, get deployment() { return setup.deployment }, effects,
         settings: () => store.settings(), paused: () => this.paused(), threadContext: trigger => sources.threadContext(trigger),
@@ -146,7 +148,7 @@ export class Runtime extends Service implements SourceHost {
           if (followup) sessions.relay(followup.id, followup.text)
           // Notify the ticket's conversations whenever it ends via a pull request.
           const ended = event.type === 'ticket.ended' ? store.tickets.get(event.data.ticketId) : undefined
-          if (ended && setup.configured()) {
+          if (ended && setup.configured() && setup.deployment.github) {
             const request = store.triggers.get(ended.origin.triggerId)?.text ?? ''
             for (const message of pullEndNotices(ended, request, setup.deployment.repository)) outbox.send(message)
           }
@@ -158,7 +160,7 @@ export class Runtime extends Service implements SourceHost {
         health: this.runtimeHealth, lifetime: this.lifetime, configured: () => setup.configured(), closing: () => this.closing() })
       this.sourceDeps = { store, engine, outbox, commands, sources, get ready() { return runtime.ready },
         get deployment() { return setup.deployment }, configured: () => setup.configured(),
-        get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, receive: trigger => passes.receive(trigger) }
+        get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, get githubProblem() { return setup.githubProblem }, receive: trigger => passes.receive(trigger) }
       this.toolHost = { context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources,
         get github() { return runtime.context({ kind: 'github', health: ['github'] }) },
         requestPass: () => { passes.request() }, sendReplies: () => outbox.sent(),
@@ -171,14 +173,16 @@ export class Runtime extends Service implements SourceHost {
     }
   }
   get health(): Readonly<Record<string, Health>> { return this.board.all }
-  /** Aborted when dsh-superagent stops or loses its state directory lock, cancelling running reads and subprocesses. */
+  /** Aborted when dsh-super-personal-agent stops or loses its state directory lock, cancelling running reads and subprocesses. */
   get lifetime(): AbortSignal { return this.stopped.signal }
   context(kind: { kind: string; health: readonly string[] }): SourceContext { return sourceContextOf(this.sourceDeps, kind) }
   /** Resolved deployment; throws while waiting for setup (`!configured()`). */
   get deployment(): Deployment { return this.setup.deployment }
   configured(): boolean { return this.setup.configured() }
   get setupProblem(): SetupProblem | undefined { return this.setup.problem }
-  /** Why the Feishu bot is unavailable even though the Feishu Source configures a CLI. */
+  /** Account problem confined to the optional GitHub Source. */
+  get githubProblem(): SetupProblem | undefined { return this.setup.githubProblem }
+  /** Why the Feishu bot is unavailable even though the Source configures a CLI. */
   get feishuProblem(): SetupProblem | undefined { return this.setup.feishuProblem }
   links(): LinkTarget {
     const resolved = this.setup.configured() ? this.setup.deployment : undefined
@@ -207,7 +211,7 @@ export class Runtime extends Service implements SourceHost {
     }
     this.sessions.install()
     this.executor.install()
-    await this.sessions.ensure(this.masterId, this.machine.stateDir, 'dsh-superagent orchestrator', 'orchestrator')
+    await this.sessions.ensure(this.masterId, this.machine.stateDir, 'dsh-super-personal-agent orchestrator', 'orchestrator')
     for (const id of this.settings.syncable()) await this.settings.sync(id).catch(() => { /* sync() records its failure in health. */ })
     // If stop() was called while awaiting setup, session creation, or policy sync, do not start background loops.
     if (this.closing()) return
@@ -221,7 +225,7 @@ export class Runtime extends Service implements SourceHost {
     const { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, setup, passes } = this
     return { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks,
       get deployment() { return setup.deployment },
-      get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem },
+      get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, get githubProblem() { return setup.githubProblem },
       configured: () => setup.configured(), links: () => runtime.links(), ticketEnvironment: ticket => runtime.ticketEnvironment(ticket),
       checkSetup: () => { setup.check() }, requestPass: () => { passes.request() }, models: () => this.ctx.sessionController.modelCatalog() }
   }
@@ -243,9 +247,8 @@ export class Runtime extends Service implements SourceHost {
       await this.ctx.sessionPersistence.flush()
     } finally {
       // Close the database before releasing the directory lock so another process cannot open the database mid-write; a compromised lock may already be released.
-      this.setup.restore()
       try { this.store.close() } finally {
-        const unreleased = (error: unknown) => { this.ctx.logger.warn('dsh-superagent could not release its state directory lock: %s',
+        const unreleased = (error: unknown) => { this.ctx.logger.warn('dsh-super-personal-agent could not release its state directory lock: %s',
           String(error)) }
         await this.releaseLock?.().catch(unreleased)
       }

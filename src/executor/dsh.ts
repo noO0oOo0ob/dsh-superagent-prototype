@@ -20,10 +20,10 @@ import type { HealthEntry } from '../infra/health.ts'
 import { cancelled, collectJob, killJobs, runningJobs, stopBackground, stopSubagents, until, untilQuiet } from './background.ts'
 
 const now = (): string => new Date().toISOString()
-/** Returns the worker session ID (`worker-<ticketId>`) for a ticket. */
-export const workerSessionId = (ticketId: string): string => `worker-${ticketId}`
-/** Returns the ticket ID for a worker session ID (`worker-<ticketId>`), or undefined for non-worker sessions. */
-export const ticketOfSession = (sessionId: string): string | undefined => sessionId.startsWith('worker-') ? sessionId.slice('worker-'.length) : undefined
+/** Returns the worker session ID (`spa-worker-<ticketId>`) for a ticket. */
+export const workerSessionId = (ticketId: string): string => `spa-worker-${ticketId}`
+/** Returns the ticket ID for a worker session ID (`spa-worker-<ticketId>`), or undefined for non-worker sessions. */
+export const ticketOfSession = (sessionId: string): string | undefined => sessionId.startsWith('spa-worker-') ? sessionId.slice('spa-worker-'.length) : undefined
 /** Maximum runtime for a workspace prepare command. */
 const PREPARE_TIMEOUT_MS = 10 * 60_000
 /** Maximum transient retry attempts for a launch or worker turn, and the initial backoff before resuming a turn. */
@@ -76,6 +76,8 @@ export interface ExecutorHost {
   paused(): boolean
   /** Execution environment variables for `ticket`, passed to its workspace prepare command. */
   environment(ticket: Ticket): Variable[]
+  /** Plugin-scoped process environment, also used for prepare commands. */
+  workerEnvironment(): NodeJS.ProcessEnv
   sourceLink(trigger: Trigger, signal?: AbortSignal): Promise<{ source_url?: string; source_url_read?: string }>
   /** Stored Trigger of the message `trigger` replies to, when it replies to one. */
   repliedTo(trigger: Trigger): Trigger | undefined
@@ -130,10 +132,10 @@ export const batchLine = (trigger: Trigger) => ({ trigger_id: trigger.id, from: 
 export const batchOf = (host: { store: Pick<Store, 'triggers'> }, ticket: Ticket): Trigger[] => ticket.origin.triggerIds
   .filter(id => id !== ticket.origin.triggerId).flatMap(id => host.store.triggers.get(id) ?? [])
 const RESUMED = 'This ticket ended earlier and the message that follows, on its thread, resumed it under the same mandate. If it asks for '
-  + 'more within the original scope, inspect the worktree, git history and PR state and continue; if it asks for work beyond that scope or '
-  + 'for another ticket, hand it back with orchestrator_trigger_handback and report dropped; if it needs nothing, such as thanks, '
+  + 'more within the original scope, inspect the ticket directory, saved artifacts and prior reports; for coding work also inspect git history and PR state and continue; if it asks for work beyond that scope or '
+  + 'for another ticket, hand it back with personal_agent_trigger_handback and report dropped; if it needs nothing, such as thanks, '
   + 'report dropped without a message. Report ready when the follow-up is done. Do not repeat completed work.'
-const RETRIED = 'A person retried this ticket. Continue the assignment from the current worktree, git history and PR state.'
+const RETRIED = 'A person retried this ticket. Continue the assignment from the current ticket directory, saved artifacts and prior reports.'
 /** Formats a policy-change input for the worker; inputs recorded before `effect` existed fall back to a general notice. */
 function policyMessage(effect?: PolicyEffect): string {
   if (!effect) return 'Policy change: the access or admission rules changed. Check that the remaining work stays within the assignment.'
@@ -248,7 +250,7 @@ export class DshExecutor implements Executor {
     const directory = ticket.execution?.directory ?? ''
     await mkdir(dirname(directory), { recursive: true })
     const command = this.host.store.settings().executor.prepare.trim()
-    const env = Object.fromEntries(this.host.environment(ticket).map(variable => [variable.key, variable.value]))
+    const env = { ...Object.fromEntries(this.host.environment(ticket).map(variable => [variable.key, variable.value])), ...this.host.workerEnvironment() }
     // Enforce a timeout so a hung prepare command (such as on a credential prompt) fails the ticket instead of holding a worker slot indefinitely.
     const signal = AbortSignal.any([this.host.lifetime, AbortSignal.timeout(PREPARE_TIMEOUT_MS)])
     if (command) await runAsWorker(this.host.context.subprocess, ['sh', '-c', command], dirname(directory), signal, env)
@@ -258,7 +260,8 @@ export class DshExecutor implements Executor {
         throw new PrepareFailed(`The prepare command failed: ${error instanceof Error ? error.message : String(error)}`)
       })
     await mkdir(directory, { recursive: true })
-    await verifyDirectory(directory, this.host.context.subprocess, this.host.lifetime)
+    if (await stat(join(directory, '.git')).then(() => true, error => { if (error.code === 'ENOENT') return false; throw error }))
+      await verifyDirectory(directory, this.host.context.subprocess, this.host.lifetime, env)
   }
   /** Enqueues a `launch` effect for an accepted or resumed assignment; launches start in queue order as worker slots free up. */
   start(ticket: Ticket, assignment: Assignment): void {
@@ -392,7 +395,7 @@ export class DshExecutor implements Executor {
     const agents = this.host.store.tickets.list().map(ticket => this.host.context.agents.get(workerSessionId(ticket.id) as SessionId))
       .filter((agent): agent is Agent => agent !== undefined)
     const stop = async () => {
-      await Promise.allSettled(agents.map(agent => stopBackground(this.host.context, agent.id, 'dsh-superagent stopped', true)))
+      await Promise.allSettled(agents.map(agent => stopBackground(this.host.context, agent.id, 'dsh-super-personal-agent stopped', true)))
       for (const { collect } of this.left.values()) collect.abort()
       const running = agents.filter(agent => agent.status !== 'idle')
       for (const agent of running) agent.cancel({ kind: 'user' }, { keepInbox: true })
@@ -423,7 +426,7 @@ export class DshExecutor implements Executor {
   private relay({ id, text }: { id: string; text: string }): void { this.host.sessions.relay(id, text) }
   private async launch(ticket: Ticket, assignment: Assignment): Promise<void> {
     const current = () => {
-      if (this.host.closing()) throw new Error('dsh-superagent is stopping')
+      if (this.host.closing()) throw new Error('dsh-super-personal-agent is stopping')
       if (this.host.paused()) throw new Later('Processing is paused')
       const stored = this.host.store.tickets.get(ticket.id)
       return !!stored && liveTicket(stored) && latestAssignment(stored)?.id === assignment.id
@@ -490,11 +493,11 @@ export class DshExecutor implements Executor {
       const ticketId = ticketOfSession(agent.id)
       if (ticketId !== undefined && message.source.kind === 'user') this.personal.set(ticketId, now())
     }))
-    // The Inputs a message of dsh-superagent's carries, which its worker reads once the Session took the message into its
+    // The Inputs a message of dsh-super-personal-agent's carries, which its worker reads once the Session took the message into its
     // history: a step that claimed it may be cancelled or fail before, which drops it.
     this.disposers.push(ctx.on('session/event', (session, event) => {
       const ticketId = ticketOfSession(session.id)
-      if (event.type !== 'user/message' || ticketId === undefined || event.data.source.kind !== 'dsh-superagent' || this.host.closing()) return
+      if (event.type !== 'user/message' || ticketId === undefined || event.data.source.kind !== 'dsh-super-personal-agent' || this.host.closing()) return
       const message = event.data
       void this.background(Promise.resolve().then(() => {
         const read = this.host.store.tickets.get(ticketId)?.inputs.filter(input => input.kind === 'trigger' && !input.readAt
@@ -529,7 +532,7 @@ export class DshExecutor implements Executor {
         // A restart within this process left DSH's Sessions, jobs and subagents running: they stop first. The inbox keeps an
         // Input that was handed over but not yet taken.
         this.host.context.agents.get(workerSessionId(ticket.id) as SessionId)?.cancel({ kind: 'user' }, { keepInbox: true })
-        this.stopWork(ticket.id, 'dsh-superagent restarted', true)
+        this.stopWork(ticket.id, 'dsh-super-personal-agent restarted', true)
         this.host.engine.assignmentInterrupted(ticket.id, running.id)
       }
       else if (latest?.state === 'pending' && !waitsForPerson(ticket)) this.start(ticket, latest)
@@ -663,10 +666,10 @@ export class DshExecutor implements Executor {
     this.host.store.atomic(() => {
       const before = latestReport(current)?.summary ?? ''
       const updated = this.host.engine.report(ticket.id, { state: 'waiting', summary: said || before })
-      // A quiet final after orchestrator_report is not a new status or an empty handoff.
+      // A quiet final after personal_agent_report is not a new status or an empty handoff.
       if (said) this.relay(resultRelay(updated, 'waiting', said))
       else if (!before.trim()) {
-        this.relay(resultRelay(updated, 'waiting', 'Worker ended without a status report. Use orchestrator_ticket_request_status to request one.'))
+        this.relay(resultRelay(updated, 'waiting', 'Worker ended without a status report. Use personal_agent_ticket_request_status to request one.'))
       }
     })
   }

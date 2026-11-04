@@ -16,11 +16,11 @@ const success = (seq: number, turn = 1, step = 2, provider = 'provider-a'): Sess
 
 it('projects native retry schedules without exposing failure text or policy data', () => {
   const health = new RetryHealth()
-  health.observe('worker-a', retry(1))
-  health.observe('worker-a', event('llm/retry-started', 2, { retryId: 'chain-a', turn: 1, step: 2, retry: 1 }))
-  expect(health.get('worker-a')).toEqual({ sessionId: 'worker-a', provider: 'provider-a', attempts: 1, since: '2026-09-21T08:00:01.000Z', lastAt: '2026-09-21T08:00:01.000Z' })
-  health.observe('worker-a', retry(3, { retry: 345 }))
-  expect(health.get('worker-a')).toEqual({ sessionId: 'worker-a', provider: 'provider-a', attempts: 345, since: '2026-09-21T08:00:01.000Z', lastAt: '2026-09-21T08:00:03.000Z' })
+  health.observe('spa-worker-a', retry(1))
+  health.observe('spa-worker-a', event('llm/retry-started', 2, { retryId: 'chain-a', turn: 1, step: 2, retry: 1 }))
+  expect(health.get('spa-worker-a')).toEqual({ sessionId: 'spa-worker-a', provider: 'provider-a', attempts: 1, since: '2026-09-21T08:00:01.000Z', lastAt: '2026-09-21T08:00:01.000Z' })
+  health.observe('spa-worker-a', retry(3, { retry: 345 }))
+  expect(health.get('spa-worker-a')).toEqual({ sessionId: 'spa-worker-a', provider: 'provider-a', attempts: 345, since: '2026-09-21T08:00:01.000Z', lastAt: '2026-09-21T08:00:03.000Z' })
   expect(JSON.stringify(health.list())).not.toMatch(/secret|Current cost|Max budget|policyKey|failure|chain-a/)
 })
 

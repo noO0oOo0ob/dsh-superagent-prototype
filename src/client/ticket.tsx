@@ -14,16 +14,16 @@ type Input = TicketPageView['inputs'][number]
 function InputLine({ input, earlier = [] }: { input: Input; earlier?: { id: string; at: string; preview: string }[] }) {
   const { t, navigate } = usePanel()
   const trigger = input.kind === 'trigger' ? input.trigger : undefined
-  return <li className="dt-row">
+  return <li className="spa-row">
     <Dot state={input.delivered ? 'idle' : 'warning'} label={input.delivered ? t('inputDelivered') : t('inputUndelivered')} />
-    <div className="dt-row-main">
-      {trigger ? <div className="dt-row-title"><button type="button" className="dt-open" onClick={() => navigate({ page: 'trigger',
+    <div className="spa-row-main">
+      {trigger ? <div className="spa-row-title"><button type="button" className="spa-open" onClick={() => navigate({ page: 'trigger',
         id: trigger.thread, query: { trigger: trigger.id } })}>
         {actorName(t, trigger.actor)}{t('labelSeparator')}{readableMarkers(t, trigger.preview) || t('empty')}
-      </button></div> : <div className="dt-row-title">{valueLabel(t, 'input', input.kind)}</div>}
-      <div className="dt-row-meta">{input.kind === 'trigger' && <span>{valueLabel(t, 'input', input.kind)}</span>}<When
+      </button></div> : <div className="spa-row-title">{valueLabel(t, 'input', input.kind)}</div>}
+      <div className="spa-row-meta">{input.kind === 'trigger' && <span>{valueLabel(t, 'input', input.kind)}</span>}<When
         at={input.at} /></div>
-      {(input.kind === 'text' || input.kind === 'note') && input.text && <div className="dt-row-quote"><MarkdownLite text={input.text} /></div>}
+      {(input.kind === 'text' || input.kind === 'note') && input.text && <div className="spa-row-quote"><MarkdownLite text={input.text} /></div>}
       {trigger?.handback && <Hint>{t('inputHandedBack', { reason: trigger.handback.reason })}</Hint>}
       <Earlier items={earlier} />
     </div>
@@ -33,24 +33,24 @@ function InputList({ inputs }: { inputs: Input[] }) {
   const sender = (input: Input) => input.kind === 'trigger' && input.trigger && !input.trigger.human
     ? `${input.trigger.actor.source}:${input.trigger.actor.id}` : undefined
   const shown = (input: Input) => ({ id: input.id, at: input.at, preview: input.kind === 'trigger' ? input.trigger?.preview ?? '' : '' })
-  return <ul className="dt-list">{automatedRuns(inputs, sender).map(run => <InputLine key={run.item.id} input={run.item}
+  return <ul className="spa-list">{automatedRuns(inputs, sender).map(run => <InputLine key={run.item.id} input={run.item}
     earlier={run.earlier.map(shown)} />)}</ul>
 }
 
 function Details({ icon, title, open = false, children }: { icon: IconName; title: ReactNode; open?: boolean; children: ReactNode }) {
   const [shown, setShown] = useState(open)
   return <DisclosureRow icon={<Icon name={icon} />} title={title} open={shown} onToggle={() => setShown(!shown)}>
-    <div className="dt-disclosure-body">{children}</div>
+    <div className="spa-disclosure-body">{children}</div>
   </DisclosureRow>
 }
 function Assignments({ ticket }: { ticket: TicketPageView }) {
   const { t } = usePanel()
   const report = (state: string) => t('assignmentReportShort', { state: valueLabel(t, 'report', state) })
-  return <ul className="dt-list">{ticket.assignments.slice().reverse().map((item, index) => <li key={item.id} className="dt-row">
+  return <ul className="spa-list">{ticket.assignments.slice().reverse().map((item, index) => <li key={item.id} className="spa-row">
     <Dot state={item.state === 'running' ? reportDot(item.report?.state) : 'idle'} label={valueLabel(t, 'assignment', item.state)} />
-    <div className="dt-row-main">
-      <div className="dt-row-title">{t('assignmentNumber', { number: ticket.assignments.length - index })}</div>
-      <div className="dt-row-meta">
+    <div className="spa-row-main">
+      <div className="spa-row-title">{t('assignmentNumber', { number: ticket.assignments.length - index })}</div>
+      <div className="spa-row-meta">
         {/* A running Assignment whose worker reported a non-progress state has ended its turn; show that report as its tag and end its span there. */}
         {item.turnEndedAt && item.report ? <Tag tone="neutral">{report(item.report.state)}</Tag> : <Tag tone={item.state === 'running'
           ? 'info'
@@ -61,7 +61,7 @@ function Assignments({ ticket }: { ticket: TicketPageView }) {
         {item.endedReason && <span>{reasonLabel(t, item.endedReason)}</span>}
       </div>
     </div>
-    {item.ref && item.ref !== ticket.sessionId && <div className="dt-row-actions"><SessionButton variant="outline"
+    {item.ref && item.ref !== ticket.sessionId && <div className="spa-row-actions"><SessionButton variant="outline"
       sessionId={item.ref} /></div>}
   </li>)}</ul>
 }
@@ -80,12 +80,12 @@ function MandateDetails({ ticket, actor }: { ticket: TicketPageView; actor: stri
   const facts = ticket.basis.facts.filter(item => !(item.name === 'sender' && item.value === actor))
   const direction = decision?.direction
   const rows: [string, ReactNode][] = decision ? [
-    [t('term.trigger'), <button type="button" className="dt-trigger-link" onClick={() => navigate({ page: 'trigger', id: decision.thread,
+    [t('term.trigger'), <button type="button" className="spa-trigger-link" onClick={() => navigate({ page: 'trigger', id: decision.thread,
       query: { trigger: decision.triggerIds[0] ?? '' } })}>
-      <span className="dt-trigger-text">{readableMarkers(t, decision.preview) || t('empty')}</span>
-      <span className="dt-row-meta"><span>{valueLabel(t, 'source', mandate.actor.source)} · {actor}</span><When at={decision.at} /></span>
+      <span className="spa-trigger-text">{readableMarkers(t, decision.preview) || t('empty')}</span>
+      <span className="spa-row-meta"><span>{valueLabel(t, 'source', mandate.actor.source)} · {actor}</span><When at={decision.at} /></span>
     </button>],
-    [t('term.decision'), <div className="dt-kv-stack">
+    [t('term.decision'), <div className="spa-kv-stack">
       <span>{decisionMark(t, decision.outcome).label}</span>
       <Hint>{reasonLabel(t, decision.reason)}</Hint>
       {decision.rules.map(rule => <Hint key={rule.id}>{t(rule.matched ? 'ruleMatched' : 'ruleUnmatched', { rule: rule.name,
@@ -96,7 +96,7 @@ function MandateDetails({ ticket, actor }: { ticket: TicketPageView; actor: stri
           { evidence: direction.evidence })}</Hint>}
     </div>],
   ] : []
-  const version = <button type="button" className="dt-textlink dt-mono" onClick={() => navigate(settingsRoute('eval',
+  const version = <button type="button" className="spa-textlink spa-mono" onClick={() => navigate(settingsRoute('eval',
     { version: mandate.policyVersion }))}>{mandate.policyVersion.slice(0, 8)}</button>
   return <Section title={t('mandateDetails')} icon="shield">
     <KeyValues rows={[...rows, [t('term.scope'), legacy ? t('legacyScopeShort') : mandate.scope || t('empty')],
@@ -134,24 +134,24 @@ export function TicketPage({ id }: { id: string }) {
       {data.sessionId && <SessionButton variant="outline" sessionId={data.sessionId} />}
     </PageHead>
     {error && <LoadState error={error} loading={false} />}
-    <div className="dt-row-meta dt-status-line">
+    <div className="spa-row-meta spa-status-line">
       <StageMark state={status.dot} icon={status.icon} label={status.label} />
       <LabelValue label={t('ticketMandateLabel')} value={valueLabel(t, 'strength', data.mandate.strength)} />
       <LabelValue label={t('ticketActorLabel')} value={`${valueLabel(t, 'source', data.mandate.actor.source)} · ${actor}`} />
       <LabelValue label={t('ticketUpdatedLabel')} value={when(data.updatedAt, t('lang'))} />
     </div>
     {ended && <Hint>{ended}</Hint>}
-    {data.attention && <div className="dt-banner"><span className="dt-banner-label">{t('attentionPrefix')}</span><MarkdownLite
+    {data.attention && <div className="spa-banner"><span className="spa-banner-label">{t('attentionPrefix')}</span><MarkdownLite
       text={data.attention.question} />
-      {channel && <div className="dt-banner-actions">
+      {channel && <div className="spa-banner-actions">
         <ActionLink href={channel.url} icon="message">{t('answerIn', { source: valueLabel(t, 'source', channel.source) })}</ActionLink>
       </div>}</div>}
     {/* Ordinary progress stays in the Session/Channels; only a report that halted work (blocked/failed) is shown here. */}
-    {data.actions.retry && data.summary && <p className={`dt-banner${failed ? ' dt-danger' : ''}${failedText ? ' dt-mono' : ''}`}>
-      <span className="dt-banner-label">{t(failed ? 'failedPrefix' : 'blockedPrefix')}</span>{data.summary}
+    {data.actions.retry && data.summary && <p className={`spa-banner${failed ? ' spa-danger' : ''}${failedText ? ' spa-mono' : ''}`}>
+      <span className="spa-banner-label">{t(failed ? 'failedPrefix' : 'blockedPrefix')}</span>{data.summary}
     </p>}
-    {data.deliveryError && <p className="dt-banner dt-danger dt-mono">
-      <span className="dt-banner-label">{t('deliveryFailedPrefix')}</span>{data.deliveryError}
+    {data.deliveryError && <p className="spa-banner spa-danger spa-mono">
+      <span className="spa-banner-label">{t('deliveryFailedPrefix')}</span>{data.deliveryError}
     </p>}
     <MandateDetails ticket={data} actor={actor} />
     {undelivered.length > 0 && <Section title={t('undeliveredInputs')} count={undelivered.length}>
@@ -159,22 +159,22 @@ export function TicketPage({ id }: { id: string }) {
       <InputList inputs={undelivered} />
     </Section>}
     {data.threads.length > 0 && <Section title={t('subscribedThreads')} count={data.threads.length}>
-      <ul className="dt-list">{data.threads.map(thread => <ThreadLine key={thread.key} thread={thread} ticketId={data.id}
+      <ul className="spa-list">{data.threads.map(thread => <ThreadLine key={thread.key} thread={thread} ticketId={data.id}
         context={thread.context} />)}</ul>
     </Section>}
-    <div className="dt-details">
+    <div className="spa-details">
       {/* A single Assignment adds nothing beyond the status line; list Assignments only once work has been resumed or handed over. */}
       {data.assignments.length > 1 && <Details icon="queue" title={`${t('term.assignment')} · ${data.assignments.length}`} open><Assignments
         ticket={data} /></Details>}
       {data.environment.length > 0 && <Details icon="settings" title={t('term.environment')}>
-        <table className="dt-table"><tbody>{data.environment.map(variable => <tr key={variable.key} title={localized(t,
+        <table className="spa-table"><tbody>{data.environment.map(variable => <tr key={variable.key} title={localized(t,
           variable.description)}>
-          <td className="dt-mono">{variable.key}</td><td className="dt-mono">{variable.value || <span
-            className="dt-hint">{t('empty')}</span>}</td>
+          <td className="spa-mono">{variable.key}</td><td className="spa-mono">{variable.value || <span
+            className="spa-hint">{t('empty')}</span>}</td>
         </tr>)}</tbody></table>
       </Details>}
       <Details icon="message" title={t('term.channel')}>
-        <ul className="dt-plain-list">{data.channels.map((item, index) => <li key={index}>
+        <ul className="spa-plain-list">{data.channels.map((item, index) => <li key={index}>
           <ExternalLink href={item.url} icon={item.source === 'github' ? 'pull' : 'message'}>{localized(t, item.label)}</ExternalLink>
         </li>)}</ul>
       </Details>
@@ -183,14 +183,14 @@ export function TicketPage({ id }: { id: string }) {
         <InputList inputs={data.inputs.filter(input => input.delivered)} />
       </Details>}
       <Details icon="hash" title={t('identifiers')}>
-        <KeyValues rows={[[t('ticketId'), <span className="dt-mono">{data.id}</span>], [t('executionDirectory'), <span
-          className="dt-mono">{data.directory ?? t('empty')}</span>],
+        <KeyValues rows={[[t('ticketId'), <span className="spa-mono">{data.id}</span>], [t('executionDirectory'), <span
+          className="spa-mono">{data.directory ?? t('empty')}</span>],
           ...legacy && data.mandate.scope ? [[t('legacyAssignment'), <span
-            className="dt-mono dt-clamp">{data.mandate.scope}</span>] as [string, ReactNode]] : []]} />
+            className="spa-mono spa-clamp">{data.mandate.scope}</span>] as [string, ReactNode]] : []]} />
       </Details>
     </div>
-    {data.actions.stop && <div className="dt-danger-zone">
-      <span className="dt-hint">{t('stopHint')}</span>
+    {data.actions.stop && <div className="spa-danger-zone">
+      <span className="spa-hint">{t('stopHint')}</span>
       <ConfirmButton variant="outline" label={t('stop')} title={t('stopConfirmTitle')} message={t('stopConfirm', { title: data.title })}
         onConfirm={() => after(call('POST tickets/:id/stop', { id }))} />
     </div>}

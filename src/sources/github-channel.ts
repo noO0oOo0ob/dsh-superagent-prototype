@@ -1,5 +1,6 @@
 /** GitHub outbound channel: posts issue/PR comments and review thread replies under the agent account. */
 import { z } from 'zod'
+import { requireGithub } from '../deployment.ts'
 import type { OutboundMessage } from '../core/index.ts'
 import { CliError } from '../infra/commands.ts'
 import { sameName } from '../infra/text.ts'
@@ -17,7 +18,7 @@ const missing = (error: unknown): boolean => error instanceof CliError && (error
 /** Posts a comment or review-thread reply with an embedded HTML marker so retries do not create duplicate comments. */
 export async function sendGithub(host: Pick<SourceContext, 'commands'>, message: OutboundMessage): Promise<'sent' | 'gone'> {
   const { commands } = host
-  const { repository, github } = commands.deployment
+  const { repository, github } = requireGithub(commands.deployment)
   const number = Number(message.channel.address.number)
   if (!number) throw new Error('Missing GitHub reply target')
   try {
@@ -31,7 +32,7 @@ export async function sendGithub(host: Pick<SourceContext, 'commands'>, message:
       rootId = source ? source.in_reply_to_id ?? source.id : undefined
     }
     const path = rootId === undefined ? `issues/${number}/comments` : `pulls/${number}/comments`
-    const marker = `<!-- dsh-superagent:${message.id} -->`
+    const marker = `<!-- dsh-super-personal-agent:${message.id} -->`
     const mine = (comment: z.infer<typeof CommentSchema>) => sameName(comment.user?.login ?? '', github.login)
       && (rootId === undefined || comment.in_reply_to_id === rootId) && (comment.body ?? '').includes(marker)
     if ((await commands.pages(CommentSchema, path)).some(mine)) return 'sent'

@@ -1,10 +1,10 @@
 # 008 Cookbook
 
-This cookbook shows how to extend dsh-superagent. It uses the terms in [001 Domain model](001-domain.md) and [002 Authorization](002-authorization.md), and the components in [007 Architecture](007-architecture.md).
+This cookbook shows how to extend dsh-super-personal-agent. It uses the terms in [001 Domain model](001-domain.md) and [002 Authorization](002-authorization.md), and the components in [007 Architecture](007-architecture.md).
 
 ## Add a Source
 
-This recipe implements a Source kind called `webhook`. It reads an imaginary message queue through an invented CLI, `hookq`, and converts messages to Triggers. All other interfaces are part of dsh-superagent.
+This recipe implements a Source kind called `webhook`. It reads an imaginary message queue through an invented CLI, `hookq`, and converts messages to Triggers. All other interfaces are part of dsh-super-personal-agent.
 
 The implementation has four responsibilities: translate events, define receiving and authorization rules, provide replies and context, and maintain a polling loop. The numbered steps build those pieces in order.
 
@@ -122,7 +122,7 @@ export function webhookTrigger(message: QueueMessage, me: string): Trigger | und
 - **Sender.** Use Source-native ids in `actor`. Set `human: false` for bots and CI. Listed bots can only become inferred candidates. An empty actor id, as for CI, uses the admission cell for unlisted, unaddressed senders. Set `addressed` to `mention` or `direct` only when the message actually addresses the agent; this gives an allowed person's message explicit strength. Never produce a Trigger for the agent's own message.
 - **Reply destination and metadata.** `channel` identifies where replies go; `url` links to the source message. `channel.thread` groups messages for ordered delivery: a Ticket's later messages wait behind its earlier ones until an earlier message has failed three times. Other Tickets do not wait. Keep Source-specific fields in `meta`, such as the receiving conversation and Thread root. Both `meta` and `text` are untrusted data, not authorization.
 
-Agents can read the new kind through `orchestrator_read trigger/<id>` and `thread/<key>`. These expose message text, disposition and neighboring Triggers. A new kind does not automatically receive a built-in skill, resources for original service records or pull-request binding.
+Agents can read the new kind through `personal_agent_read trigger/<id>` and `thread/<key>`. These expose message text, disposition and neighboring Triggers. A new kind does not automatically receive a built-in skill, resources for original service records or pull-request binding.
 
 Text search works without extra code. Implement `find(query)` when people use Source-specific references such as message ids, URLs or `#12`. Return the Thread keys and search terms those references identify:
 
@@ -195,7 +195,7 @@ export async function sendWebhook(host: Pick<SourceContext, 'commands'>, message
   },
 ```
 
-Proactive assessment needs the conversation around a Trigger. `orchestrator_eval` reads an initial window; `orchestrator_eval_read` expands pages, the root or the parent message. Implement the optional `threadContext` interface to provide these reads:
+Proactive assessment needs the conversation around a Trigger. `personal_agent_eval` reads an initial window; `personal_agent_eval_read` expands pages, the root or the parent message. Implement the optional `threadContext` interface to provide these reads:
 
 - `read(commands, trigger, part, cursor, config)` returns a `ContextPart`. Its `messages` use `ContextMessage`: `{id, from, at, text}` plus applicable `bot`, `deleted`, `reply_to`, `url`, `path` and `line` fields. `next` is omitted on the last page. `body` is the content shown to the assessing Session, here the same messages. Optional `status` can describe special results such as Feishu's `chat_neighbours`. `part` is `thread`, `root` or `parent`.
 - `messageId(trigger)` finds the Trigger's own message among them.
@@ -237,27 +237,27 @@ If messages reply to earlier messages, add `repliesTo(trigger)`. It returns the 
 
 ```ts
   environment: {
-    variables: [{ key: 'DSH_SUPERAGENT_WEBHOOK_CONVERSATION', description: {
+    variables: [{ key: 'DSH_SUPER_PERSONAL_AGENT_WEBHOOK_CONVERSATION', description: {
       zh: '接下工单的 webhook 对话；工单不是从这个来源来的时为空',
       en: 'The webhook conversation that started the ticket; empty when the ticket did not start on this Source' } }],
     values: ({ trigger }) => ({
-      DSH_SUPERAGENT_WEBHOOK_CONVERSATION: trigger?.source === 'webhook' ? String(trigger.meta.conversation ?? '') : '' }),
+      DSH_SUPER_PERSONAL_AGENT_WEBHOOK_CONVERSATION: trigger?.source === 'webhook' ? String(trigger.meta.conversation ?? '') : '' }),
   },
 ```
 
 Execution settings show declared `variables` beside the prepare command even when the Source is disabled. While enabled, `values` supplies Ticket-specific values using deployment, configuration and the originating Trigger.
 
-The prepare command reads environment variables; the worker reads their values in its instructions. Use the `DSH_SUPERAGENT_<KIND>_…` prefix, return an empty value for Tickets from another Source, and never include credentials.
+The prepare command reads environment variables; the worker reads their values in its instructions. Use the `DSH_SUPER_PERSONAL_AGENT_<KIND>_…` prefix, return an empty value for Tickets from another Source, and never include credentials.
 
 ### 9. The plugin entry and its loop
 
 ```ts
-export const name = 'dsh-superagent-webhook'
-export const inject = ['orchestrator']
+export const name = 'dsh-super-personal-agent-webhook'
+export const inject = ['superPersonalAgent']
 export function apply(ctx: Context): void {
-  ctx.effect(() => ctx.orchestrator.sources.register(webhookKind), 'webhook: source kind')
+  ctx.effect(() => ctx.superPersonalAgent.sources.register(webhookKind), 'webhook: source kind')
   ctx.effect(() => {
-    const source = sourceContext(ctx.orchestrator, webhookKind)
+    const source = sourceContext(ctx.superPersonalAgent, webhookKind)
     const controller = new AbortController()
     // DSH ends its process on an unhandled rejection, so a failure that escapes the loop becomes the Source's health.
     const running = watch(source, controller.signal)
@@ -272,7 +272,7 @@ The plugin injects `orchestrator`. Its first effect registers the kind and unreg
 ```ts
 async function watch(ctx: SourceContext, signal: AbortSignal): Promise<void> {
   await ctx.ready
-  // Setup restarts dsh-superagent once it resolves the accounts; until then the Source reads nothing.
+  // Setup restarts dsh-super-personal-agent once it resolves the accounts; until then the Source reads nothing.
   if (!ctx.configured()) { ctx.report('webhook', health('paused', 'setupPending')); return }
   let failures = 0
   while (!signal.aborted) {
@@ -343,12 +343,12 @@ entry: { index: 'src/index.ts', 'github-watch': 'src/sources/github.ts', 'feishu
 Then export the built file in `package.json` by adding `"./webhook-watch": "./lib/webhook-watch.js"` to `exports`, and add the plugin to the `insert` list of the bundle's `cordis.patch.yml`, disabled, as Feishu is:
 
 ```yaml
-    - id: dsh-superagent-webhook
-      name: dsh-superagent/webhook-watch
+    - id: dsh-super-personal-agent-webhook
+      name: dsh-super-personal-agent/webhook-watch
       disabled: true
 ```
 
-Enable the plugin in a profile's `cordis.patch.yml` with `id: dsh-superagent-webhook` and `disabled: false`. Build and restart. The new Source appears in Sources settings and under **Eval → On each Source**.
+Enable the plugin in a profile's `cordis.patch.yml` with `id: dsh-super-personal-agent-webhook` and `disabled: false`. Build and restart. The new Source appears in Sources settings and under **Eval → On each Source**.
 
 Add its module and spec to the module and test tables in [007 Architecture](007-architecture.md). `tests/docs.spec.ts` checks that both indexes are complete.
 

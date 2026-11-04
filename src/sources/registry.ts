@@ -54,7 +54,9 @@ export class SourceRegistry implements SourceScope {
   validate(id: string, value: { enabled: boolean; config: unknown }): { enabled: boolean; config: Record<string, unknown> } {
     const kind = this.kinds.get(id)
     if (!kind) throw new Error(`Source kind not installed: ${id}`)
-    return { enabled: value.enabled, config: kind.schema.parse(value.config) }
+    const config = kind.schema.parse(value.config)
+    if (value.enabled) kind.validateEnabled?.(config)
+    return { enabled: value.enabled, config }
   }
   /** Validates each Source's part of a submitted Policy against its kind; policy parts for uninstalled Source kinds are kept as stored. */
   validatePolicy(parts: Record<string, Record<string, unknown>>): Record<string, Record<string, unknown> & { allowed: { id: string; name?: string }[] }> {
@@ -133,6 +135,6 @@ export class SourceRegistry implements SourceScope {
   /** Falls back to schema defaults and disables the instance when stored configuration fails validation. */
   private resolve(kind: SourceKind, stored: { enabled: boolean; config: Record<string, unknown> } | undefined): SourceInstance {
     const parsed = kind.schema.safeParse(stored?.config ?? {})
-    return { id: kind.kind, kind: kind.kind, enabled: parsed.success && (stored?.enabled ?? true), config: parsed.success ? parsed.data : kind.schema.parse({}) }
+    return { id: kind.kind, kind: kind.kind, enabled: parsed.success && (stored?.enabled ?? kind.defaultEnabled ?? true), config: parsed.success ? parsed.data : kind.schema.parse({}) }
   }
 }

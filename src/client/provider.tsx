@@ -21,21 +21,21 @@ export interface PanelData {
   error: Error | undefined
   reload: () => Promise<void>
   setup: SetupView | undefined
-  /** Executor Sessions in an active turn, which a restart of `dsh-superagent` interrupts. */
+  /** Executor Sessions in an active turn, which a restart of `dsh-super-personal-agent` interrupts. */
   running: number
-  /** Incremented each time dsh-superagent recovers from a restart so dependent views refetch. */
+  /** Incremented each time dsh-super-personal-agent recovers from a restart so dependent views refetch. */
   restarts: number
 }
 const Panel = createContext<PanelContext | undefined>(undefined)
 const PanelState = createContext<PanelData | undefined>(undefined)
 export function usePanel(): PanelContext {
   const value = useContext(Panel)
-  if (!value) throw new Error('dsh-superagent page rendered outside its panel')
+  if (!value) throw new Error('dsh-super-personal-agent page rendered outside its panel')
   return value
 }
 export function usePanelData(): PanelData {
   const value = useContext(PanelState)
-  if (!value) throw new Error('dsh-superagent page rendered outside its panel')
+  if (!value) throw new Error('dsh-super-personal-agent page rendered outside its panel')
   return value
 }
 /** Wrap an async action with re-entrancy protection, busy state, optional reload, and error toast reporting. */
@@ -66,7 +66,7 @@ function Toast({ text, onDone, holdMs = 3000 }: { text: string; onDone: () => vo
   const done = useRef(onDone)
   done.current = onDone
   useEffect(() => { const timer = setTimeout(() => done.current(), holdMs + 1000); return () => clearTimeout(timer) }, [holdMs])
-  return createPortal(<div className="dt-toast" role="status" style={{ ['--dt-toast-hold' as string]: `${holdMs}ms` }}>{text}</div>,
+  return createPortal(<div className="spa-toast" role="status" style={{ ['--spa-toast-hold' as string]: `${holdMs}ms` }}>{text}</div>,
     document.body)
 }
 const stay = () => {}

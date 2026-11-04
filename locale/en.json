@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Superagent",
-    "description": "Watch one GitHub repository, turn authorized requests into Tickets, and execute each in its own DSH Session."
+    "title": "super-personal-Agent",
+    "description": "Run personal tasks from local messages with optional GitHub and Feishu Sources, durable Tickets and dedicated worker Sessions."
   }
 }

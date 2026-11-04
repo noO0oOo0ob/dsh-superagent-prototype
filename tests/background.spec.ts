@@ -8,7 +8,7 @@ import { jobRegistry } from './fixtures/host.ts'
 /** A context with DSH's job registry and subagents, and an idle worker agent with one live subagent, `child-1`. */
 function setup(waitForChildren: (agent: Agent) => Promise<boolean>, drainChildren: () => Promise<void> = async () => {}) {
   const jobs = jobRegistry()
-  const agent = { id: 'worker-t1', status: 'idle', whenIdle: async () => {}, inbox: { nextTurn: [], nextStep: [] }, cancel: vi.fn() } as unknown as
+  const agent = { id: 'spa-worker-t1', status: 'idle', whenIdle: async () => {}, inbox: { nextTurn: [], nextStep: [] }, cancel: vi.fn() } as unknown as
     Agent & { status: string; cancel: ReturnType<typeof vi.fn> }
   const subagents = { waitForChildren: vi.fn(waitForChildren), listChildren: async () => [{ id: 'child-1' }], drainChildren: vi.fn(drainChildren) }
   const services: Record<string, unknown> = { jobs: jobs.service, subagents }
@@ -22,7 +22,7 @@ it('is not quiet when an end during the subagent check woke the worker, whose ow
     jobs.end(id); (agent as { status: string }).status = 'running'
     return false
   })
-  const id = jobs.run('worker-t1')
+  const id = jobs.run('spa-worker-t1')
   expect(await untilQuiet(ctx, agent, new AbortController().signal)).toBe(false)
 })
 
@@ -40,7 +40,7 @@ it('stops waiting for subagents that never settle once the host stops', async ()
 
 it('looks at the jobs only when one ends, not at each output of a noisy one', async () => {
   const { ctx, agent, jobs } = setup(async () => false)
-  const id = jobs.run('worker-t1')
+  const id = jobs.run('spa-worker-t1')
   const stop = new AbortController()
   const quiet = untilQuiet(ctx, agent, stop.signal)
   await new Promise(resolve => setTimeout(resolve, 0))

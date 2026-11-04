@@ -37,7 +37,7 @@ export function actor(source: string, id: string, human = true): Actor {
 type TicketFields = Omit<TicketRow, 'stage' | 'action'>
 const TICKET = {
   id: 't1', title: '修复回归', state: 'open', actions: { retry: false, stop: true }, strength: 'explicit', ended: undefined,
-  attention: undefined, assignments: 1, inputs: 2, undelivered: 0, deliveryError: undefined, sessionId: 'worker-t1', directory: '/w/t1',
+  attention: undefined, assignments: 1, inputs: 2, undelivered: 0, deliveryError: undefined, sessionId: 'spa-worker-t1', directory: '/w/t1',
   summary: 'working on it', createdAt: '2026-09-22T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z',
   threads: [{ key: 'github:42', source: 'github', title: '#42 Fix login', url: 'https://github.com/acme/widgets/pull/42',
     facts: { number: { value: '#42' }, ci: { label: { zh: 'CI 失败', en: 'CI failed' }, value: '1', problem: true } } }],
@@ -80,7 +80,7 @@ const dayAgo = () => new Date(Date.now() - 86_400_000).toISOString()
 export const problemOf = (code: SetupCode, values: Record<string, string> = {}) => new SetupError(code, values).problem
 // The kinds' configurations differ, and the fake reads them only as the records the views carry.
 const KINDS = [feishuKind, githubKind] as unknown as SourceKind[]
-export const MACHINE = { stateDir: '/srv/dsh-superagent', promptMaxChars: 100000, admissionContextMaxPages: 10,
+export const MACHINE = { stateDir: '/srv/dsh-super-personal-agent', promptMaxChars: 100000, admissionContextMaxPages: 10,
   admissionContextTimeoutMs: 15000 }
 
 type Settings = ReturnType<typeof SettingsSchema.parse>
@@ -169,11 +169,11 @@ const settingsView = (): ApiResponse<'GET settings'> => ({
     eval: { value: server.settings.eval, revision: server.revisions.eval ?? 0 },
     executor: { value: server.settings.executor, revision: server.revisions.executor ?? 0 } },
   sources: sourceSettings(),
-  environment: { root: '/srv/dsh-superagent/work', variables: [
-    { owner: 'executor', enabled: true, variables: [{ key: 'DSH_SUPERAGENT_DIR', description: { zh: '工单的执行目录',
+  environment: { root: '/srv/dsh-super-personal-agent/work', variables: [
+    { owner: 'executor', enabled: true, variables: [{ key: 'DSH_SUPER_PERSONAL_AGENT_DIR', description: { zh: '工单的执行目录',
       en: 'The ticket directory' } },
-      { key: 'DSH_SUPERAGENT_NAME', description: { zh: '工单短名', en: 'Short name' } }] },
-    { owner: 'github', enabled: false, variables: [{ key: 'DSH_SUPERAGENT_GITHUB_REPOSITORY', description: { zh: '仓库',
+      { key: 'DSH_SUPER_PERSONAL_AGENT_NAME', description: { zh: '工单短名', en: 'Short name' } }] },
+    { owner: 'github', enabled: false, variables: [{ key: 'DSH_SUPER_PERSONAL_AGENT_GITHUB_REPOSITORY', description: { zh: '仓库',
       en: 'Repository' } }] }] },
 })
 const overviewView = (): ApiResponse<'GET overview'> => {
@@ -209,8 +209,8 @@ const ticketDetail = (): TicketPageView => ({
   mandate: { strength: 'explicit', policyVersion: 'abcdef1234567890', basis: { via: 'addressed', sender: 'Alice', addressed: 'mention' },
     actor: actor('feishu', MEMBER), scope: '修复登录页回归' },
   basis: { facts: [{ name: 'sender', value: 'Alice' }, { name: 'addressed', value: 'mention' }], legacy: false },
-  environment: [{ key: 'DSH_SUPERAGENT_DIR', value: '/w/t1', description: { zh: '执行目录', en: 'Directory' }, owner: 'executor' },
-    { key: 'DSH_SUPERAGENT_GITHUB_NUMBER', value: '', description: { zh: '编号', en: 'Number' }, owner: 'github' }],
+  environment: [{ key: 'DSH_SUPER_PERSONAL_AGENT_DIR', value: '/w/t1', description: { zh: '执行目录', en: 'Directory' }, owner: 'executor' },
+    { key: 'DSH_SUPER_PERSONAL_AGENT_GITHUB_NUMBER', value: '', description: { zh: '编号', en: 'Number' }, owner: 'github' }],
   channels: [{ source: 'feishu', url: 'https://applink.feishu.cn/client/chat/open?openChatId=oc_1', label: { zh: '飞书消息',
     en: 'Feishu message' } },
     { source: 'github', url: 'https://github.com/acme/widgets/issues/42', label: { zh: 'GitHub #42', en: 'GitHub #42' } }],
@@ -248,7 +248,7 @@ function initial(): PanelServer {
   const defaults = { revision: 0, previousRevision: null, savedAt: '', source: 'defaults' }
   return {
     health: {}, down: false, pending: 0, opened: [], requests: [], misuse: [], queued: new Set(), dropped: [], failing: [],
-    setup: { machine: MACHINE, problem: null, feishuProblem: null,
+    setup: { machine: MACHINE, problem: null, feishuProblem: null, githubProblem: null,
       accounts: { repository: 'acme/widgets', agent: 'agent-bot', feishu: { appId: 'cli_bot', brand: 'feishu', botId: 'ou_bot',
         name: 'Widgets Bot' } } },
     settings, revisions: { policy: 3, eval: 1, executor: 0 },
@@ -260,7 +260,7 @@ function initial(): PanelServer {
     threads: [threadSummary()], threadPages: threadPage,
     person: [ticketSummary({ attention: { id: 'q1', question: '需要确认按钮颜色' }, note: { text: '需要确认按钮颜色', error: false }, reply },
       { stage: 'person', action: 'answer' }),
-      ticketSummary({ id: 't4', title: '截图工具', actions: { retry: true, stop: true }, sessionId: 'worker-t4',
+      ticketSummary({ id: 't4', title: '截图工具', actions: { retry: true, stop: true }, sessionId: 'spa-worker-t4',
         summary: 'LlmError: no adapter registered for provider "provider-a"',
         note: { text: 'LlmError: no adapter registered for provider "provider-a"', error: true } }, { stage: 'person', action: 'failed' })],
     search: { items: [], threads: [] },
@@ -370,7 +370,7 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   'POST policy-sync/:id': { answer: ({ params }) => ({ policy: server.settings.policy.sources[params.id] }) },
   'POST setup/check': { answer: () => ({ restarting: true }) },
   'GET models': { answer: () => ({ default: { provider: 'host', model: 'default' }, routableProviders: [], failures: [],
-    groups: [{ id: 'worker-provider', name: 'Worker provider', models: [{ id: 'worker-model', name: 'Worker model',
+    groups: [{ id: 'spa-worker-provider', name: 'Worker provider', models: [{ id: 'spa-worker-model', name: 'Worker model',
       reasoning: { efforts: [{ id: 'high', name: 'High' }] } }] }] }) },
   'GET prompts': { query: ['revision', 'offset'], answer: () => server.prompts },
   'PUT prompts': { body: true, answer: ({ body }) => {
@@ -436,7 +436,7 @@ export function usePanelServer(cleanup: () => void) {
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit): Promise<Response> => {
       if (server.down) return new Response(null, { status: 404 })
       const address = new URL(url, 'http://127.0.0.1:3082')
-      const path = address.pathname.replace('/orchestrator/api/', '')
+      const path = address.pathname.replace('/super-personal-agent/api/', '')
       const method = init?.method ?? 'GET'
       const body: unknown = init?.body ? JSON.parse(String(init.body)) : undefined
       server.requests.push({ path: decodeURIComponent(`${path}${address.search}`), method, ...body === undefined ? {} : { body } })

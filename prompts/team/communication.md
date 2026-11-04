@@ -90,7 +90,7 @@ Reject advice that adds unnecessary complexity, duplicates existing behavior or 
 Do not chase bot approval, acknowledge every bot comment, or repeat an unchanged disposition.
 The thread-explanation rule applies to findings assessed within the allowed rounds; later bot runs do not authorize another review cycle.
 Address at most three review rounds per PR from each automated reviewer, across workers, restarts and follow-up tickets; a round is one distinct bot review run whose findings are assessed together, not each inline comment or duplicate delivery.
-Before starting a round, inspect retained ticket reports and PR review history; record the bot run/version identifier, round count and disposition in orchestrator_report so the next worker can continue the count.
+Before starting a round, inspect retained ticket reports and PR review history; record the bot run/version identifier, round count and disposition in personal_agent_report so the next worker can continue the count.
 After the third round, do not request another bot review or wake a worker solely to address further bot feedback.
 Deliver the reviewed PR with any material unresolved issue stated honestly; a verified serious blocker still warrants a brief human alert, but not another automated bot-review cycle.
 Human review and CI remain separate.

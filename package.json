@@ -1,10 +1,10 @@
 {
-  "name": "dsh-superagent",
+  "name": "dsh-super-personal-agent",
   "author": "DeepSeek Harness Team <team@dsh.dev>",
   "license": "MIT",
   "version": "0.1.0",
   "private": true,
-  "description": "A proactive agent for one GitHub repository, as a DSH (DeepSeek Harness) bundle: it listens to GitHub and optionally Feishu, evaluates requests under a Policy, turns authorized ones into Tickets, and executes each in its own DSH Session.",
+  "description": "A personal agent for DSH: optional GitHub and Feishu Sources, a local inbox, durable tasks and isolated worker Sessions.",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -17,7 +17,9 @@
     "./github-watch": "./lib/github-watch.js",
     "./feishu-watch": "./lib/feishu-watch.js",
     "./package.json": "./package.json",
-    "./locale/*.json": "./locale/*.json"
+    "./locale/*.json": "./locale/*.json",
+    "./execution-environment": "./lib/execution-environment.js",
+    "./inbox-watch": "./lib/inbox-watch.js"
   },
   "files": [
     "lib",

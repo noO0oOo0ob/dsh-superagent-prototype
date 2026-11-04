@@ -49,8 +49,8 @@ function setup(strength: 'explicit' | 'inferred' = 'inferred', bodies = Array.fr
   const outbox = { send: () => {}, status: () => undefined, withdraw: () => {} }
   engine = new Engine({ repo, policy: () => policy, scope, assessor, executor, outbox })
   const tools: Record<string, (args: unknown, signal: AbortSignal) => Promise<unknown>> = {}
-  tools.orchestrator_eval_read = (args, signal) => assessor.read({} as Agent, EvalReadSchema.parse(args), signal)
-  tools.orchestrator_eval_decide = (args, signal) => {
+  tools.personal_agent_eval_read = (args, signal) => assessor.read({} as Agent, EvalReadSchema.parse(args), signal)
+  tools.personal_agent_eval_decide = (args, signal) => {
     const { trigger_id, ...result } = args as { trigger_id: string }
     return assessor.decide(trigger_id, AssessmentSchema.parse(result), signal)
   }
@@ -68,7 +68,7 @@ it('keeps nothing for an Eval once it is decided, as for one that timed out', as
   for (let n = 1; n <= 3; n++) {
     s.engine.receive(issue(n)); s.engine.evaluateDue()
     await s.assessor.context(`issue-${n}`, signal)
-    await s.tools.orchestrator_eval_read!({ trigger_id: `issue-${n}`, resource: 'file', path: 'src/value.ts', offset: 0 }, signal)
+    await s.tools.personal_agent_eval_read!({ trigger_id: `issue-${n}`, resource: 'file', path: 'src/value.ts', offset: 0 }, signal)
     expect(s.size()).toBeGreaterThan(0)
     s.engine.decide(`issue-${n}`, { kind: 'ignore', reason: 'not a request' })
     expect(s.size()).toBe(0)
@@ -98,28 +98,28 @@ it('reads the context of a Trigger through its Source, and none for a Source tha
   s.engine.receive(issue(1)); s.engine.evaluateDue()
   const context = await s.assessor.context('issue-1', signal)
   expect(context.thread).toMatchObject({ complete: true, loaded_messages: 6, source_found: true })
-  const page = await s.tools.orchestrator_eval_read!({ trigger_id: 'issue-1', resource: 'thread', offset: 0 }, signal) as { text: string }
+  const page = await s.tools.personal_agent_eval_read!({ trigger_id: 'issue-1', resource: 'thread', offset: 0 }, signal) as { text: string }
   expect(JSON.parse(page.text)).toMatchObject({ next_read: null,
     messages: expect.arrayContaining([expect.objectContaining({ text: 'comment 0' })]) })
   const other: Trigger = { ...issue(2), id: 'other-2', source: 'probe', threads: [{ source: 'probe', id: '2' }], actor: { source: 'probe',
     id: 'bob' } }
   s.engine.receive(other); s.engine.evaluateDue()
   expect((await s.assessor.context('other-2', signal)).thread).toMatchObject({ error: expect.stringContaining('gives no Thread context') })
-  await expect(s.tools.orchestrator_eval_read!({ trigger_id: 'other-2', resource: 'thread', offset: 0 },
+  await expect(s.tools.personal_agent_eval_read!({ trigger_id: 'other-2', resource: 'thread', offset: 0 },
     signal)).rejects.toThrow('gives no Thread context')
   // The Trigger's own text is still readable when its Source provides no Thread context.
-  expect(await s.tools.orchestrator_eval_read!({ trigger_id: 'other-2', resource: 'message', offset: 0 },
+  expect(await s.tools.personal_agent_eval_read!({ trigger_id: 'other-2', resource: 'message', offset: 0 },
     signal)).toMatchObject({ text: 'issue 2' })
 })
 it('routes an explicit candidate instead of assessing it: each eval tool names the routing tools', async () => {
   const s = setup('explicit')
   s.engine.receive(issue(1)); s.engine.evaluateDue()
-  const routed = 'orchestrator_route with its trigger_id and kind accept, attach, stop or ignore'
+  const routed = 'personal_agent_route with its trigger_id and kind accept, attach, stop or ignore'
   await expect(s.assessor.context('issue-1', signal)).rejects.toThrow(routed)
-  await expect(s.tools.orchestrator_eval_read!({ trigger_id: 'issue-1', resource: 'message', offset: 0 }, signal)).rejects.toThrow(routed)
+  await expect(s.tools.personal_agent_eval_read!({ trigger_id: 'issue-1', resource: 'message', offset: 0 }, signal)).rejects.toThrow(routed)
   const direction = { implementation_requested: false, target_basis: 'undetermined', requires_design_decision: false, evidence: 'chatter' }
   const decision = { trigger_id: 'issue-1', decision: 'ignore', rule_assessments: [], direction, title: 't', scope: 's', reason: 'r' }
-  await expect(s.tools.orchestrator_eval_decide!(decision, signal)).rejects.toThrow(routed)
+  await expect(s.tools.personal_agent_eval_decide!(decision, signal)).rejects.toThrow(routed)
 })
 
 it('asks the assessment only for decisions its tool accepts, which no longer include reopen or stop', () => {
@@ -150,9 +150,9 @@ it('loads a window without the assessment instructions: the trigger once, cut me
   expect(at(12)).toMatchObject({ chars: bodies[12]!.length, text: `${bodies[12]!.slice(0, 400)}…` })
   expect(at(14)).toMatchObject({ text: bodies[14] })
   expect(at(14)).not.toHaveProperty('chars')
-  // Messages outside the window are stubs that orchestrator_eval_read can read in full.
+  // Messages outside the window are stubs that personal_agent_eval_read can read in full.
   expect(at(8)).toEqual({ id: expect.any(String), from: 'bob', preview: bodies[8]!.slice(0, 50) })
-  const whole = await s.tools.orchestrator_eval_read!({ trigger_id: 'c15', resource: 'message', message_id: at(8).id }, signal)
+  const whole = await s.tools.personal_agent_eval_read!({ trigger_id: 'c15', resource: 'message', message_id: at(8).id }, signal)
   expect(JSON.stringify(whole)).toContain(bodies[8]!.slice(-40))
   expect(JSON.stringify(result).length).toBeLessThan(9000)
 })
@@ -172,7 +172,7 @@ it('lets the main Session read on from the cursor its loaded window ends with, a
   s.engine.receive(long); s.engine.evaluateDue()
   const result = await s.assessor.context('long', signal) as { thread: { next_cursor?: string }, batch: Record<string, unknown>[] }
   expect(result.thread.next_cursor).toBe('10')
-  const more = await s.tools.orchestrator_eval_read!({ trigger_id: 'long', resource: 'thread', cursor: '10' }, signal)
+  const more = await s.tools.personal_agent_eval_read!({ trigger_id: 'long', resource: 'thread', cursor: '10' }, signal)
   expect(JSON.stringify(more)).toContain('message 10')
   const shorter = { trigger_id: 'issue-1' }
   expect(result.batch).toEqual([expect.objectContaining(shorter)])

@@ -191,10 +191,10 @@ export function SaveBar({ state, dirty, busy, words, status, onDiscard, onSave }
   }, [shown])
   if (!shown) return null
   const leave = (next: Element | null) => { if (next && !bar.current?.contains(next)) focused.current = false }
-  return <div ref={bar} className="dt-savebar" onFocus={() => { focused.current = true }}
+  return <div ref={bar} className="spa-savebar" onFocus={() => { focused.current = true }}
     onBlur={event => leave(event.relatedTarget as Element | null)}>
-    {line.error ? <p className="dt-error dt-clamp" role="alert">{line.error}</p>
-      : <p className="dt-hint" aria-live="polite">{status ?? line.status}</p>}
+    {line.error ? <p className="spa-error spa-clamp" role="alert">{line.error}</p>
+      : <p className="spa-hint" aria-live="polite">{status ?? line.status}</p>}
     <Button variant="ghost" size="sm" disabled={!dirty || busy} onClick={onDiscard}>{t('discard')}</Button>
     <Button variant="primary" size="sm" disabled={!dirty || busy} {...onSave ? { onClick: onSave } : { type: 'submit' as const }}>
       {t('save')}

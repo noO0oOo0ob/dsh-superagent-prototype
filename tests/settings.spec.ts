@@ -13,7 +13,7 @@ function deferred<T>() {
   const promise = new Promise<T>(settle => { resolve = settle })
   return { promise, resolve }
 }
-const model = { provider: 'worker-provider', model: 'worker-model' }
+const model = { provider: 'spa-worker-provider', model: 'spa-worker-model' }
 
 it('refuses a save of a block that another save changed during its model or account check, and saves nothing of it', async () => {
   h = await startRuntime()

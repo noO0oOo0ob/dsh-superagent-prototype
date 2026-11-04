@@ -66,6 +66,6 @@ export async function candidateCard(host: LinkHost, candidate: Candidate) {
     mode: settings.eval.mode, ...others.length ? { batch: others.map(trigger => triggerCard(trigger)) } : {},
     ...handedBack.length ? { handed_back: handedBack } : {}, ...relatedTickets(candidate.tickets),
     ...(delivered.length ? { delivered_to: delivered } : {}), ...(referenced.length ? { referenced_tickets: referenced.map(ticketCard) } : {}),
-    next_action: candidate.strength === 'explicit' ? 'Route it with orchestrator_route as dispatch says: accept, attach, stop or ignore.'
-      : 'Ignore it with orchestrator_route if the card shows it touches no enabled rule; else assess it with orchestrator_eval, orchestrator_eval_read, then orchestrator_eval_decide.' }
+    next_action: candidate.strength === 'explicit' ? 'Route it with personal_agent_route as dispatch says: accept, attach, stop or ignore.'
+      : 'Ignore it with personal_agent_route if the card shows it touches no enabled rule; else assess it with personal_agent_eval, personal_agent_eval_read, then personal_agent_eval_decide.' }
 }

@@ -29,14 +29,14 @@ const FeishuConfigSchema = FeishuBotSchema.extend({
 }).strict()
 export type FeishuConfig = z.infer<typeof FeishuConfigSchema>
 export const feishuKind: SourceKind<FeishuConfig> = {
-  kind: SOURCE,
+  kind: SOURCE, defaultEnabled: false,
   refreshLabels: (host, signal) => refreshChatNames(sourceContext(host, feishuKind), signal),
   title: { zh: '飞书', en: 'Feishu' },
   description: { zh: '接收下列群和私聊中发给机器人的消息，补收群历史并轮询订阅的线程。', en: 'Receives messages to the bot in these chats and direct messages, recovers chat history and polls subscribed Threads.' },
   schema: FeishuConfigSchema,
   fields: [
     { key: 'cli', type: 'text', label: { zh: '机器人的 lark-cli', en: 'Bot lark-cli' },
-      hint: { zh: '命令名或绝对路径，指向只允许机器人身份（strict mode bot）的 lark-cli 配置；执行器以 lark-cli 调用它。保存时读取应用和机器人，然后重启 dsh-superagent。', en: 'A command name or absolute path of a lark-cli configuration that allows only the bot identity (strict mode bot); the Executor calls it as lark-cli. Saving reads the app and the bot, then restarts dsh-superagent.' } },
+      hint: { zh: '命令名或绝对路径，指向只允许机器人身份（strict mode bot）的 lark-cli 配置；执行器以 lark-cli 调用它。保存时读取应用和机器人，然后重启 dsh-super-personal-agent。', en: 'A command name or absolute path of a lark-cli configuration that allows only the bot identity (strict mode bot); the Executor calls it as lark-cli. Saving reads the app and the bot, then restarts dsh-super-personal-agent.' } },
     { key: 'chats', type: 'rows', label: { zh: '接收的群', en: 'Chats' },
       hint: { zh: '“仅 @”只接收 @ 机器人的消息和已有工单的线程；“全部消息”也接收其余消息，评估可以按规则从中推断工作，需要机器人有读取全部消息的权限。', en: '"@ only" receives messages that mention the bot and Threads that have Tickets; "All" also receives the rest, from which Eval may infer work under the rules; the bot needs permission to read all messages.' },
       columns: [
@@ -117,23 +117,23 @@ export const feishuKind: SourceKind<FeishuConfig> = {
   },
   environment: {
     variables: [
-      { key: 'DSH_SUPERAGENT_FEISHU_BOT', description: { zh: '飞书机器人；lark-cli 以它行事', en: 'The Feishu bot; lark-cli acts as it' } },
-      { key: 'DSH_SUPERAGENT_FEISHU_CHAT', description: { zh: '接下工单的飞书群 chat_id；工单不是从飞书来的时为空', en: 'chat_id of the Feishu chat that started the ticket; empty when the ticket did not start on Feishu' } },
+      { key: 'DSH_SUPER_PERSONAL_AGENT_FEISHU_BOT', description: { zh: '飞书机器人；lark-cli 以它行事', en: 'The Feishu bot; lark-cli acts as it' } },
+      { key: 'DSH_SUPER_PERSONAL_AGENT_FEISHU_CHAT', description: { zh: '接下工单的飞书群 chat_id；工单不是从飞书来的时为空', en: 'chat_id of the Feishu chat that started the ticket; empty when the ticket did not start on Feishu' } },
     ],
-    values: ({ deployment, trigger }) => ({ DSH_SUPERAGENT_FEISHU_BOT: deployment.feishu ? deployment.feishu.name || deployment.feishu.botId : '', DSH_SUPERAGENT_FEISHU_CHAT: trigger?.source === SOURCE ? String(trigger.meta.chatId ?? '') : '' }),
+    values: ({ deployment, trigger }) => ({ DSH_SUPER_PERSONAL_AGENT_FEISHU_BOT: deployment.feishu ? deployment.feishu.name || deployment.feishu.botId : '', DSH_SUPER_PERSONAL_AGENT_FEISHU_CHAT: trigger?.source === SOURCE ? String(trigger.meta.chatId ?? '') : '' }),
   },
   facts: (deployment): Record<string, Localized | string> => deployment?.feishu ? { cli: { zh: `当前机器人 ${deployment.feishu.name || deployment.feishu.botId}`, en: `Current bot ${deployment.feishu.name || deployment.feishu.botId}` } } : {},
 }
 /** Returns the Feishu Source's settings, falling back to schema defaults while the Feishu plugin is disabled. */
 export const feishuSettings = (sources: SourceRegistry): FeishuConfig => sources.instance<FeishuConfig>(SOURCE)?.config ?? FeishuConfigSchema.parse({})
 
-export const name = 'dsh-superagent-feishu'
-export const inject = ['orchestrator']
+export const name = 'dsh-super-personal-agent-feishu'
+export const inject = ['superPersonalAgent']
 export function apply(ctx: Context): void {
-  ctx.effect(() => ctx.orchestrator.sources.register(feishuKind), 'feishu: source kind')
+  ctx.effect(() => ctx.superPersonalAgent.sources.register(feishuKind), 'feishu: source kind')
   ctx.effect(() => {
     const controller = new AbortController()
-    const running = runFeishu(sourceContext(ctx.orchestrator, feishuKind), controller.signal)
+    const running = runFeishu(sourceContext(ctx.superPersonalAgent, feishuKind), controller.signal)
     return async () => { controller.abort(); await running }
   })
 }

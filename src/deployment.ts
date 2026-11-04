@@ -11,7 +11,7 @@ import { SetupError } from './setup.ts'
 
 const reason = (error: unknown): string => error instanceof Error ? error.message : String(error)
 const absolute = (description: string) => s.string().pattern(/^\//).description(`${description} Absolute path.`)
-/** Plugin configuration of the dsh-superagent entry. Volatile fields apply without a restart because dsh-superagent reads them on each use; changing `stateDir` remounts the plugin. */
+/** Plugin configuration of the dsh-super-personal-agent entry. Volatile fields apply without a restart because dsh-super-personal-agent reads them on each use; changing `stateDir` remounts the plugin. */
 export const Config = s.object({
   stateDir: absolute('Directory for the database, locks, worker shims, the agent\'s git configuration and, by default, the ticket directories.').required(),
   promptMaxChars: s.number().min(LIMITS.promptMaxChars.min).max(LIMITS.promptMaxChars.max).step(1).default(100000)
@@ -37,7 +37,7 @@ const MOVED: Record<string, string> = {
 /** Read machine settings and reject unknown configuration keys (naming where deprecated keys moved). */
 export function machineOf(config: DeploymentConfig): Machine {
   const unknown = Object.keys(config).filter(key => !(key in (Config.dict ?? {})))
-  if (unknown.length) throw new Error(`dsh-superagent configuration has keys it does not use: ${unknown.map(key => MOVED[key] ? `${key} (now ${MOVED[key]})` : key).join(', ')}; docs/006-deployment.md lists the keys`)
+  if (unknown.length) throw new Error(`dsh-super-personal-agent configuration has keys it does not use: ${unknown.map(key => MOVED[key] ? `${key} (now ${MOVED[key]})` : key).join(', ')}; docs/006-deployment.md lists the keys`)
   const { stateDir, promptMaxChars, admissionContextMaxPages, admissionContextTimeoutMs } = config
   return { stateDir, promptMaxChars, admissionContextMaxPages, admissionContextTimeoutMs }
 }
@@ -52,8 +52,15 @@ export const SETUP_FIELDS: Readonly<Record<string, readonly string[]>> = { githu
 
 export interface Deployment extends Machine {
   repository: string
-  github: { cli: string; login: string; noreply: string }
+  github?: { cli: string; login: string; noreply: string }
   feishu?: FeishuBot
+}
+/** Deployment with a verified GitHub account and repository. */
+export type GithubDeployment = Deployment & { github: NonNullable<Deployment['github']> }
+/** Refuse GitHub operations when no verified account is available. */
+export function requireGithub(deployment: Deployment): GithubDeployment {
+  if (!deployment.github) throw new Error('GitHub is unavailable; configure and enable the GitHub Source first.')
+  return { ...deployment, github: deployment.github }
 }
 export interface FeishuBot { cli: string; appId: string; brand: 'feishu' | 'lark'; botId: string; name: string }
 
@@ -70,9 +77,9 @@ export function executable(name: string, path: string, exclude?: string): string
 
 export type Probe = (argv: string[]) => Promise<string>
 /** Run startup checks through DSH's worker subprocess service with worker shims removed from PATH so a `gh` wrapper script reaches the real binary. */
-export function workerProbe(subprocess: SubprocessRuntime, stateDir: string, cwd: string, signal: AbortSignal): Probe {
-  const path = withoutDirectory(process.env.PATH ?? '', workerBin(stateDir))
-  return argv => runAsWorker(subprocess, ['env', `PATH=${path}`, ...argv], cwd, AbortSignal.any([signal, AbortSignal.timeout(60_000)]))
+export function workerProbe(subprocess: SubprocessRuntime, stateDir: string, cwd: string, signal: AbortSignal, env?: NodeJS.ProcessEnv): Probe {
+  const path = withoutDirectory(env?.PATH ?? process.env.PATH ?? '', workerBin(stateDir))
+  return argv => runAsWorker(subprocess, ['env', `PATH=${path}`, ...argv], cwd, AbortSignal.any([signal, AbortSignal.timeout(60_000)]), env)
 }
 
 const GithubUser = z.object({ login: z.string().regex(/^[A-Za-z0-9-]+$/), id: z.number().int().positive() })
@@ -84,7 +91,7 @@ function parsed<T>(schema: z.ZodType<T>, text: string): T | undefined {
   return result.success ? result.data : undefined
 }
 /** Verify the agent's GitHub CLI identity and push access to the configured repository. */
-export async function resolveDeployment(machine: Machine, github: unknown, probe: Probe, path = process.env.PATH ?? ''): Promise<Deployment> {
+export async function resolveDeployment(machine: Machine, github: unknown, probe: Probe, path = process.env.PATH ?? ''): Promise<GithubDeployment> {
   const { stateDir } = machine
   const accounts = GithubAccountsSchema.parse(github ?? {})
   const remote = accounts.repository

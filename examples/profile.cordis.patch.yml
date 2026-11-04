@@ -1,12 +1,9 @@
 # Example profile configuration ($DSH_HOME/profiles/<profile>/cordis.patch.yml).
 # Replace <placeholders> before first start; see docs/006-deployment.md.
-- id: webserver
+# Merge into the existing patch; keep its webserver and original plugin entries.
+- id: dsh-super-personal-agent
   config:
-    host: 127.0.0.1
-    port: 3082
-- id: dsh-superagent
-  config:
-    stateDir: <absolute path, for example /home/me/.dsh/state/superagent>
+    stateDir: <absolute path, for example /home/me/.dsh/state/super-personal-agent>
 # Feishu is optional: uncomment to enable its Source, then set the bot's lark-cli on the Feishu Source.
-# - id: dsh-superagent-feishu
+# - id: dsh-super-personal-agent-feishu
 #   disabled: false

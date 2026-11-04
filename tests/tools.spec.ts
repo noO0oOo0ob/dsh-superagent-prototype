@@ -14,7 +14,7 @@ beforeEach(async () => { h = await startRuntime() })
 afterEach(async () => { await h.stop() })
 const words = (count: number) => Array.from({ length: count }, () => 'word').join(' ')
 const read = (resource: string, page: { offset?: number; limit?: number } = {}) =>
-  h.runTool(h.runtime.masterId, 'orchestrator_read', { resource, ...page })
+  h.runTool(h.runtime.masterId, 'personal_agent_read', { resource, ...page })
 
 it('reads the lists, a ticket, a decision, the settings, the prompts and the models as resources', async () => {
   const { ticket, trigger } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
@@ -42,7 +42,7 @@ it('reads the lists, a ticket, a decision, the settings, the prompts and the mod
   }
   expect(JSON.parse((await read('settings/policy') as { text: string }).text).value.sources.feishu.allowed).toEqual([{ id: 'ou_alice', name: 'Alice' }])
   await expect(read('settings/source:retired')).rejects.toThrow('Unknown settings block')
-  const skills = { built_in: ['dsh-superagent-feishu', 'dsh-superagent-github'], team: [] }
+  const skills = { built_in: ['dsh-super-personal-agent-feishu', 'dsh-super-personal-agent-github'], team: [] }
   expect(await read('prompts')).toMatchObject({ revision: 0, read: 'prompts/0', skills, items: [expect.objectContaining({ revision: 0 })], next_offset: null })
   const models = [{ id: 'm1', name: 'One' }, { id: 'm2', name: 'Two' }]
   const catalog = { default: { provider: 'p', model: 'm1' }, groups: [{ id: 'p', name: 'Provider', models }], failures: [] }
@@ -57,7 +57,7 @@ it('reads the lists, a ticket, a decision, the settings, the prompts and the mod
 })
 
 it('lists in prompts the built-in parts whose text changed since the team overrode them, and the built-in parts in prompts/defaults', async () => {
-  const read = (resource: string, offset = 0) => h.runTool(h.runtime.masterId, 'orchestrator_read', { resource, offset, limit: 8000 })
+  const read = (resource: string, offset = 0) => h.runTool(h.runtime.masterId, 'personal_agent_read', { resource, offset, limit: 8000 })
   expect(await read('prompts')).not.toHaveProperty('default_changed')
   // An override edited from the built-in text of an earlier version.
   h.runtime.prompts.save({ ...defaultPrompts(), overrides: { 'runtime/dispatch': { text: '## dispatch\nOurs.', base: 'earlier' } } }, 0, 'panel')
@@ -73,7 +73,7 @@ it('lists in prompts the built-in parts whose text changed since the team overro
 })
 
 it('saves with the prompt save tool an override without its base, refuses a part no version has, and drops a removed one read back', async () => {
-  const save = (overrides: Record<string, unknown>) => h.runTool(h.runtime.masterId, 'orchestrator_prompts_save',
+  const save = (overrides: Record<string, unknown>) => h.runTool(h.runtime.masterId, 'personal_agent_prompts_save',
     { config: { ...defaultPrompts(), overrides }, baseRevision: h.runtime.prompts.current().revision })
   await expect(save({ constructor: { text: 'x' } })).rejects.toThrow(new UserError('unknownPromptPart', { part: 'constructor' }))
   await save({ 'runtime/dispatch': { text: '## dispatch\nOurs.' } })
@@ -84,21 +84,21 @@ it('saves with the prompt save tool an override without its base, refuses a part
     'runtime/retired': { text: 'Old.', base: 'b' } } }
   h.runtime.store.set(KV.prompts.version(revision + 1), { revision: revision + 1, previousRevision: revision, savedAt: '', source: 'panel', config: read })
   h.runtime.store.set(KV.prompts.revision, revision + 1)
-  await h.runTool(h.runtime.masterId, 'orchestrator_prompts_save', { config: read, baseRevision: revision + 1 })
+  await h.runTool(h.runtime.masterId, 'personal_agent_prompts_save', { config: read, baseRevision: revision + 1 })
   expect(h.runtime.prompts.current().config.overrides).toEqual({ 'runtime/dispatch': dispatch })
   // The tool describes the overrides once, in its schema.
-  const tool = h.tools.get(h.runtime.masterId)!.get('orchestrator_prompts_save') as unknown as { description: string }
+  const tool = h.tools.get(h.runtime.masterId)!.get('personal_agent_prompts_save') as unknown as { description: string }
   expect(tool.description).not.toContain('overrides')
 })
 
 it('keeps the main Session\'s resources from an Executor Session, which lists only its own', async () => {
   const { ticket, sessionId } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
   for (const resource of ['tickets', 'triggers', 'threads', 'decisions', 'settings', 'prompts', 'models']) {
-    await expect(h.runTool(sessionId, 'orchestrator_read', { resource })).rejects.toThrow('belongs to the main Session')
+    await expect(h.runTool(sessionId, 'personal_agent_read', { resource })).rejects.toThrow('belongs to the main Session')
   }
-  expect(await h.runTool(sessionId, 'orchestrator_read', { resource: `ticket/${ticket.id}` })).toMatchObject({ ticket_id: ticket.id })
+  expect(await h.runTool(sessionId, 'personal_agent_read', { resource: `ticket/${ticket.id}` })).toMatchObject({ ticket_id: ticket.id })
   type Registered = { description: string; parameters: { properties: { resource: { description: string } } } }
-  const registered = h.tools.get(sessionId)!.get('orchestrator_read') as unknown as Registered
+  const registered = h.tools.get(sessionId)!.get('personal_agent_read') as unknown as Registered
   const offered = registered.description + registered.parameters.properties.resource.description
   for (const { name, executor } of RESOURCES) expect(offered.includes(`${name}:`), name).toBe(!!executor)
   expect(offered).not.toMatch(/preview/i)
@@ -108,21 +108,21 @@ it('answers every routing tool in one shape: the decision it recorded, why, and 
   const { ticket, sessionId } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
   const card = expect.objectContaining({ ticket_id: ticket.id })
   const run = (name: string, args: unknown) => h.runTool(h.runtime.masterId, name, args)
-  const route = async (item: Record<string, unknown>) => ((await run('orchestrator_route', { decisions: [item] })).results as unknown[])[0]
+  const route = async (item: Record<string, unknown>) => ((await run('personal_agent_route', { decisions: [item] })).results as unknown[])[0]
   const other = feishu('3', '@bot 顺便看看这个')
   h.runtime.receive(other); await h.runtime.idle()
   expect(await route({ kind: 'attach', ticket_id: ticket.id, trigger_id: other.id })).toEqual({ trigger_id: other.id, kind: 'attach',
     reason: expect.any(String), ticket: card })
-  const status = await run('orchestrator_ticket_request_status', { ticket_id: ticket.id })
+  const status = await run('personal_agent_ticket_request_status', { ticket_id: ticket.id })
   expect(status).toEqual({ reason: 'The worker is not waiting; nothing was sent', ticket: card })
-  await h.runTool(sessionId, 'orchestrator_report', { state: 'failed', summary: 'The build broke.' })
-  expect(await run('orchestrator_ticket_retry', { ticket_id: ticket.id })).toEqual({ reason: 'Started a new assignment', ticket: card })
+  await h.runTool(sessionId, 'personal_agent_report', { state: 'failed', summary: 'The build broke.' })
+  expect(await run('personal_agent_ticket_retry', { ticket_id: ticket.id })).toEqual({ reason: 'Started a new assignment', ticket: card })
   const chatter = feishu('4', '@bot 谢谢')
   h.runtime.receive(chatter); await h.runtime.idle()
   expect(await route({ kind: 'ignore', trigger_id: chatter.id, reason: 'thanks' })).toEqual({ trigger_id: chatter.id, kind: 'ignore', decision: 'ignore',
     reason: 'thanks' })
   // A stop needs the person's stop message, which the gate judges; the ticket keeps the reason given.
-  await expect(run('orchestrator_route', { decisions: [{ kind: 'stop', ticket_id: ticket.id, reason: 'Not needed after all' }] })).rejects.toThrow()
+  await expect(run('personal_agent_route', { decisions: [{ kind: 'stop', ticket_id: ticket.id, reason: 'Not needed after all' }] })).rejects.toThrow()
   expect(h.runtime.store.tickets.get(ticket.id)!.ended).toBeUndefined()
   const request = feishu('5', '@bot 不用修了')
   h.runtime.receive(request); await h.runtime.idle()
@@ -144,7 +144,7 @@ it('routes several triggers in one call, in order, and answers a refused or fail
     if (triggerId === more.id) throw new Error('database is locked')
     return attach(ticketId, triggerId, note)
   })
-  const { results } = await h.runTool(h.runtime.masterId, 'orchestrator_route', { decisions: [
+  const { results } = await h.runTool(h.runtime.masterId, 'personal_agent_route', { decisions: [
     { kind: 'ignore', trigger_id: thanks.id, reason: 'Thanks only.' },
     // A stop without its ticket is refused, alone.
     { kind: 'stop', trigger_id: request.id },
@@ -169,7 +169,7 @@ it('refuses alone an item that lacks a field its kind needs or breaks a field\'s
   await h.runtime.idle()
   const [a, b, c, d, e] = triggers.map(trigger => trigger.id) as [string, string, string, string, string]
   const accept = { kind: 'accept', title: 'Fix', acknowledgement: '收到。' }
-  const { results } = await h.runTool(h.runtime.masterId, 'orchestrator_route', { decisions: [
+  const { results } = await h.runTool(h.runtime.masterId, 'personal_agent_route', { decisions: [
     { ...accept, trigger_id: a },
     { ...accept, trigger_id: b, worktree_name: 'one-two-three-four-five' },
     { ...accept, trigger_id: c, worktree_name: 'fix-c', note: words(NOTE_WORDS + 1) },
@@ -194,7 +194,7 @@ it('decides a candidate\'s batch with its card\'s trigger: a second accept keeps
   await h.runtime.settings.pause(false, 'panel')
   await h.runtime.pump(); await h.runtime.idle()
   const accept = { kind: 'accept', worktree_name: 'retitle', acknowledgement: '收到。' }
-  const { results } = await h.runTool(h.runtime.masterId, 'orchestrator_route', { decisions: [
+  const { results } = await h.runTool(h.runtime.masterId, 'personal_agent_route', { decisions: [
     { ...accept, trigger_id: first.id, title: 'Retitle' },
     { ...accept, trigger_id: second.id, title: 'Another title' },
     { kind: 'ignore', trigger_id: second.id, reason: 'chat' },
@@ -210,7 +210,7 @@ it('decides a candidate\'s batch with its card\'s trigger: a second accept keeps
 
 it('states each routing field\'s limit in its description, which the schema leaves to the item\'s check', () => {
   type Schema = { parameters: { properties: { decisions: { items: { properties: Record<string, { description?: string }> } } } } }
-  const fields = (h.tools.get(h.runtime.masterId)!.get('orchestrator_route') as unknown as Schema).parameters.properties.decisions.items.properties
+  const fields = (h.tools.get(h.runtime.masterId)!.get('personal_agent_route') as unknown as Schema).parameters.properties.decisions.items.properties
   const limits: Record<string, string[]> = { title: ['200 characters'], worktree_name: ['kebab-case', '32 characters'],
     acknowledgement: [`${IM_WORDS} words`], note: [`${NOTE_WORDS} words`, 'Never add implementation instructions'], reason: ['500 characters'] }
   for (const [field, phrases] of Object.entries(limits)) for (const phrase of phrases) expect(fields[field]!.description, field).toContain(phrase)
@@ -223,7 +223,7 @@ it('stops one follow-up for each ticket it reached, in one call', async () => {
   h.runtime.engine.bindThread(two.ticket.id, { source: 'feishu', id: `${CHAT}:om_1` }, false)
   const stop = feishu('7', '都先停一下', { mentions: [], root_id: 'om_1' })
   h.runtime.receive(stop); await h.runtime.idle()
-  const { results } = await h.runTool(h.runtime.masterId, 'orchestrator_route', { decisions: [
+  const { results } = await h.runTool(h.runtime.masterId, 'personal_agent_route', { decisions: [
     { kind: 'stop', trigger_id: stop.id, ticket_id: one.ticket.id }, { kind: 'stop', trigger_id: stop.id, ticket_id: two.ticket.id }] }) as
     { results: Record<string, unknown>[] }
   expect(results.map(result => result.decision)).toEqual(['stop', 'stop'])
@@ -234,7 +234,7 @@ it('ignores a proactive candidate from its card beside other decisions, marked s
   const chat = feishu('2', '中午吃什么', { mentions: [] }), thanks = feishu('3', '@bot 谢谢'), proposal = feishu('4', '把标题改短一点', { mentions: [] })
   for (const trigger of [chat, thanks, proposal]) h.runtime.receive(trigger)
   await h.runtime.pump(); await h.runtime.idle()
-  const { results } = await h.runTool(h.runtime.masterId, 'orchestrator_route', { decisions: [
+  const { results } = await h.runTool(h.runtime.masterId, 'personal_agent_route', { decisions: [
     { kind: 'ignore', trigger_id: chat.id, reason: 'Lunch chat.' },
     { kind: 'ignore', trigger_id: thanks.id, reason: 'Thanks only.' },
     { kind: 'accept', trigger_id: proposal.id, title: 'Shorter title', worktree_name: 'short-title', acknowledgement: '收到。' },
@@ -242,14 +242,14 @@ it('ignores a proactive candidate from its card beside other decisions, marked s
   expect(results).toEqual([
     { trigger_id: chat.id, kind: 'ignore', decision: 'ignore', reason: 'Ignored from its card, without a rule assessment; Lunch chat.' },
     { trigger_id: thanks.id, kind: 'ignore', decision: 'ignore', reason: 'Thanks only.' },
-    { trigger_id: proposal.id, kind: 'accept', refused: expect.stringContaining('assess proactive candidates with orchestrator_eval') },
+    { trigger_id: proposal.id, kind: 'accept', refused: expect.stringContaining('assess proactive candidates with personal_agent_eval') },
   ])
 })
 
 it('returns where a reply stands: sent, or dropped when its conversation can no longer receive it', async () => {
   const { ticket, sessionId } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
-  await h.runTool(sessionId, 'orchestrator_report', { state: 'ready', summary: 'Done.' })
-  const reply = (text: string) => h.runTool(h.runtime.masterId, 'orchestrator_reply', { ticket_id: ticket.id, purpose: 'result', text })
+  await h.runTool(sessionId, 'personal_agent_report', { state: 'ready', summary: 'Done.' })
+  const reply = (text: string) => h.runTool(h.runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'result', text })
   expect(await reply('修好了。')).toEqual({ status: 'sent' })
   vi.mocked(Commands.prototype.lark).mockRejectedValue(new CliError('the message was withdrawn', 230011))
   expect(await reply('修好了，请看 PR。')).toEqual({ status: 'dropped' })
@@ -264,18 +264,19 @@ it('checks an acknowledgement against the IM word limit, not a character count',
 })
 
 it('saves a settings block by name, a Source\'s block with the Source\'s id', async () => {
-  const save = (args: Record<string, unknown>) => h.runTool(h.runtime.masterId, 'orchestrator_settings_save', args)
+  const save = (args: Record<string, unknown>) => h.runTool(h.runtime.masterId, 'personal_agent_settings_save', args)
   const github = { config: h.runtime.store.settings().sources.github!.config, revision: h.runtime.store.blockRevision('source:github') }
   const off = { enabled: false, config: github.config }
   await expect(save({ block: 'source', value: off, revision: github.revision })).rejects.toThrow('source names the Source')
   await expect(save({ block: 'source:github', value: off, revision: github.revision })).rejects.toThrow()
-  expect(await save({ block: 'source', source: 'github', value: off, revision: github.revision })).toMatchObject({ saved: true })
-  expect(h.runtime.store.settings().sources.github?.enabled).toBe(false)
+  await expect(save({ block: 'source', source: 'github', value: off, revision: github.revision })).rejects.toThrow('only be changed in the management panel')
+  expect(await save({ block: 'source', source: 'github', value: { enabled: true, config: { ...github.config, observeIssues: true } }, revision: github.revision })).toMatchObject({ saved: true })
+  expect(h.runtime.store.settings().sources.github?.config.observeIssues).toBe(true)
   expect(await save({ block: 'pause', value: { paused: true }, revision: 0 })).toEqual({ paused: true })
 })
 
 it('previews a prompt configuration without saving it, and saves one only against the revision it edits', async () => {
-  const save = (args: Record<string, unknown>) => h.runTool(h.runtime.masterId, 'orchestrator_prompts_save', args)
+  const save = (args: Record<string, unknown>) => h.runTool(h.runtime.masterId, 'personal_agent_prompts_save', args)
   const config = { ...h.runtime.prompts.current().config, scope: 'Finish what was asked.' }
   const preview = await save({ config, preview: true }) as { previews: { role: string; read: string }[] }
   expect(preview.previews.map(item => item.role)).toEqual(['orchestrator', 'worker'])
@@ -292,7 +293,7 @@ it('previews a prompt configuration without saving it, and saves one only agains
 
 it('releases the tools it registered for a Session once its agent is disposed, and leaves the other Sessions\' tools', async () => {
   const { ticket } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
-  const worker = `worker-${ticket.id}`
+  const worker = `spa-worker-${ticket.id}`
   expect(h.tools.get(worker)!.size).toBeGreaterThan(0)
   h.ctx.emit('agent/disposed', { agent: h.agents.get(worker) } as never)
   expect([h.tools.get(worker)!.size, h.tools.get(h.runtime.masterId)!.size > 0]).toEqual([0, true])
@@ -310,11 +311,11 @@ it('reads a thread by the key cards show: its label, tickets, latest decisions a
   expect(thread).toMatchObject({ thread: key, label: '@bot 修一下回归', tickets: [expect.objectContaining({ ticket_id: ticket.id })],
     decisions: [expect.objectContaining({ kind: 'accept', ticket_id: ticket.id })], items: [expect.objectContaining({ trigger_id: trigger.id, read: `trigger/${trigger.id}` })],
     next_offset: null })
-  expect(await h.runTool(sessionId, 'orchestrator_read', { resource: `thread/${key}` })).toMatchObject({ thread: key })
+  expect(await h.runTool(sessionId, 'personal_agent_read', { resource: `thread/${key}` })).toMatchObject({ thread: key })
   const elsewhere = feishu('5', '@bot 别的事', { chat_id: 'oc_other' })
   h.runtime.store.triggers.save(elsewhere)
   h.runtime.store.threads.save({ key: `feishu:oc_other:om_5`, ref: { source: 'feishu', id: 'oc_other:om_5' }, createdAt: '', subscriptions: [], correlated: [], pending: [], meta: {} })
-  await expect(h.runTool(sessionId, 'orchestrator_read', { resource: 'thread/feishu:oc_other:om_5' })).rejects.toThrow('Unknown or inaccessible thread')
+  await expect(h.runTool(sessionId, 'personal_agent_read', { resource: 'thread/feishu:oc_other:om_5' })).rejects.toThrow('Unknown or inaccessible thread')
 })
 
 it('reads a ticket with the ids it is tied to, its reports by assignment, and its assignments and inputs a page at a time, each by the name its line gives or by its id', async () => {
@@ -337,7 +338,7 @@ it('reads a ticket with the ids it is tied to, its reports by assignment, and it
   expect([earlier.items.map(item => (item as { id?: string }).id), earlier.next_offset]).toEqual([['a4', 'a3', 'a2'], 6])
   expect(await read(details.assignments.next_resource!, { offset: 6 })).toEqual({ next_offset: null,
     items: [expect.objectContaining({ id: 'a1', report: expect.objectContaining({ read: `ticket/${ticket.id}/report/a1` }) })] })
-  expect(await h.runTool(sessionId, 'orchestrator_read', { resource: `ticket/${ticket.id}/report/a1` })).toMatchObject({ text: report(1).summary })
+  expect(await h.runTool(sessionId, 'personal_agent_read', { resource: `ticket/${ticket.id}/report/a1` })).toMatchObject({ text: report(1).summary })
   expect(JSON.stringify(details).length).toBeLessThan(3000)
   const page = await read(details.inputs.items[0]!.read!) as { text: string }
   expect(page.text).toContain('check the margin on mobile as well.')
@@ -375,7 +376,7 @@ it('shows a candidate with its thread\'s tickets open first, the tickets it reac
   const a = first.ticket
   // Requests on its thread reach its worker, which hands back what is not its own; the main Session then routes them.
   const handBack = async (id: string) => {
-    await h.runTool(first.sessionId, 'orchestrator_trigger_handback', { trigger_id: id, reason: 'Another change.' })
+    await h.runTool(first.sessionId, 'personal_agent_trigger_handback', { trigger_id: id, reason: 'Another change.' })
     await h.runtime.pump(); await h.runtime.idle()
   }
   const second = feishu('2', '@bot 另一个问题', { root_id: 'om_1' })
@@ -401,12 +402,12 @@ it('shows a candidate with its thread\'s tickets open first, the tickets it reac
 
 it('relays a worker\'s report with its ticket card and the start of its summary, and a question with the card alone', async () => {
   const { ticket, trigger, sessionId } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
-  await h.runTool(sessionId, 'orchestrator_report', { state: 'progress', summary: 'Needs a decision.', human_action: 'Desktop too?' })
+  await h.runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'Needs a decision.', human_action: 'Desktop too?' })
   await h.runtime.idle()
   expect(relaysOf('worker_attention').at(-1)).toEqual({ kind: 'worker_attention', state: 'progress', read: `ticket/${ticket.id}/result`,
     ticket: expect.objectContaining({ ticket_id: ticket.id, state: 'person/answer', attention: expect.objectContaining({ question: 'Desktop too?' }) }) })
   const summary = 'Done. ' + 'Evidence. '.repeat(100)
-  await h.runTool(sessionId, 'orchestrator_report', { state: 'ready', summary, human_action: null })
+  await h.runTool(sessionId, 'personal_agent_report', { state: 'ready', summary, human_action: null })
   await h.runtime.idle()
   const report = relaysOf('worker_report').at(-1)!
   expect(report).toMatchObject({ ticket: { ticket_id: ticket.id, title: ticket.title }, trigger_id: trigger.id, state: 'ready', chars: summary.length,
@@ -418,7 +419,7 @@ it('relays a worker\'s report with its ticket card and the start of its summary,
 })
 
 it('tells the main Session of the settings, prompts, requeues and unsubscriptions others made, never of its own', async () => {
-  const save = (args: Record<string, unknown>) => h.runTool(h.runtime.masterId, 'orchestrator_settings_save', args)
+  const save = (args: Record<string, unknown>) => h.runTool(h.runtime.masterId, 'personal_agent_settings_save', args)
   const evaluation = h.runtime.store.settings().eval
   await h.runtime.settings.save('eval', { ...evaluation, mode: 'observe' }, h.runtime.store.blockRevision('eval'), 'panel')
   await h.runtime.idle()
@@ -426,29 +427,29 @@ it('tells the main Session of the settings, prompts, requeues and unsubscription
   const before = notices().length
   expect(await save({ block: 'eval', value: { ...evaluation, mode: 'auto' }, revision: h.runtime.store.blockRevision('eval') })).not.toHaveProperty('context_delivery')
   const config = { ...h.runtime.prompts.current().config, scope: 'Finish what was asked.' }
-  expect(await h.runTool(h.runtime.masterId, 'orchestrator_prompts_save', { config, baseRevision: 0 })).not.toHaveProperty('context_delivery')
+  expect(await h.runTool(h.runtime.masterId, 'personal_agent_prompts_save', { config, baseRevision: 0 })).not.toHaveProperty('context_delivery')
   await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
   const thanks = feishu('5', '@bot 谢谢')
   h.runtime.receive(thanks); await h.runtime.idle()
   await h.route({ kind: 'ignore', trigger_id: thanks.id, reason: 'thanks' })
-  expect(await h.runTool(h.runtime.masterId, 'orchestrator_trigger_requeue', { trigger_id: thanks.id })).toEqual({ queued: true })
-  expect(await h.runTool(h.runtime.masterId, 'orchestrator_thread_unsubscribe', { thread: `feishu:${CHAT}:om_1` })).toEqual({ removed: true, thread: `feishu:${CHAT}:om_1` })
+  expect(await h.runTool(h.runtime.masterId, 'personal_agent_trigger_requeue', { trigger_id: thanks.id })).toEqual({ queued: true })
+  expect(await h.runTool(h.runtime.masterId, 'personal_agent_thread_unsubscribe', { thread: `feishu:${CHAT}:om_1` })).toEqual({ removed: true, thread: `feishu:${CHAT}:om_1` })
   await h.runtime.idle()
   expect(notices().slice(before).filter(notice => !('ticket_ended' in notice))).toEqual([])
 })
 
 it('answers a policy sync with the counts and what changed, not the whole list', async () => {
   vi.mocked(Commands.prototype.lark).mockResolvedValue({ users: [{ member_id: 'ou_alice', name: 'Alice' }, { member_id: 'ou_bob', name: 'Bob' }], has_more: false })
-  expect(await h.runTool(h.runtime.masterId, 'orchestrator_policy_sync', { source: 'feishu' })).toEqual({ source: 'feishu', allowed: 2, added: ['Bob'], removed: [] })
+  expect(await h.runTool(h.runtime.masterId, 'personal_agent_policy_sync', { source: 'feishu' })).toEqual({ source: 'feishu', allowed: 2, added: ['Bob'], removed: [] })
 })
 
 it('shows an Executor Session no id it cannot read: no Decision, no other ticket, no Trigger its ticket did not reach', async () => {
   const { ticket, trigger, sessionId } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
   const another = feishu('2', '@bot 再修一个', { root_id: 'om_1' })
   h.runtime.receive(another); await h.runtime.idle()
-  await h.runTool(sessionId, 'orchestrator_trigger_handback', { trigger_id: another.id, reason: 'Another fix.' })
+  await h.runTool(sessionId, 'personal_agent_trigger_handback', { trigger_id: another.id, reason: 'Another fix.' })
   const other = await h.acceptedTicket(another)
-  const worker = (resource: string) => h.runTool(sessionId, 'orchestrator_read', { resource })
+  const worker = (resource: string) => h.runTool(sessionId, 'personal_agent_read', { resource })
   const thread = await worker(`thread/feishu:${CHAT}:om_1`)
   expect(thread).not.toHaveProperty('tickets')
   expect(thread).not.toHaveProperty('decisions')
@@ -465,7 +466,7 @@ it('shows an Executor Session no id it cannot read: no Decision, no other ticket
 it('marks the threads a worker follows for context apart from those a Source bound its ticket to', async () => {
   const { ticket, sessionId } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
   h.runtime.engine.bindThread(ticket.id, { source: 'github', id: '12' }, true)
-  await h.runTool(sessionId, 'orchestrator_thread_follow', { thread: 'github:9', reason: 'The Issue it fixes.' })
+  await h.runTool(sessionId, 'personal_agent_thread_follow', { thread: 'github:9', reason: 'The Issue it fixes.' })
   const { threads } = await read(`ticket/${ticket.id}`) as { threads: { thread: string }[] }
   expect(threads).toEqual(expect.arrayContaining([{ thread: `feishu:${CHAT}:om_1` }, { thread: 'github:12', bound: true }, { thread: 'github:9', context: true }]))
   expect(threads).toHaveLength(3)
@@ -483,9 +484,9 @@ it('gives a worker the other messages of the request its ticket was accepted fro
   const ticket = h.runtime.store.tickets.get((accepted.ticket as { ticket_id: string }).ticket_id)!
   const other = ticket.origin.triggerIds.find(id => id !== ticket.origin.triggerId)!
   expect(ticket.origin.triggerIds).toHaveLength(2)
-  const message = h.relays(`worker-${ticket.id}`)[0]!
+  const message = h.relays(`spa-worker-${ticket.id}`)[0]!
   expect(message.batch).toEqual([expect.objectContaining({ trigger_id: other, preview: expect.any(String), read: `trigger/${other}` })])
-  const page = await h.runTool(`worker-${ticket.id}`, 'orchestrator_read', { resource: `ticket/${ticket.id}` })
+  const page = await h.runTool(`spa-worker-${ticket.id}`, 'personal_agent_read', { resource: `ticket/${ticket.id}` })
   expect(page).toMatchObject({ batch: [{ trigger_id: other, read: `trigger/${other}` }] })
-  expect(await h.runTool(`worker-${ticket.id}`, 'orchestrator_read', { resource: `trigger/${other}` })).toMatchObject({ trigger_id: other })
+  expect(await h.runTool(`spa-worker-${ticket.id}`, 'personal_agent_read', { resource: `trigger/${other}` })).toMatchObject({ trigger_id: other })
 })

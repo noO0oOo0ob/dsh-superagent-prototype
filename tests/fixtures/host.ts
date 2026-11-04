@@ -158,7 +158,7 @@ export async function startRuntime(seed?: (store: Store) => void) {
     const reader = (text: string) => ({ readFrom: () => ({ text, nextOffset: text.length, lossy: false }) })
     const exited = { exitCode: 0, signal: null }
     const done = argv[0] === 'sh' && hooks.prepare ? hooks.prepare.then(() => exited) : Promise.resolve(exited)
-    return { done, collected: { stdout: reader(answers[argv.join(' ')] ?? ''), stderr: reader('') } }
+    return { done, collected: { stdout: reader(answers[argv.join(' ')] ?? ''), stderr: reader('') }, terminate: vi.fn<() => void>(), waitForExit: async () => { await done; return true } }
   }) }
   const agents = new Map<string, FakeAgent>()
   /** Each Session's next step, which takes the messages that wait for one. */
@@ -254,8 +254,8 @@ export async function startRuntime(seed?: (store: Store) => void) {
   runtime.sources.register(feishuKind); runtime.sources.register(githubKind)
   const settings = runtime.store.settings()
   runtime.store.saveSettings({ ...settings, eval: { ...settings.eval, mode: 'auto' },
-    policy: { ...settings.policy, sources: { feishu: { allowed: [{ id: MEMBER, name: 'Alice' }], syncChat: CHAT }, github: { allowed: [{ id: 'alice' }] } } },
-    sources: { ...sources, feishu: { enabled: true, config: { cli: BOT, chats: [{ chatId: CHAT, listen: 'all' }], directMessages: true } } } })
+    policy: { ...settings.policy, sources: { feishu: { allowed: [{ id: MEMBER, name: 'Alice' }], syncChat: CHAT }, github: { allowed: [{ id: 'alice' }] }, ...settings.policy.sources } },
+    sources: { ...settings.sources, feishu: { ...settings.sources.feishu!, config: { chats: [{ chatId: CHAT, listen: 'all' }], directMessages: true, ...settings.sources.feishu?.config } } } })
   deliveries.mockClear()
 
   /** Parsed JSON payloads delivered to `sessionId`. */
@@ -267,9 +267,9 @@ export async function startRuntime(seed?: (store: Store) => void) {
     if (!tool) throw new Error(`Tool ${name} is not registered for ${sessionId}`)
     return await tool.execute(args, { signal: new AbortController().signal }) as Record<string, unknown>
   }
-  /** Route one decision with the main Session's orchestrator_route, answering its result; a refused one throws its reason. */
+  /** Route one decision with the main Session's personal_agent_route, answering its result; a refused one throws its reason. */
   async function route(item: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const { results } = await runTool(runtime.masterId, 'orchestrator_route', { decisions: [item] }) as { results: Record<string, unknown>[] }
+    const { results } = await runTool(runtime.masterId, 'personal_agent_route', { decisions: [item] }) as { results: Record<string, unknown>[] }
     if (results[0]!.refused) throw new Error(String(results[0]!.refused))
     return results[0]!
   }
@@ -279,12 +279,12 @@ export async function startRuntime(seed?: (store: Store) => void) {
     const result = await route({ kind: 'accept', trigger_id: trigger.id, title: `Fix ${trigger.id}`, worktree_name: 'fix-regression', acknowledgement: '收到，修复回归。' })
     await runtime.idle()
     const ticket = runtime.store.tickets.get((result.ticket as { ticket_id: string }).ticket_id)!
-    return { trigger, ticket, sessionId: `worker-${ticket.id}` }
+    return { trigger, ticket, sessionId: `spa-worker-${ticket.id}` }
   }
   async function api(method: string, path: string, json?: unknown) {
     let status = 0, text = ''
     const chunks = json === undefined ? [] : [Buffer.from(JSON.stringify(json))]
-    const req = { method, url: `/orchestrator/api/${path}`, headers: { host: '127.0.0.1:3082', 'x-orchestrator-request': '1' }, async *[Symbol.asyncIterator]() { yield* chunks } }
+    const req = { method, url: `/super-personal-agent/api/${path}`, headers: { host: '127.0.0.1:3082', 'x-super-personal-agent-request': '1' }, async *[Symbol.asyncIterator]() { yield* chunks } }
     await http(req, { writeHead: (code: number) => { status = code }, end: (data: string) => { text = data } })
     return { status, body: JSON.parse(text) as Record<string, unknown> }
   }

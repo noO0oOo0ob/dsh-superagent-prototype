@@ -54,11 +54,11 @@ it('writes a schema 10 database in its current shape once, so nothing reads an o
     mandate: mandate({ chatId: 'oc_team', direct: false, member: 'ou_alice', mention: true }),
     inputs: [{ id: 'i1', kind: 'reopen', decisionId: 'd2', at: '3' }, { id: 'i2', kind: 'reopen', decisionId: 'd0', at: '0' },
       { id: 'i3', kind: 'trigger', triggerId: 'trig-2', at: '4' }, { id: 'i4', kind: 'trigger', triggerId: 'ci-1', at: '5' }], undelivered: ['i1'],
-    meta: { sourceTriggerId: 'trig-1', triggerIds: ['trig-1', 'trig-2'], workspace: '/w/fix-1', name: 'fix-1', sessionId: 'worker-t1', assignment: 'Read trigger/trig-1.',
+    meta: { sourceTriggerId: 'trig-1', triggerIds: ['trig-1', 'trig-2'], workspace: '/w/fix-1', name: 'fix-1', sessionId: 'spa-worker-t1', assignment: 'Read trigger/trig-1.',
       prNumber: 7, prUrl: 'https://github.com/acme/widgets/pull/7', branch: 'agent/fix-1', deliveryError: 'offline', recovery: 2, worktreeName: 'fix', scope: 'small' },
   }
   const imported = { ...ticket, id: 't2', state: 'ended', channels: [], inputs: [], undelivered: [], mandate: mandate({ legacyAuthority: 'thread_followup', followup: true }),
-    meta: { sourceTriggerId: 'old', workspace: '/w/task-2', sessionId: 'worker-task-2', legacyPrompt: 'Read event/old' },
+    meta: { sourceTriggerId: 'old', workspace: '/w/task-2', sessionId: 'spa-worker-task-2', legacyPrompt: 'Read event/old' },
     ended: { at: '6', by: 'executor', reason: 'merged' } }
   // Ended with a person's message waiting, and with no execution or origin trigger.
   const waiting = { ...ticket, id: 't3', state: 'ended', channels: [], ended: { at: '6', by: 'human', reason: 'Not needed' }, inputs: [{ id: 'i5', kind: 'trigger', triggerId: 'trig-2', at: '7' }],
@@ -93,7 +93,7 @@ it('writes a schema 10 database in its current shape once, so nothing reads an o
     'github-object-state:7': 'open', subscriptions: [], 'settings-before-9': { policy: {} }, 'thread-times-backfilled': true,
     'github-issue-pending': { 1: {} },
     // Caches of reads, which memory keeps now.
-    'feishu-read:orchestrator-1:feishu/e1/thread': '{}', 'github-read:worker-t1:github/pulls/7': '{}', 'feishu-source-link:oc_team:om_1': 'https://x',
+    'feishu-read:orchestrator-1:feishu/e1/thread': '{}', 'github-read:spa-worker-t1:github/pulls/7': '{}', 'feishu-source-link:oc_team:om_1': 'https://x',
     'orchestrator-1:prompt-preview/abc': 'prompt',
   }, { ticket: [ticket, imported, waiting, bare], decision: [decision, reopened, unavailable], thread: [thread], trigger: triggers })
 
@@ -104,7 +104,7 @@ it('writes a schema 10 database in its current shape once, so nothing reads an o
   expect(settings.sources.github!.config).not.toHaveProperty('mergeCli')
   expect(settings.policy.rules[0]).not.toHaveProperty('visual')
   expect(settings.executor).not.toHaveProperty('reviewer')
-  expect(settings.executor.prepare).toBe('echo $DSH_SUPERAGENT_DIR')
+  expect(settings.executor.prepare).toBe('echo $DSH_SUPER_PERSONAL_AGENT_DIR')
   // The current settings are the newest revision, which the migration saved, since the newest saved one differs from them.
   const [current, , second, first] = store.settingsHistory()
   expect(current).toMatchObject({ revision: 4, source: 'internal', settings })
@@ -112,7 +112,7 @@ it('writes a schema 10 database in its current shape once, so nothing reads an o
   expect(first).toMatchObject({ source: 'panel', settings: { sources: { feishu: { config: { chats: [{ chatId: 'oc_team', listen: 'mentions' }] } } } } })
   expect(second).toMatchObject({ source: 'tool', settings: { sources: { 'github-issue': { enabled: true } } } })
   expect(store.get('prompt-version:1')).toMatchObject({ legacy: { config: { guides: { release: 'Use guide/github and dsh-tag-feishu.' } } },
-    config: { skills: { release: 'Use the github section and dsh-superagent-feishu.' } } })
+    config: { skills: { release: 'Use the github section and dsh-super-personal-agent-feishu.' } } })
   // An invalid historical prompt version keeps its raw value under legacy and falls back to the preceding version's config.
   expect(store.get('prompt-version:2')).toMatchObject({ legacy: { config: { communication: 1 } }, config: store.get<{ config: object }>('prompt-version:1')!.config })
   expect(store.get('settings-version:3')).toMatchObject({ source: 'panel', settings: { executor: { maxWorkers: 'many' } } })
@@ -157,7 +157,7 @@ it('writes a schema 10 database in its current shape once, so nothing reads an o
   expect(store.get('ticket/t1/input/i9')).toBeUndefined()
   expect(store.keys('task/')).toEqual([])
   for (const name of ['answer-ready:t1:trig-3', 'github-object-state:7', 'subscriptions', 'settings-before-9', 'thread-times-backfilled', 'prompt-settings-text',
-    'feishu-read:orchestrator-1:feishu/e1/thread', 'github-read:worker-t1:github/pulls/7', 'feishu-source-link:oc_team:om_1', 'orchestrator-1:prompt-preview/abc']) {
+    'feishu-read:orchestrator-1:feishu/e1/thread', 'github-read:spa-worker-t1:github/pulls/7', 'feishu-source-link:oc_team:om_1', 'orchestrator-1:prompt-preview/abc']) {
     expect(store.get(name)).toBeUndefined()
   }
   expect(store.get('github-issue-pending')).toBeUndefined()
@@ -241,7 +241,7 @@ const opened = (records: Record<string, unknown>) => {
 }
 
 it('writes a prompt version saved before the team sections in them, keeping its skills and auto-merge threshold, and marks it', () => {
-  const store = opened({ ...legacyPrompts(3, { notes: 'Call orchestrator_create_task with event_id, read event/<id>, follow guide/work and guide/release, load dsh-tag-github, cd "$DSH_TAG_DIR".' }) })
+  const store = opened({ ...legacyPrompts(3, { notes: 'Call personal_agent_create_task with event_id, read event/<id>, follow guide/work and guide/release, load dsh-tag-github, cd "$DSH_TAG_DIR".' }) })
   const prompts = new Prompts(store, () => 100000, () => undefined, () => true)
   const { config } = prompts.version(3)
   expect(config.communication).toBe(defaultPrompts().communication)
@@ -249,7 +249,7 @@ it('writes a prompt version saved before the team sections in them, keeping its 
   expect(config.delivery).not.toContain('fewer than 200 lines')
   // Guides that are now fixed or built-in are gone; the team's own skills stay, in current names.
   expect(Object.keys(config.skills)).toEqual(['identities', 'notes'])
-  expect(config.skills.notes).toBe('Call orchestrator_route (kind accept) with trigger_id, read trigger/<id>, follow the work section and skill dsh-superagent-release, load dsh-superagent-github, cd "$DSH_SUPERAGENT_DIR".')
+  expect(config.skills.notes).toBe('Call personal_agent_route (kind accept) with trigger_id, read trigger/<id>, follow the work section and skill dsh-super-personal-agent-release, load dsh-super-personal-agent-github, cd "$DSH_SUPER_PERSONAL_AGENT_DIR".')
   const prompt = composePrompt(config, 'orchestrator')
   expect(prompt).not.toContain('Legacy orchestrator')
   expect(prompt).toContain(masterPrompt)
@@ -261,14 +261,14 @@ it('writes a prompt version saved before the team sections in them, keeping its 
 
 it('writes saved team sections and skills under current names: earlier project names, the tools that became reads and the routing tools', () => {
   const config = { ...defaultPrompts(), delivery: 'Merge with --repo $DSH_FREELANCER_GITHUB_REPOSITORY.',
-    skills: { notes: 'Load dsh-freelancer-github; cd "$DSH_FREELANCER_DIR". List with orchestrator_tickets, then orchestrator_ticket_inspect.',
-      routing: 'Accept with orchestrator_ticket_accept; stop with orchestrator_ticket_stop, never orchestrator_trigger_ignore.' } }
+    skills: { notes: 'Load dsh-freelancer-github; cd "$DSH_FREELANCER_DIR". List with personal_agent_tickets, then personal_agent_ticket_inspect.',
+      routing: 'Accept with personal_agent_ticket_accept; stop with personal_agent_ticket_stop, never personal_agent_trigger_ignore.' } }
   const store = opened({ 'prompt-version:1': { revision: 1, previousRevision: 0, savedAt: '', source: 'web', config }, 'prompt-revision': 1, 'prompt-settings-text': 1 })
   const { config: current } = new Prompts(store, () => 100000, () => undefined, () => true).current()
-  expect(current.delivery).toBe('Merge with --repo $DSH_SUPERAGENT_GITHUB_REPOSITORY.')
-  expect(current.skills.notes).toBe('Load dsh-superagent-github; cd "$DSH_SUPERAGENT_DIR". List with orchestrator_read tickets, then orchestrator_read ticket/<id>.')
+  expect(current.delivery).toBe('Merge with --repo $DSH_SUPER_PERSONAL_AGENT_GITHUB_REPOSITORY.')
+  expect(current.skills.notes).toBe('Load dsh-super-personal-agent-github; cd "$DSH_SUPER_PERSONAL_AGENT_DIR". List with personal_agent_read tickets, then personal_agent_read ticket/<id>.')
   // The four routing tools are one.
-  expect(current.skills.routing).toBe('Accept with orchestrator_route (kind accept); stop with orchestrator_route (kind stop), never orchestrator_route (kind ignore).')
+  expect(current.skills.routing).toBe('Accept with personal_agent_route (kind accept); stop with personal_agent_route (kind stop), never personal_agent_route (kind ignore).')
   store.close()
 })
 
@@ -339,7 +339,7 @@ function lastSchema10(path: string): void {
   const ticket = { id: 't1', title: 'Fix', decisionId: 'd1', channels: [], state: 'open', summary: '', createdAt: trigger.at, updatedAt: trigger.at,
     mandate: mandate({ source: 'feishu', scope: { chatId: 'oc_team' }, sender: 'Alice', addressed: 'mention' }), inputs: [], undelivered: [],
     assignments: [{ id: 'a1', state: 'running', createdAt: trigger.at }],
-    meta: { sourceTriggerId: trigger.id, triggerIds: [trigger.id], workspace: '/w/fix-1', name: 'fix-1', sessionId: 'worker-t1', assignment: 'Read trigger/trig-1.' } }
+    meta: { sourceTriggerId: trigger.id, triggerIds: [trigger.id], workspace: '/w/fix-1', name: 'fix-1', sessionId: 'spa-worker-t1', assignment: 'Read trigger/trig-1.' } }
   db.prepare('INSERT INTO ticket VALUES (?,?)').run(ticket.id, JSON.stringify(ticket))
   const reply = { id: 'reply-1', channel: { source: 'feishu', thread: thread.key, address: { chatId: 'oc_team', messageId: 'om_1' } }, text: '收到', kind: 'reply', attempts: 0, error: '' }
   db.prepare('INSERT INTO outbox VALUES (?,?,0)').run(reply.id, JSON.stringify(reply))
@@ -423,9 +423,9 @@ it('writes the Sources\' records in their current shape once, so no Source conve
 
 it('keeps each fact of a ticket once: its end, its latest report, and no worker Session it can derive', () => {
   const base = { id: 't', title: 'Fix', decisionId: 'd', channels: [], inputs: [], undelivered: [], createdAt: '1', updatedAt: '2',
-    mandate: mandate({ via: 'listed' }), origin: { triggerId: 'x', triggerIds: ['x'] }, execution: { name: 'fix', directory: '/w', session: 'worker-t', assignment: 'Do it.' } }
+    mandate: mandate({ via: 'listed' }), origin: { triggerId: 'x', triggerIds: ['x'] }, execution: { name: 'fix', directory: '/w', session: 'spa-worker-t', assignment: 'Do it.' } }
   const open = withoutCopies({ ...base, state: 'open', summary: 'Working on it',
-    assignments: [{ id: 'a1', ticketId: 't', ref: 'worker-t', state: 'running', createdAt: '1' }] })
+    assignments: [{ id: 'a1', ticketId: 't', ref: 'spa-worker-t', state: 'running', createdAt: '1' }] })
   expect(open).toEqual({ ...base, execution: { name: 'fix', directory: '/w', assignment: 'Do it.' },
     assignments: [{ id: 'a1', state: 'running', createdAt: '1', report: { state: 'progress', summary: 'Working on it', at: '2' } }] })
   // A report the ticket had stays the latest one; an ended ticket without an end record ended closed.

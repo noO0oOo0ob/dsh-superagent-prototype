@@ -26,7 +26,7 @@ import { join } from 'node:path'
 const MEMBER = 'ou_alice'
 function host(overrides: Partial<SourceContextDeps> = {}) {
   const store = new Store(join(mkdtempSync(join(tmpdir(), 'sources-')), 'db.sqlite'))
-  const settings = SettingsSchema.parse({ policy: { sources: { feishu: { allowed: [{ id: 'ou_alice', name: 'Alice' }], syncChat: 'oc_team' }, github: { allowed: [{ id: 'alice' }] } } }, eval: { mode: 'auto' }, sources: { feishu: { enabled: true, config: { chats: [{ chatId: 'oc_team', listen: 'mentions' }, { chatId: 'oc_observed', listen: 'all' }], directMessages: true } } } })
+  const settings = SettingsSchema.parse({ policy: { sources: { feishu: { allowed: [{ id: 'ou_alice', name: 'Alice' }], syncChat: 'oc_team' }, github: { allowed: [{ id: 'alice' }] } } }, eval: { mode: 'auto' }, sources: { github: { enabled: true, config: {} }, feishu: { enabled: true, config: { chats: [{ chatId: 'oc_team', listen: 'mentions' }, { chatId: 'oc_observed', listen: 'all' }], directMessages: true } } } })
   store.saveSettings(settings)
   const board = new HealthBoard()
   const sources = new SourceRegistry(() => store.settings(), board)
@@ -95,7 +95,7 @@ describe('feishu source', () => {
       // The fixture's registry already holds the kind; this one starts empty so the plugin's registration shows.
       const value = host({ sources: emptyRegistry(), ...overrides })
       const disposers: (() => unknown)[] = []
-      applyFeishu({ orchestrator: value, effect: (effect: () => () => unknown) => { disposers.push(effect()) } } as never)
+      applyFeishu({ superPersonalAgent: value, effect: (effect: () => () => unknown) => { disposers.push(effect()) } } as never)
       await vi.waitFor(() => expect(value.health.history).toBeDefined())
       const registered = value.sources.kind('feishu')
       // Snapshot health before disposal clears the registered entries.
@@ -770,7 +770,7 @@ describe('github source', () => {
         healthOf.set(sources, board)
         const value = host({ sources, ...overrides })
         const disposers: (() => unknown)[] = []
-        applyGithub({ orchestrator: value, effect: (effect: () => () => unknown) => { disposers.push(effect()) } } as never)
+        applyGithub({ superPersonalAgent: value, effect: (effect: () => () => unknown) => { disposers.push(effect()) } } as never)
         return { value, stop: async () => { for (const dispose of disposers) await dispose(); value.store.close() } }
       }
       const pending = await start({ configured: () => false })
@@ -806,7 +806,7 @@ describe('github source', () => {
     // The fixture's registry already holds the kind; this one starts empty so the plugin can register it.
     const value = host({ sources: emptyRegistry(), ready: Promise.reject(new Error('lock held')) })
     const disposers: (() => unknown)[] = []
-    applyGithub({ orchestrator: value, effect: (effect: () => () => unknown) => { disposers.push(effect()) } } as never)
+    applyGithub({ superPersonalAgent: value, effect: (effect: () => () => unknown) => { disposers.push(effect()) } } as never)
     await vi.waitFor(() => expect(value.health.github).toMatchObject({ state: 'error', detail: expect.stringContaining('lock held') }))
     for (const dispose of disposers) await dispose()
     value.store.close()
