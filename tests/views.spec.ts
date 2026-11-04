@@ -186,6 +186,20 @@ it('says no Source runs when every Source is off, and states a Source missing or
     .toEqual({ feishu: ['off', true], github: ['off', true], jira: ['missing', false] })
 })
 
+it('recognizes account admission without a sender list, excluding disabled and uninstalled sources', () => {
+  const host = views()
+  const settings = store.settings()
+  const account = { allowed: [], admission: { dm: { unlistedAddressed: 'explicit' as const } } }
+  store.saveSettings({ ...settings, policy: { ...settings.policy, sources: { feishu: account } } })
+  expect(problems(host)).not.toContainEqual({ kind: 'no-allowed' })
+  store.saveSettings({ ...store.settings(), sources: { ...settings.sources, feishu: { enabled: false, config: {} } } })
+  expect(problems(host)).toContainEqual({ kind: 'no-allowed' })
+  store.saveSettings({ ...settings, policy: { ...settings.policy, sources: { missing: account } } })
+  expect(problems(host)).toContainEqual({ kind: 'no-allowed' })
+  store.saveSettings({ ...settings, policy: { ...settings.policy, sources: { feishu: { allowed: [], admission: { dm: { unlistedAddressed: 'inferred' } } } } } })
+  expect(problems(host)).toContainEqual({ kind: 'no-allowed' })
+})
+
 it('sends text without HTML, entity-encoded tags included, and with images named', () => {
   const text = '<div>Hello <b>there</b></div> &lt;script&gt;alert(1)&lt;/script&gt; <!-- note --> ![shot](https://x/y.png) [Image: diagram]'
   expect(plain(text)).toBe('Hello there alert(1) [image] [image]')

@@ -10,6 +10,31 @@ import { feishu } from './fixtures/host.ts'
 import { deferred } from './fixtures/async.ts'
 import { startRuntime } from './fixtures/host.ts'
 
+it('accepts local requests before the first message on a fresh installation', async () => {
+  const h = await startRuntime(store => store.saveSettings({ ...store.settings(), sources: {}, policy: { ...store.settings().policy, sources: {} } }))
+  try {
+    expect(h.runtime.store.settings().policy.sources.main?.allowed).toEqual([{ id: 'owner' }])
+    const response = await h.api('GET', 'overview')
+    expect(response.status).toBe(200)
+    expect(response.body.problems).not.toContainEqual({ kind: 'no-allowed' })
+    expect(h.runtime.main.currentRequest()).toBeUndefined()
+    expect(h.runtime.store.tickets.list()).toHaveLength(0)
+  } finally { await h.stop() }
+})
+
+it.each([false, true])('preserves Main enabled=%s and an explicitly empty owner policy on startup', async enabled => {
+  const h = await startRuntime(store => store.saveSettings({ ...store.settings(), sources: { main: { enabled, config: {} } },
+    policy: { ...store.settings().policy, sources: { main: { allowed: [] } } } }))
+  try {
+    expect(h.runtime.store.settings().sources.main?.enabled).toBe(enabled)
+    expect(h.runtime.store.settings().policy.sources.main?.allowed).toEqual([])
+    const request = h.runtime.main.capture(createUserMessage({ content: [{ type: 'text', text: 'Plan a trip' }], source: { kind: 'user' } }))!
+    await expect(h.runTool(h.runtime.masterId, 'personal_agent_submit', { trigger_id: request.id, title: 'Trip', worktree_name: 'trip' })).rejects.toThrow(enabled ? 'not_a_member' : 'source_disabled')
+    expect(h.runtime.store.settings().policy.sources.main?.allowed).toEqual([])
+    expect(h.runtime.store.tickets.list()).toHaveLength(0)
+  } finally { await h.stop() }
+})
+
 it('keeps conversation inline, delegates once and publishes a result without another model call', async () => {
   const h = await startRuntime(store => store.saveSettings({ ...store.settings(), sources: {} }))
   try {

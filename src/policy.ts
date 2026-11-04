@@ -124,7 +124,18 @@ export function listedBot(settings: Settings, actor: ActorRef): z.infer<typeof A
   const bots = z.array(AllowedSchema).catch([]).parse(settings.policy.sources[actor.source]?.bots ?? [])
   return bots.find(entry => sameName(entry.id, actor.id))
 }
-export const anyoneAllowed = (settings: Settings): boolean => Object.values(settings.policy.sources).some(part => part.allowed.length > 0)
+/**
+ * Whether an available Source admits direct requests from listed senders or through its admission table.
+ * @param settings - Current source policies.
+ * @param sourceIds - Installed, enabled Source instances to check.
+ * @returns Whether at least one source permits an explicit request; inferred candidates are independent.
+ */
+export function acceptsDirectRequests(settings: Settings, sourceIds: readonly string[]): boolean {
+  return sourceIds.some(id => {
+    const part = settings.policy.sources[id]
+    return !!part && (part.allowed.length > 0 || Object.values(part.admission).some(row => row.unlistedAddressed === 'explicit'))
+  })
+}
 const senderName = (entry: z.infer<typeof AllowedSchema>): string => entry.name || entry.id
 
 /** Check whether a thread has tickets of its own (excluding context-only subscriptions). */

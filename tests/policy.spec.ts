@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SettingsSchema, assessmentOutcome, policyEffects, settingsPolicy, policyVersion, allowedSender, anyoneAllowed, type Settings } from '../src/policy.ts'
+import { SettingsSchema, assessmentOutcome, policyEffects, settingsPolicy, policyVersion, allowedSender, acceptsDirectRequests, type Settings } from '../src/policy.ts'
 import type { MandateBasis } from '../src/core/index.ts'
 import { migrateSettings } from '../src/app/migration.ts'
 import { SourceRegistry } from '../src/sources/registry.ts'
@@ -61,8 +61,8 @@ describe('gate', () => {
     expect(policy.gate(github(MEMBER, 'mention'), thread(), [])).toEqual({ admissible: false, reason: 'not_a_member' })
     expect(allowedSender(base, { source: 'github', id: 'ALICE' })).toEqual({ id: 'Alice' })
     expect(allowedSender(base, { source: 'feishu', id: 'Alice' })).toBeUndefined()
-    expect(anyoneAllowed(base)).toBe(true)
-    expect(anyoneAllowed(SettingsSchema.parse({}))).toBe(false)
+    expect(acceptsDirectRequests(base, ['feishu', 'github'])).toBe(true)
+    expect(acceptsDirectRequests(SettingsSchema.parse({}), ['main'])).toBe(false)
   })
   it('assesses follow-ups on Threads with Tickets, explicit from an allowed sender and inferred from anyone else', () => {
     const quiet = { meta: { chatId: CHAT, direct: false, mentioned: false } }

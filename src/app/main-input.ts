@@ -37,6 +37,9 @@ export class MainInput {
         } },
     }
     this.disposers.push(host.sources.register(kind))
+    const settings = host.store.settings()
+    if (!settings.policy.sources.main) host.store.saveSettings({ ...settings,
+      policy: { ...settings.policy, sources: { ...settings.policy.sources, main: { allowed: [{ id: 'owner' }] } } } })
   }
   install(): void {
     this.disposers.push(this.host.context.on('session/event', (session, event) => {
@@ -64,9 +67,6 @@ export class MainInput {
     return store.atomic(() => {
       const existing = store.triggers.get(id)
       if (existing) return existing
-      const settings = store.settings()
-      if (!settings.policy.sources.main) store.saveSettings({ ...settings,
-        policy: { ...settings.policy, sources: { ...settings.policy.sources, main: { allowed: [{ id: 'owner' }] } } } })
       const trigger: Trigger = { id, source: 'main', actor: { source: 'main', id: 'owner' }, human: true, addressed: 'direct',
         at, text, threads: [{ source: 'main', id: String(message.id) }],
         channel: { source: 'main', thread: String(message.id), address: { sessionId: masterId, messageId: String(message.id), triggerId: id } },
