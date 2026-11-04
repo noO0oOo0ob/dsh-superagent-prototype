@@ -12,7 +12,7 @@ import { key, said, type Decision, type Thread, type Ticket, type Trigger } from
  */
 const RULES: [rule: string, file: string, says: string[], gone?: string[]][] = [
   ['A message attaches to a ticket only on an explicit pointer', 'dispatch',
-    ['Attach only when the message points at that ticket explicitly', 'A message on a similar subject is a new request: accept or ignore it, never attach it.']],
+    ['Attach only when the message points at that ticket explicitly', 'A message on a similar subject is a new request: accept or respond to it, never attach it merely for topical similarity.']],
   ['An Executor drops an attached thread it finds unrelated, without replying there', 'work',
     ['call personal_agent_thread_unrelated with the thread key and a one-sentence reason; do not acknowledge it or reply there.']],
   ['A located element or a few CSS lines settle no design', 'team/scope',
@@ -87,7 +87,10 @@ const RULES: [rule: string, file: string, says: string[], gone?: string[]][] = [
   ['A ticket owner\'s decision is a structured attention request, not progress', 'handoff',
     ['Ticket handoff contract:', 'An empty final preserves a successful report', 'budget errors alone do not authorize an IM message']],
   ['An Executor asks through human_action and clears the question explicitly', 'handoff-worker', ['human_action:null or a ready report clears it', 'state may remain progress']],
-  ['The main Session answers local discussion while delegating task investigation', 'dispatch', ['Local questions and brainstorming may be answered directly']],
+  ['The main Session answers discussion locally or through the original IM conversation', 'dispatch',
+    ['Questions and brainstorming may be answered directly without a ticket', 'use route kind respond for IM candidates',
+      'A final Main Session paragraph alone does not reach IM', 'Do not ignore greetings or discussion because no ticket is needed'],
+    ['ignore (ordinary discussion']],
   ['A UI change carries before-and-after evidence, as a delivery requirement the team can change', 'team/delivery',
     ['PR description must contain BOTH Before and After visual evidence', 'same scenario, viewport, theme and relevant UI state', 'After-only evidence is incomplete',
       'not a mockup presented as the previous implementation', 'baseline and changed revision identified', 'do not claim the UI PR is ready']],

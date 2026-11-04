@@ -76,7 +76,7 @@ export function threadCard(thread: Thread, label: string) {
     read: `thread/${thread.key}` }
 }
 export function decisionCard(decision: Decision) {
-  return { decision_id: decision.id, kind: decision.kind, reason: reasonText(decision.reason), strength: decision.strength,
+  return { decision_id: decision.id, kind: decision.kind === 'ignore' && decision.audit?.interaction === 'respond' ? 'respond' : decision.kind, reason: reasonText(decision.reason), strength: decision.strength,
     thread: decision.threadKey,
     trigger_ids: decision.triggerIds, ...(decision.ticketId ? { ticket_id: decision.ticketId } : {}), at: decision.at,
     read: `decision/${decision.id}` }

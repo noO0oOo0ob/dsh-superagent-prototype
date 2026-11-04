@@ -114,7 +114,7 @@ it('reads the context of a Trigger through its Source, and none for a Source tha
 it('routes an explicit candidate instead of assessing it: each eval tool names the routing tools', async () => {
   const s = setup('explicit')
   s.engine.receive(issue(1)); s.engine.evaluateDue()
-  const routed = 'personal_agent_route with its trigger_id and kind accept, attach, stop or ignore'
+  const routed = 'personal_agent_route with its trigger_id and kind respond, accept, attach, stop or ignore'
   await expect(s.assessor.context('issue-1', signal)).rejects.toThrow(routed)
   await expect(s.tools.personal_agent_eval_read!({ trigger_id: 'issue-1', resource: 'message', offset: 0 }, signal)).rejects.toThrow(routed)
   const direction = { implementation_requested: false, target_basis: 'undetermined', requires_design_decision: false, evidence: 'chatter' }

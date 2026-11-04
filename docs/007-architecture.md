@@ -435,6 +435,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/panel-trigger.spec.tsx` | Personal feature lifecycle and isolation checks |
 | `tests/personal-integration.spec.ts` | Personal feature lifecycle and isolation checks |
 | `tests/result-delivery.spec.ts` | Shared publication receipts, uncertain sends, restart recovery, new results and Connector redelivery |
+| `tests/conversation-reply.spec.ts` | Direct IM conversation, silent-ignore refusal, atomic reply scheduling and duplicate delivery prevention |
 | `tests/personal-tools.spec.ts` | Personal feature lifecycle and isolation checks |
 | `tests/repositories.spec.ts` | Personal feature lifecycle and isolation checks |
 | `tests/routing.spec.ts` | Personal feature lifecycle and isolation checks |
@@ -542,7 +543,7 @@ The main Session has 14 application tools:
 | Scheduled work | `personal_agent_schedules`, `personal_agent_schedule_create`, `personal_agent_schedule_update`, `personal_agent_schedule_control` |
 | Configure | `personal_agent_settings_save`, `personal_agent_policy_sync`, `personal_agent_prompts_save` |
 
-`personal_agent_route` accepts 1–20 decisions in order. Each accept, attach, stop or ignore runs as a separate Engine command. It also permits ignoring an inferred candidate directly from its card. `personal_agent_ticket_note` sends a fact as context, not authority.
+`personal_agent_route` accepts 1–20 decisions in order. Each accept, attach, stop or ignore runs as a separate Engine command; respond atomically settles a conversation candidate and queues its answer without creating a ticket. It also permits ignoring an inferred candidate directly from its card. `personal_agent_ticket_note` sends a fact as context, not authority.
 
 Settings saves select `policy`, `eval`, `executor`, `pause`, or `source`; the last also names its Source id. A prompt save with `preview: true` composes text without saving.
 

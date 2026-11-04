@@ -48,6 +48,7 @@ export const sourceMark = (t: T, state: SourceStatusRow['state']) => ({ dot: SOU
 type Outcome = DecisionRow['outcome']
 const DECISION_MARKS: Record<Outcome, Omit<Mark, 'label'>> = {
   accept: { dot: 'done', icon: 'decision', tone: 'success' }, reopen: { dot: 'done', icon: 'refresh', tone: 'success' },
+  respond: { dot: 'idle', icon: 'inbox', tone: 'info' },
   stop: { dot: 'idle', icon: 'stop', tone: 'danger' }, ignore: { dot: 'idle', icon: 'dismiss', tone: 'neutral' },
   unavailable: { dot: 'warning', icon: 'alert', tone: 'warning' }, wouldAccept: { dot: 'idle', icon: 'dismiss', tone: 'warning' },
 }

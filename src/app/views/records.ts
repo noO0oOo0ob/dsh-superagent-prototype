@@ -183,16 +183,20 @@ export function channelLink({ store, links }: ViewHost, channel: ChannelRef) {
 }
 /** Parses stored assessment audit metadata, tolerating fields omitted or shaped differently by older versions. */
 const AuditSchema = z.object({
+  interaction: z.literal('respond').optional().catch(undefined),
   would_accept: z.boolean().optional().catch(undefined),
   rule_assessments: z.array(z.object({ rule_id: z.string(), matched: z.boolean(), reason: z.string() })).optional().catch(undefined),
   matches: z.array(z.object({ rule_id: z.string(), reason: z.string() })).optional().catch(undefined),
   direction: z.object({ implementation_requested: z.boolean(), target_basis: z.string(), requires_design_decision: z.boolean(),
     evidence: z.string() }).optional().catch(undefined),
 }).catch({})
-/** Decision kind, or `wouldAccept` for an ignore decision that observe mode would have accepted. */
-export type DecisionOutcome = DecisionKind | 'wouldAccept'
-const outcomeOf = (decision: Decision): DecisionOutcome =>
-  decision.kind === 'ignore' && AuditSchema.parse(decision.audit ?? {}).would_accept ? 'wouldAccept' : decision.kind
+/** Routing outcome distinguishes a queued conversation reply from a silent ignore or an observed acceptance. */
+export type DecisionOutcome = DecisionKind | 'wouldAccept' | 'respond'
+const outcomeOf = (decision: Decision): DecisionOutcome => {
+  if (decision.kind !== 'ignore') return decision.kind
+  const audit = AuditSchema.parse(decision.audit ?? {})
+  return audit.interaction === 'respond' ? 'respond' : audit.would_accept ? 'wouldAccept' : 'ignore'
+}
 export function decisionView(view: Snapshot, decision: Decision) {
   const { store } = view
   const thread = store.threads.get(decision.threadKey)

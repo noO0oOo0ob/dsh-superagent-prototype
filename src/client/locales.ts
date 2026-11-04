@@ -121,6 +121,7 @@ const TEXT = {
   'decision.reopen': ['续做', 'Reopen'],
   'decision.stop': ['停止', 'Stop'],
   'decision.ignore': ['忽略', 'Ignore'],
+  'decision.respond': ['对话回复', 'Conversation reply'],
   'decision.unavailable': ['未完成', 'Unavailable'],
   'strength.explicit': ['明确', 'Explicit'],
   'strength.inferred': ['推断', 'Inferred'],
@@ -860,7 +861,7 @@ export const GLOSSARY = {
   execution: ['executor', 'environment', 'ticket', 'assignment', 'input', 'report', 'attention'],
 } as const
 export const GLOSSARY_VALUES = {
-  decision: ['decision.accept', 'decision.reopen', 'decision.stop', 'decision.ignore', 'decision.unavailable'], strength: ['strength.explicit', 'strength.inferred'],
+  decision: ['decision.accept', 'decision.reopen', 'decision.stop', 'decision.ignore', 'decision.respond', 'decision.unavailable'], strength: ['strength.explicit', 'strength.inferred'],
   ticket: ['stage.answer', 'stage.review', 'stage.blocked', 'stage.failed', 'stage.delivery', 'stage.queued', 'stage.working', 'stage.idle', 'ticket.ended'],
   assignment: ['assignment.pending', 'assignment.running', 'assignment.ended'], report: ['report.progress', 'report.waiting', 'report.ready', 'report.blocked', 'report.failed', 'report.dropped'],
 } as const

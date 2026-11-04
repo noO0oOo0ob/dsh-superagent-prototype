@@ -3,7 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { RoutingDenied } from '../../personal/routing.ts'
 import { z } from 'zod'
-import { UserError, followupOwners, key, reasonText, type Decision, type DecisionKind, type EngineForMainSession, type EngineForPeople }
+import { UserError, followupOwners, key, reasonText, type Decision, type DecisionKind, type ReplyStatus, type EngineForMainSession, type EngineForPeople }
   from '../../core/index.ts'
 import { IM_WORDS, NOTE_WORDS, wordCount } from '../../infra/text.ts'
 import { AssessmentSchema, EvalReadSchema, WorktreeNameSchema, type MasterAssessor } from '../assessment.ts'
@@ -20,7 +20,7 @@ const RoutingNoteSchema = z.string().trim()
   .describe(`Optional routing background or explicit human constraint, at most ${NOTE_WORDS} words. Never add implementation instructions or replace the original source.`)
 export interface MainToolsHost {
   readonly context: Context
-  readonly engine: Pick<EngineForMainSession, 'decide' | 'attach' | 'reply' | 'requestStatus' | 'note'> & EngineForPeople
+  readonly engine: Pick<EngineForMainSession, 'candidate' | 'decide' | 'attach' | 'reply' | 'requestStatus' | 'note'> & EngineForPeople
   readonly store: Pick<Store, 'tickets' | 'triggers' | 'threads' | 'atomic' | 'replyStatus' | 'settings'>
   readonly prompts: Pick<Prompts, 'preview' | 'save'>
   readonly sessions: Pick<Sessions, 'status' | 'notify' | 'delivery' | 'modelRetry'>
@@ -47,7 +47,9 @@ const fromDecision = (decision: Decision) => ({ decision: decision.kind, reason:
  */
 const RouteItemSchema = z.object({
   resource_ids: z.array(z.string().min(1)).max(32).optional().describe('accept: explicit configured repository IDs; empty means no repository. Never guess resource IDs.'),
-  kind: z.enum(['accept', 'attach', 'ignore', 'stop']),
+  kind: z.enum(['accept', 'attach', 'respond', 'ignore', 'stop']),
+  text: z.string().nullish().describe('respond: the actual conversational answer in the source language, sent to the original message without creating a ticket.'),
+  silence_requested: z.boolean().optional().describe('ignore: true only when the original human message explicitly asks for no reply. Ordinary chat or no task is not a request for silence.'),
   trigger_id: z.string().describe('The candidate card\'s trigger_id; deciding it decides its batch.'),
   ticket_id: z.string().nullish().describe('attach and stop: the ticket.'),
   title: z.string().nullish().describe('accept: a short label of at most 200 characters describing the original request; no added requirements or implementation advice.'),
@@ -58,9 +60,10 @@ const RouteItemSchema = z.object({
 }).strict()
 type RouteItem = z.infer<typeof RouteItemSchema>
 type Kind = RouteItem['kind']
-type Field = Exclude<keyof RouteItem, 'kind' | 'trigger_id' | 'resource_ids'>
+type Field = Exclude<keyof RouteItem, 'kind' | 'trigger_id' | 'resource_ids' | 'silence_requested'>
 /** Each field's check, the kinds whose items read it and those that need it; an item of another kind leaves it unread. */
 const FIELDS: Record<Field, { check: z.ZodType; reads: readonly Kind[]; needs: readonly Kind[] }> = {
+  text: { check: z.string().trim().min(1).max(20000), reads: ['respond'], needs: ['respond'] },
   ticket_id: { check: z.string(), reads: ['attach', 'stop'], needs: ['attach', 'stop'] },
   title: { check: z.string().max(200), reads: ['accept'], needs: ['accept'] },
   worktree_name: { check: WorktreeNameSchema, reads: ['accept'], needs: ['accept'] },
@@ -82,7 +85,7 @@ function invalid(item: RouteItem): string | undefined {
   }
   return undefined
 }
-type Routed = { decision?: DecisionKind; reason: string; ticketId?: string | undefined; triggerIds?: readonly string[] }
+type Routed = { decision?: DecisionKind | 'respond'; reason: string; ticketId?: string | undefined; triggerIds?: readonly string[]; reply?: { id: string; status: ReplyStatus } }
 /**
  * Carry out one routing decision as its Engine command, in a transaction of its own. `decided` holds the Triggers that this
  * call's earlier items decided, with their batches.
@@ -92,7 +95,7 @@ function route(host: MainToolsHost, item: RouteItem, decided: ReadonlyMap<string
   // A Trigger an earlier item decided went with that item's Decision, also as a member of its batch.
   // A stop of it for another ticket is the Engine's to judge.
   const earlier = decided.get(item.trigger_id)
-  if (earlier && item.kind === 'ignore') return { refused: `Decided in this call with ${earlier}, whose Decision took its batch` }
+  if (earlier && (item.kind === 'ignore' || item.kind === 'respond')) return { refused: `Decided in this call with ${earlier}, whose Decision took its batch` }
   switch (item.kind) {
     case 'accept': {
       const before = host.store.triggers.disposition(item.trigger_id)?.decisionId
@@ -114,7 +117,22 @@ function route(host: MainToolsHost, item: RouteItem, decided: ReadonlyMap<string
       const decision = host.engine.decide(item.trigger_id, { kind: 'stop', ticketId: item.ticket_id!, reason: item.reason || { code: 'humanStop' } })
       return { ...fromDecision(decision), triggerIds: decision.triggerIds }
     }
+    case 'respond': return host.store.atomic(() => {
+      const candidate = host.engine.candidate(item.trigger_id)
+      const trigger = host.store.triggers.get(item.trigger_id)
+      if (!candidate || candidate.strength !== 'explicit' || !trigger?.human || !trigger.addressed || !trigger.channel)
+        return { refused: 'respond requires a pending, explicitly addressed human message with a reply channel; do not resend an already decided response' }
+      const decision = host.engine.decide(item.trigger_id, { kind: 'ignore', evalId: candidate.evalId,
+        reason: 'Conversation reply queued; no background task created.', audit: { interaction: 'respond' } })
+      if (decision.kind !== 'ignore') return { refused: reasonText(decision.reason) }
+      const reply = host.engine.reply({ purpose: 'answer', triggerId: item.trigger_id, text: item.text! })
+      return { ...fromDecision(decision), decision: 'respond', triggerIds: decision.triggerIds, reply: { id: reply.id, status: reply.status } }
+    })
     case 'ignore': {
+      const candidate = host.engine.candidate(item.trigger_id)
+      const needsResponse = (candidate?.triggers ?? [host.store.triggers.get(item.trigger_id)]).some(trigger =>
+        trigger?.source.startsWith('im-') && trigger.human && trigger.addressed)
+      if (needsResponse && !item.silence_requested) return { refused: 'Addressed IM conversation needs a response: use respond for greetings, questions or discussion, or accept/attach/stop for work. Ignore only when the person explicitly requests silence.' }
       const decision = host.engine.decide(item.trigger_id, { kind: 'ignore', reason: item.reason! })
       return { ...fromDecision(decision), triggerIds: decision.triggerIds }
     }
@@ -127,7 +145,7 @@ function route(host: MainToolsHost, item: RouteItem, decided: ReadonlyMap<string
 function routeTool(host: MainToolsHost): Tool {
   return tool({
     name: 'personal_agent_route',
-    description: 'Route candidates, one item each by the card\'s trigger_id, in one call: accept an explicit request as a new ticket, attach a trigger to an existing ticket, stop a ticket on a person\'s stop message, or ignore a candidate that needs no ticket or stop, as dispatch says. Items run in order and each is answered on its own; a refused item leaves the others. An inferred candidate may be ignored here; accepting one goes through personal_agent_eval_decide.',
+    description: 'Route candidates by the card\'s trigger_id, one item each: accept new work; attach to a ticket; stop on a human request; respond to conversation without a ticket; ignore unaddressed observations or requested silence. Follow dispatch. Items run in order; refusal of one leaves the others. Inferred acceptance requires personal_agent_eval_decide.',
     schema: z.object({ decisions: z.array(RouteItemSchema).min(1).max(20) }).strict(),
     execute: async ({ decisions }) => {
       const decided = new Map<string, string>()
@@ -141,7 +159,7 @@ function routeTool(host: MainToolsHost): Tool {
           for (const id of result.triggerIds ?? []) if (!decided.has(id)) decided.set(id, item.trigger_id)
           const ticket = result.ticketId ? host.store.tickets.get(result.ticketId) : undefined
           return { ...head, ...(result.decision ? { decision: result.decision } : {}), reason: result.reason,
-            ...(ticket ? { ticket: ticketCard(ticket) } : {}) }
+            ...(ticket ? { ticket: ticketCard(ticket) } : {}), ...(result.reply ? { reply: result.reply } : {}) }
         } catch (error) {
           if (error instanceof UserError || error instanceof RoutingDenied) return { ...head, refused: error.message }
           host.context.logger.warn('dsh-super-personal-agent could not route trigger %s: %s', item.trigger_id, String(error))
@@ -149,6 +167,10 @@ function routeTool(host: MainToolsHost): Tool {
         }
       })
       host.requestPass()
+      if (results.some(result => 'reply' in result)) {
+        await host.sendReplies()
+        for (const result of results) if ('reply' in result && result.reply) result.reply.status = host.store.replyStatus(result.reply.id) ?? result.reply.status
+      }
       return { results }
     },
   })
@@ -226,7 +248,7 @@ export function mainTools(host: MainToolsHost, agent: Agent): Tool[] {
       name: 'personal_agent_reply',
       description: `Send an answer to a human question, a ready result, or attention requiring human action, as the replies section says. Published reports reuse their automatic delivery receipt and original content; changing text does not resend them. The gate refuses progress. purpose=result needs a ready, completed, merged or dropped ticket. IM limit for other replies: ${IM_WORDS} words.`,
       schema: z.object({
-        trigger_id: z.string().optional().describe('The original human question, for an answer only.'),
+        trigger_id: z.string().optional().describe('The original human message, for an answer only. Use route kind respond for pending conversational candidates.'),
         ticket_id: z.string().optional(),
         purpose: z.enum(['answer', 'result', 'attention']),
         human_action: z.string().trim().min(1).optional().describe('Required for attention: the ticket\'s current attention question.'),
