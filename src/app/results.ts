@@ -105,17 +105,19 @@ export class Results {
     const assignment = latestAssignment(ticket), report = assignment?.report
     if (!assignment || !report || ['progress', 'waiting'].includes(report.state) && !ticket.attention && !replyTo && report.publication?.mode !== 'publish') return
     if (report.publication) this.validatePublication(ticket, report.publication)
-    const id = ticket.attention ? key('attention-result-v1', ticket.attention.id) : reportId(ticket)!
+    const questionId = ticket.attention ? key('attention-result-v1', ticket.attention.id) : undefined
+    const question = questionId && report.publication?.mode !== 'internal' && (!report.publication || !this.get(questionId)) ? ticket.attention : undefined
+    const id = question ? questionId! : reportId(ticket)!
     if (this.get(id)) return
     const result: ResultRecord = { version: 1, id, ticketId: ticket.id, assignmentId: assignment.id, at: report.at,
-      state: report.state, title: ticket.title, summary: ticket.attention?.question ?? report.summary,
+      state: report.state, title: ticket.title, summary: question?.question ?? report.summary,
       contexts: this.host.store.contexts.references(ticketContexts(ticket)), url: `http://127.0.0.1:${this.host.port}/super-personal-agent/result/${id}`,
       ...(report.publication ? { publication: report.publication } : {}),
       artifacts: this.list(ticket.id).filter(item => item.artifactPath && item.assignmentId === assignment.id
-        && (!report.publication || report.publication.mode === 'publish' && publicationArtifacts(report.publication.blocks).includes(item.id))).map(({ id, title, url }) => ({ id, title, url })),
+        && report.publication?.mode === 'publish' && publicationArtifacts(report.publication.blocks).includes(item.id)).map(({ id, title, url }) => ({ id, title, url })),
       channel: this.host.store.triggers.get(replyTo ?? ticket.attention?.triggerId ?? ticket.origin.triggerId)?.channel,
       ...(replyTo ? { replyTo } : {}),
-      ...(ticket.attention ? { attentionId: ticket.attention.id } : {}) }
+      ...(question ? { attentionId: question.id } : {}) }
     this.host.store.set(resultRecords(id), result)
     const exported = this.host.vault?.enqueue(result)
     if (exported) this.host.effects.enqueue('vault', exported.id, { id: exported.id })

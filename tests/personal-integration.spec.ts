@@ -23,7 +23,7 @@ it('exports a no-Git task to Markdown and hook files while returning its result 
     const workspace = h.runtime.store.tickets.get(ticketId)!.execution!.directory
     await writeFile(join(workspace, 'plan.md'), '# Detailed plan\nTake the early train.')
     const artifact = await h.runTool(`spa-worker-${ticketId}`, 'personal_agent_artifact', { path: 'plan.md', title: 'Detailed plan' })
-    await h.runTool(`spa-worker-${ticketId}`, 'personal_agent_report', { state: 'ready', summary: 'Visit the museum on Sunday.' })
+    await h.runTool(`spa-worker-${ticketId}`, 'personal_agent_report', { publication: { mode: 'publish', blocks: [{ type: 'text', text: 'Visit the museum on Sunday.' }, { type: 'file', artifactId: artifact.artifact_id }] }, state: 'ready', summary: 'Visit the museum on Sunday.' })
     await h.runtime.idle(); await h.runtime.pump()
     const result = h.runtime.results.list(ticketId).find(item => item.state === 'ready')!, exported = h.runtime.vault.list(result.id)[0]!
     expect(exported.state).toBe('written')
@@ -38,7 +38,7 @@ it('exports a no-Git task to Markdown and hook files while returning its result 
     await h.runtime.idle()
     const repeated = await h.runTool(`spa-worker-${ticketId}`, 'personal_agent_artifact', { path: 'plan.md', title: 'Detailed plan' })
     expect(repeated.artifact_id).not.toBe(artifact.artifact_id)
-    await h.runTool(`spa-worker-${ticketId}`, 'personal_agent_report', { state: 'ready', summary: 'The plan still works.' })
+    await h.runTool(`spa-worker-${ticketId}`, 'personal_agent_report', { publication: { mode: 'publish', blocks: [{ type: 'text', text: 'The plan still works.' }, { type: 'file', artifactId: repeated.artifact_id }] }, state: 'ready', summary: 'The plan still works.' })
     await h.runtime.idle()
     expect(h.runtime.results.list(ticketId).find(item => item.summary === 'The plan still works.')?.artifacts?.[0]?.id).toBe(repeated.artifact_id)
   } finally { await h.stop(); await rm(root, { recursive: true, force: true }) }

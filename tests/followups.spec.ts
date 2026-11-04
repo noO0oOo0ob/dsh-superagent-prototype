@@ -191,7 +191,7 @@ it('takes the message a follow-up answers from its Source kind, whichever kind i
 it('tells the main Session of a follow-up to an ended ticket once the ticket resumes, and not when it cannot', async () => {
   h = await startRuntime()
   const { ticket, sessionId } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
-  await h.runTool(sessionId, 'personal_agent_report', { state: 'ready', summary: 'Done' })
+  await h.runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: 'Done' })
   expect(h.runtime.store.tickets.get(ticket.id)!.ended).toBeDefined()
   // While processing is paused the message waits for the ticket, which has not resumed: the main Session hears nothing yet.
   await h.runtime.settings.pause(true, 'panel')
@@ -208,7 +208,7 @@ it('tells the main Session of a follow-up to an ended ticket once the ticket res
 it('tells the main Session nothing of a message it attached to an ended ticket, which resumes for it', async () => {
   h = await startRuntime()
   const { ticket, sessionId } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
-  await h.runTool(sessionId, 'personal_agent_report', { state: 'dropped', summary: 'nothing to do' })
+  await h.runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'dropped', summary: 'nothing to do' })
   const request = feishu('40', '@bot 上次那个改动还要改一下', { root_id: undefined })
   h.runtime.receive(request); await h.runtime.idle()
   await h.route({ kind: 'attach', ticket_id: ticket.id, trigger_id: request.id })

@@ -59,7 +59,7 @@ it('lets a real scheduled worker read only its approving context and retains the
     expect(h.runtime.store.contexts.refs('session', sessionId)).toEqual(expected)
     expect(JSON.stringify(await h.runTool(sessionId, 'personal_agent_read', { resource: `context/${contextRef(origin.id).id}` }))).toContain(origin.meta.messageId)
     await expect(h.runTool(sessionId, 'personal_agent_read', { resource: `context/${contextRef(unrelated.id).id}` })).rejects.toThrow()
-    await h.runTool(sessionId, 'personal_agent_report', { state: 'ready', summary: 'The scheduled travel research is ready.' })
+    await h.runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: 'The scheduled travel research is ready.' })
     await h.runtime.idle()
     const updated = h.runtime.store.tickets.get(ticket.id)!, assignment = updated.assignments.at(-1)!
     expect(h.runtime.store.contexts.refs('report', `${assignment.id}:${assignment.report!.at}`)).toEqual(expected)

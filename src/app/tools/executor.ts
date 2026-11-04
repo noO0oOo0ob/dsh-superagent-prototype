@@ -90,7 +90,7 @@ export function executorTools(host: ExecutorToolsHost, ticket: Ticket): Tool[] {
       schema: z.object({
         state: z.enum(['progress', 'ready', 'blocked', 'failed', 'dropped']),
         summary: z.string().min(1),
-        publication: WorkerPublicationSchema.optional().describe('Explicitly publish ordered text/image/file blocks, or keep this report internal. Omission supports pre-upgrade workers only. Destinations are resolved by the host.'),
+        publication: WorkerPublicationSchema.describe('Publish selected text/image/file blocks or keep this report internal. The host resolves destinations.'),
         human_action: z.string().trim().min(1).max(1000).nullish().describe('One concrete question for a person, also with state=progress; omit to keep the pending one, null to clear it.'),
         question_for_trigger_id: z.string().optional().describe('With human_action: the human message that raised the question, which is asked where that person wrote.'),
         pr_number: z.number().int().positive().nullish().describe('Optional GitHub PR, only when the GitHub Source is enabled and verified. Omit for tasks without a PR.'),

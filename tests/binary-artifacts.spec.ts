@@ -43,3 +43,20 @@ it('publishes only selected artifacts and shares the rich result receipt with Ma
     expect((await h.runtime.results.materialize(String(artifact.artifact_id))).bytes).toEqual(Buffer.from([0, 1, 255]))
   } finally { await h.stop() }
 })
+
+it('keeps a new explicit publication distinct from an existing question and requires explicit intent', async () => {
+  const h = await startRuntime(store => store.saveSettings({ ...store.settings(), sources: {} }))
+  try {
+    const origin = h.runtime.main.capture(createUserMessage({ content: [{ type: 'text', text: 'Prepare a trip' }], source: { kind: 'user' } }))!
+    const response = await h.runTool(h.runtime.masterId, 'personal_agent_submit', { trigger_id: origin.id, title: 'Trip', worktree_name: 'trip' })
+    await h.runtime.idle()
+    const id = (response.ticket as { ticket_id: string }).ticket_id, session = `spa-worker-${id}`
+    await expect(h.runTool(session, 'personal_agent_report', { state: 'ready', summary: 'No publication intent' })).rejects.toThrow()
+    await h.runTool(session, 'personal_agent_report', { state: 'blocked', summary: 'Need dates', human_action: 'Which dates?', publication: { mode: 'internal' } })
+    await h.runTool(session, 'personal_agent_report', { state: 'progress', summary: 'Question', publication: { mode: 'publish', blocks: [{ type: 'text', text: 'Which dates?' }] } })
+    await h.runTool(session, 'personal_agent_report', { state: 'progress', summary: 'Additional result', publication: { mode: 'publish', blocks: [{ type: 'text', text: 'Here are two options while you decide.' }] } })
+    const published = h.runtime.results.list(id).filter(item => item.publication?.mode === 'publish')
+    expect(published).toHaveLength(2)
+    expect(new Set(published.map(item => item.id)).size).toBe(2)
+  } finally { await h.stop() }
+})

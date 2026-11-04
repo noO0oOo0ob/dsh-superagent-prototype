@@ -52,7 +52,7 @@ it('keeps conversation inline, delegates once and publishes a result without ano
     const id = (delegated.ticket as { ticket_id: string }).ticket_id
     expect(h.runtime.store.tickets.list()).toHaveLength(1)
     const main = h.agents.get(h.runtime.masterId)!
-    await h.runTool(`spa-worker-${id}`, 'personal_agent_report', { state: 'ready', summary: 'Day one: park. Day two: museum.' })
+    await h.runTool(`spa-worker-${id}`, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: 'Day one: park. Day two: museum.' })
     await h.runtime.idle()
     const results = h.runtime.results.list(id)
     expect(results).toHaveLength(1)
@@ -84,14 +84,14 @@ it('deduplicates a question across progress reports and withdraws it when cleare
   try {
     const { ticket, sessionId } = await h.acceptedTicket(feishu('7', '@bot Plan a trip'))
     h.runtime.store.saveSettings({ ...h.runtime.store.settings(), paused: true })
-    await h.runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'Planning', human_action: 'Which dates?' })
+    await h.runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'Planning', human_action: 'Which dates?' })
     await h.runtime.idle()
     const attentionId = h.runtime.store.tickets.get(ticket.id)!.attention!.id
-    await h.runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'Checking destinations' })
+    await h.runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'Checking destinations' })
     await h.runtime.idle()
     expect(h.runtime.results.list(ticket.id)).toHaveLength(1)
     expect(h.runtime.store.replyStatus(key('attention-reply', attentionId))).toBe('pending')
-    await h.runTool(sessionId, 'personal_agent_report', { state: 'ready', summary: 'Plan completed', human_action: null })
+    await h.runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: 'Plan completed', human_action: null })
     await h.runtime.idle()
     expect(h.runtime.store.replyStatus(key('attention-reply', attentionId))).toBeUndefined()
   } finally { await h.stop() }
@@ -113,7 +113,7 @@ it('does not inject a question cleared while its Main Session is being resolved'
       if (id === h.runtime.masterId) await hold.promise
       return h.resolveDefault(id)
     })
-    await h.runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'Drafting', human_action: 'Obsolete question?' })
+    await h.runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'Drafting', human_action: 'Obsolete question?' })
     h.runtime.engine.report(ticket.id, { state: 'progress', summary: 'Proceeding', question: null })
     hold.resolve()
     await h.runtime.idle()

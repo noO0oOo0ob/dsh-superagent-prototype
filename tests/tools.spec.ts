@@ -115,7 +115,7 @@ it('answers every routing tool in one shape: the decision it recorded, why, and 
     reason: expect.any(String), ticket: card })
   const status = await run('personal_agent_ticket_request_status', { ticket_id: ticket.id })
   expect(status).toEqual({ reason: 'The worker is not waiting; nothing was sent', ticket: card })
-  await h.runTool(sessionId, 'personal_agent_report', { state: 'failed', summary: 'The build broke.' })
+  await h.runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'failed', summary: 'The build broke.' })
   expect(await run('personal_agent_ticket_retry', { ticket_id: ticket.id })).toEqual({ reason: 'Started a new assignment', ticket: card })
   const chatter = feishu('4', '@bot 谢谢')
   h.runtime.receive(chatter); await h.runtime.idle()
@@ -248,7 +248,7 @@ it('ignores a proactive candidate from its card beside other decisions, marked s
 
 it('preserves a sent publication receipt and reports a new publication dropped when its conversation is gone', async () => {
   const { ticket, sessionId } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
-  await h.runTool(sessionId, 'personal_agent_report', { state: 'ready', summary: 'Done.' })
+  await h.runTool(sessionId, 'personal_agent_report', { publication: { mode: 'publish', blocks: [{ type: 'text', text: 'Done.' }] }, state: 'ready', summary: 'Done.' })
   const reply = (text: string) => h.runTool(h.runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'result', text })
   expect(await reply('修好了。')).toEqual({ status: 'sent' })
   const next = await h.acceptedTicket(feishu('2', '@bot 修一下另一处回归'))
@@ -256,7 +256,7 @@ it('preserves a sent publication receipt and reports a new publication dropped w
   lark.mockRejectedValue(new CliError('the message was withdrawn', 230011))
   expect(await reply('修好了，请看 PR。')).toEqual({ status: 'sent' })
   expect(lark.mock.calls).toHaveLength(calls)
-  await h.runTool(next.sessionId, 'personal_agent_report', { state: 'ready', summary: 'Another fix.' })
+  await h.runTool(next.sessionId, 'personal_agent_report', { publication: { mode: 'publish', blocks: [{ type: 'text', text: 'Another fix.' }] }, state: 'ready', summary: 'Another fix.' })
   expect(await h.runTool(h.runtime.masterId, 'personal_agent_reply', { ticket_id: next.ticket.id, purpose: 'result', text: '另一处也修好了。' }))
     .toEqual({ status: 'dropped' })
 })
@@ -409,12 +409,12 @@ it('shows a candidate with its thread\'s tickets open first, the tickets it reac
 
 it('relays a worker\'s report with its ticket card and the start of its summary, and a question with the card alone', async () => {
   const { ticket, trigger, sessionId } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
-  await h.runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'Needs a decision.', human_action: 'Desktop too?' })
+  await h.runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'Needs a decision.', human_action: 'Desktop too?' })
   await h.runtime.idle()
   expect(relaysOf('worker_attention').at(-1)).toEqual({ kind: 'worker_attention', automatic_delivery: true, state: 'progress', read: `ticket/${ticket.id}/result`,
     ticket: expect.objectContaining({ ticket_id: ticket.id, state: 'person/answer', attention: expect.objectContaining({ question: 'Desktop too?' }) }) })
   const summary = 'Done. ' + 'Evidence. '.repeat(100)
-  await h.runTool(sessionId, 'personal_agent_report', { state: 'ready', summary, human_action: null })
+  await h.runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary, human_action: null })
   await h.runtime.idle()
   const report = relaysOf('worker_report').at(-1)!
   expect(report).toMatchObject({ ticket: { ticket_id: ticket.id, title: ticket.title }, trigger_id: trigger.id, state: 'ready', chars: summary.length,

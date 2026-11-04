@@ -46,9 +46,9 @@ it('starts without GitHub, completes a plain-directory task and persists its sou
     const result = 'Day 1: explore the old town. Day 2: visit the waterfront. Keep both afternoons free.'
     writeFileSync(join(ticket.execution!.directory, 'plan.md'), result)
     h.step(session)
-    await expect(h.runTool(session, 'personal_agent_report', { state: 'ready', summary: result, pr_number: 42 }))
+    await expect(h.runTool(session, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: result, pr_number: 42 }))
       .rejects.toThrow('GitHub is unavailable')
-    await h.runTool(session, 'personal_agent_report', { state: 'ready', summary: result })
+    await h.runTool(session, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: result })
     await h.runtime.idle()
     expect(h.runtime.store.tickets.get(id)?.ended?.outcome).toBe('completed')
     expect(h.relays(h.runtime.masterId)).toContainEqual(expect.objectContaining({ kind: 'worker_report', trigger_id: trigger.id, state: 'ready', summary: result }))

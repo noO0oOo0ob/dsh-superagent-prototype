@@ -184,8 +184,8 @@ async function drive(host: Host) {
   const b = proactive.ticket_id
   await runtime.idle()
   const [workerA, workerB] = [a, b].map(workerSessionId) as [string, string]
-  await run(workerA, 'personal_agent_report', { state: 'progress', summary: 'Needs a decision.', human_action: 'Desktop too?' })
-  await run(workerA, 'personal_agent_report', { state: 'progress', summary: 'It reads the config.', human_action: null, reply_to_trigger_id: request.id })
+  await run(workerA, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'Needs a decision.', human_action: 'Desktop too?' })
+  await run(workerA, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'It reads the config.', human_action: null, reply_to_trigger_id: request.id })
   const other = feishu('9', '@bot 顺便看看这个')
   await runtime.receive(other)
   await run(master, 'personal_agent_route', { decisions: [{ kind: 'attach', ticket_id: a, trigger_id: other.id }] })
@@ -199,7 +199,7 @@ async function drive(host: Host) {
   await run(master, 'personal_agent_ticket_note', { ticket_id: a, text: 'Ticket B changes the same settings page.' })
   await runtime.pump()
   await runtime.idle()
-  await run(workerA, 'personal_agent_report', { state: 'ready', summary: 'Done.' })
+  await run(workerA, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: 'Done.' })
   await runtime.receive(feishu('2', '再加一个按钮', { mentions: [], root_id: 'om_1' }))
   await vi.waitFor(async () => {
     await runtime.pump()

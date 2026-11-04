@@ -28,3 +28,5 @@ Each stage is committed locally; no push. Live binding is left to the owner afte
 `vendor/dsh-im/UPSTREAM.json` pins v5.10.0 at c826bfa415d79669d8ebba206cf4a1eac554d8e2 and records SHA-256 for every copied file. The first import is mechanical. Subsequent local adaptations are tracked in Git and the manifest. Original plugin registration and independent Session execution are not activated. Retain the included LICENSE and THIRD_PARTY_NOTICES.md.
 
 The Worker prompt/tool character budget is 44,000 (previously 42,000), accounting for the typed publication schema. Only implemented text/image/file blocks are exposed in the Worker tool; other types remain in the persisted protocol for future adapters.
+
+Publication is mandatory on new Worker reports. Internal reports never select draft artifacts for external delivery. Each later publication has its own identity even while a human question remains pending. File snapshots become visible only after their bytes and metadata are durable.

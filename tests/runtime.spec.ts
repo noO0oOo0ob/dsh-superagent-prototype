@@ -310,10 +310,10 @@ it('accepts silently under a rule that says so, gives the worker the rule proced
   expect(sections.get(`spa-worker-${ticket.id}`)!.text({})).toContain(mandateInstructions({ strength: 'inferred' }))
   expect(await runTool(`spa-worker-${ticket.id}`, 'personal_agent_read', { resource: `ticket/${ticket.id}/assignment` })).toMatchObject({ text: expect.stringContaining('沉默地复现和修复 (silent-bugfix): Reproduce minimally first; accept silently.') })
   await expect(runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'result', text: 'x' })).rejects.toThrow('not ready')
-  await runTool(`spa-worker-${ticket.id}`, 'personal_agent_report', { state: 'blocked', summary: 'needs a decision' })
+  await runTool(`spa-worker-${ticket.id}`, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'blocked', summary: 'needs a decision' })
   await expect(runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'result', text: 'x' })).rejects.toThrow('not ready')
   // Nothing left for a human: the ticket closes instead of waiting, and the rule's closing sentence can still be delivered.
-  await runTool(`spa-worker-${ticket.id}`, 'personal_agent_report', { state: 'dropped', summary: 'too complex; recorded in #123' })
+  await runTool(`spa-worker-${ticket.id}`, 'personal_agent_report', { publication: { mode: 'publish', version: 1, blocks: [{ type: 'text', text: 'too complex; recorded in #123', format: 'markdown' }] }, state: 'dropped', summary: 'too complex; recorded in #123' })
   expect(runtime.store.tickets.get(ticket.id)).toMatchObject({ ended: expect.objectContaining({ by: 'executor', outcome: 'dropped' }) })
   expect(await runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'result', text: '看到这个问题我试了一下，能复现，修复需要较大改动，已记在 #123。' })).toEqual({ status: 'sent' })
 })
@@ -321,19 +321,19 @@ it('accepts silently under a rule that says so, gives the worker the rule proced
 it('records worker reports, binds the task PR, ends the ticket on ready without a PR, and relays attention', async () => {
   const { ticket, sessionId } = await acceptedTicket()
   deliveries.mockClear()
-  expect(await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'started' })).toMatchObject({ notification: 'internal_only' })
+  expect(await runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'started' })).toMatchObject({ notification: 'internal_only' })
   expect(relays(runtime.masterId)).toEqual([])
-  await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'need a decision', human_action: 'Desktop too?' })
+  await runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'need a decision', human_action: 'Desktop too?' })
   expect(runtime.store.tickets.get(ticket.id)!.attention).toMatchObject({ question: 'Desktop too?' })
   expect(relays(runtime.masterId).at(-1)).toMatchObject({ kind: 'worker_attention', ticket: { ticket_id: ticket.id, attention: { question: 'Desktop too?' } } })
   await expect(runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'attention', human_action: 'other', text: 'x' })).rejects.toThrow('current attention question')
   expect(await runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'attention', human_action: 'Desktop too?', text: '要不要也改桌面端？' })).toEqual({ status: 'sent' })
-  await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'pr open', pr_number: 42, human_action: null })
+  await runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'pr open', pr_number: 42, human_action: null })
   const bound = runtime.store.tickets.get(ticket.id)!
   expect(pullOf(bound)).toBe(42)
   expect(bound.attention).toBeUndefined()
   expect(runtime.store.threads.get('github:42')?.subscriptions).toEqual([ticket.id])
-  await runTool(sessionId, 'personal_agent_report', { state: 'ready', summary: 'reviewed' })
+  await runTool(sessionId, 'personal_agent_report', { publication: { mode: 'publish', version: 1, blocks: [{ type: 'text', text: 'reviewed', format: 'markdown' }] }, state: 'ready', summary: 'reviewed' })
   expect(runtime.store.tickets.get(ticket.id)!.ended).toBeUndefined()
   expect(relays(runtime.masterId).at(-1)).toMatchObject({ kind: 'worker_report', state: 'ready' })
   expect(await runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'result', text: '已提交 PR #42，待 review。' })).toEqual({ status: 'sent' })
@@ -353,7 +353,7 @@ it('records worker reports, binds the task PR, ends the ticket on ready without 
 
 it('lists each ticket with the Threads it subscribes to, as their Sources describe them', async () => {
   const { sessionId, ticket } = await acceptedTicket()
-  await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'pr open', pr_number: 42 })
+  await runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'pr open', pr_number: 42 })
   const line = () => ticketList(viewsOf(runtime), 'working', 0, 20).items.find(item => item.id === ticket.id)!
   runtime.store.threads.describe('github:42', { label: '#42 Fix the margin', facts: { number: { value: '#42' }, ci: { label: 'CI', value: { zh: '通过', en: 'passed' } } } })
   expect(line()).not.toHaveProperty('prNumber')
@@ -372,9 +372,9 @@ it('shows a message that carries JSON, with or without a label, as its label and
 
 it('ends a ticket on ready when no PR is bound', async () => {
   const { ticket, sessionId } = await acceptedTicket()
-  await runTool(sessionId, 'personal_agent_report', { state: 'ready', summary: 'done locally' })
+  await runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: 'done locally' })
   expect(runtime.store.tickets.get(ticket.id)).toMatchObject({ ended: expect.objectContaining({ outcome: 'completed' }) })
-  await expect(runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'late' })).rejects.toThrow('Ticket ended')
+  await expect(runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'late' })).rejects.toThrow('Ticket ended')
 })
 
 it('stops a ticket on a person\'s instruction for good, and resumes an ended one on any person\'s message on its thread', async () => {
@@ -396,7 +396,7 @@ it('stops a ticket on a person\'s instruction for good, and resumes an ended one
   await expect(route({ kind: 'attach', ticket_id: ticket.id, trigger_id: guest.id })).rejects.toThrow('stopped')
   // A ticket that ended by itself resumes on a person's message on its thread, whoever sent it.
   const other = await acceptedTicket(feishu('20', '@bot 修另一个'))
-  await runTool(other.sessionId, 'personal_agent_report', { state: 'dropped', summary: 'not reproduced' })
+  await runTool(other.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'dropped', summary: 'not reproduced' })
   expect(runtime.store.tickets.get(other.ticket.id)!.ended).toBeDefined()
   await receive(feishu('21', '我这边还能复现', { mentions: [], root_id: 'om_20', sender_id: 'ou_guest' }))
   await runtime.pump()
@@ -672,7 +672,7 @@ it('retries only a failed, blocked or undelivered ticket with a new assignment, 
   const { ticket } = await acceptedTicket()
   expect(() => runtime.engine.retryTicket(ticket.id)).toThrow(new UserError('notRetryable'))
   const current = runtime.store.tickets.get(ticket.id)!
-  await runTool(`spa-worker-${ticket.id}`, 'personal_agent_report', { state: 'failed', summary: 'LlmError: offline' })
+  await runTool(`spa-worker-${ticket.id}`, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'failed', summary: 'LlmError: offline' })
   expect(waitsForPerson(runtime.store.tickets.get(ticket.id)!)).toBe(true)
   // A person may continue a failed worker in its Session; only an ended Ticket locks its tools.
   expect(guards.get(`spa-worker-${ticket.id}`)!()).toBeUndefined()
@@ -757,14 +757,14 @@ it('asks a question where the human message that raised it was written, not in t
   subscribe(ticket.id, { source: 'github', id: '42' })
   const review = commentTrigger({ id: 5, body: 'Can you add the reason?', user: { login: 'alice' }, html_url: 'https://github.com/acme/widgets/pull/42#pullrequestreview-5', created_at: '2026-09-09T00:02:00Z' }, { number: 42, isPr: true }, 'review', 'agent-bot')
   await receive(review)
-  await expect(runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'x', question_for_trigger_id: review.id })).rejects.toThrow('needs the question it raised')
-  await expect(runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'x', human_action: 'Keep it?', question_for_trigger_id: 'unknown' })).rejects.toThrow('the person\'s message that raised it')
-  await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'no stop reason is recorded', human_action: 'Keep the PR and record the reason in a follow-up?', question_for_trigger_id: review.id })
+  await expect(runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'x', question_for_trigger_id: review.id })).rejects.toThrow('needs the question it raised')
+  await expect(runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'x', human_action: 'Keep it?', question_for_trigger_id: 'unknown' })).rejects.toThrow('the person\'s message that raised it')
+  await runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'no stop reason is recorded', human_action: 'Keep the PR and record the reason in a follow-up?', question_for_trigger_id: review.id })
   const queued = vi.spyOn(runtime.outbox, 'send')
   await runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'attention', human_action: 'Keep the PR and record the reason in a follow-up?', text: 'Keep the PR and record the reason in a follow-up?' })
   expect(queued.mock.calls.at(-1)![0].channel).toEqual(review.channel)
   // A question about the ticket as a whole still goes to where the ticket started.
-  await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'y', human_action: 'Desktop too?' })
+  await runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'y', human_action: 'Desktop too?' })
   await runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'attention', human_action: 'Desktop too?', text: '要不要也改桌面端？' })
   expect(queued.mock.calls.at(-1)![0].channel).toEqual(trigger.channel)
 })
@@ -801,19 +801,19 @@ it('reads resources recorded under the pre-vocabulary names', async () => {
 
 it('leaves waiting and blocked assignments alone after a restart and keeps blocked workers paused', async () => {
   const { ticket, sessionId } = await acceptedTicket()
-  await runTool(sessionId, 'personal_agent_report', { state: 'blocked', summary: 'need credentials' })
+  await runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'blocked', summary: 'need credentials' })
   runtime.executor.resume()
   expect(runtime.store.tickets.get(ticket.id)!.assignments).toHaveLength(1)
   expect(waitsForPerson(runtime.store.tickets.get(ticket.id)!)).toBe(true)
   const other = await acceptedTicket(feishu('12', '@bot 另一个', { root_id: undefined }))
-  await runTool(other.sessionId, 'personal_agent_report', { state: 'progress', summary: 'midway' })
+  await runTool(other.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'midway' })
   runtime.executor.resume()
   expect(runtime.store.tickets.get(other.ticket.id)!.assignments.map(item => item.state)).toEqual(['ended', 'pending'])
 })
 
 it('keeps local execution ready when an enabled GitHub Source has no account', async () => {
   const { ticket, sessionId } = await acceptedTicket()
-  await runTool(sessionId, 'personal_agent_report', { state: 'failed', summary: 'crashed' })
+  await runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'failed', summary: 'crashed' })
   const next = await restart({}, { github: { cli: '' } })
   await next.ready
   expect(next.configured()).toBe(true)
@@ -927,7 +927,7 @@ it('checks a changed account CLI before saving it, restarts after the save, and 
 
 it('lists Tickets that wait on a person with where to answer them, as the overview does', async () => {
   const { ticket, sessionId } = await acceptedTicket()
-  await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'need a decision', human_action: '按钮用哪种颜色？' })
+  await runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'need a decision', human_action: '按钮用哪种颜色？' })
   expect(ticketList(viewsOf(runtime), 'person', 0, 20).items).toEqual([expect.objectContaining({ id: ticket.id, stage: 'person', reply: expect.objectContaining({ source: 'feishu' }) })])
 })
 
@@ -1077,7 +1077,7 @@ it('runs the prepare command once for a new ticket, under the execution root wit
   expect(runs()).toEqual([expect.objectContaining({ argv: ['sh', '-c', 'git -C /srv/widgets worktree add "$DSH_SUPER_PERSONAL_AGENT_DIR" -b "agent/$DSH_SUPER_PERSONAL_AGENT_NAME"'], cwd: join(directory, 'work'),
     env: expect.objectContaining({ DSH_SUPER_PERSONAL_AGENT_DIR: ticket.execution!.directory, DSH_SUPER_PERSONAL_AGENT_NAME: ticket.execution!.name, DSH_SUPER_PERSONAL_AGENT_GITHUB_REPOSITORY: 'acme/widgets', DSH_SUPER_PERSONAL_AGENT_FEISHU_CHAT: CHAT }) })])
   // A retry reuses the prepared directory.
-  await runTool(`spa-worker-${ticket.id}`, 'personal_agent_report', { state: 'failed', summary: 'offline' })
+  await runTool(`spa-worker-${ticket.id}`, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'failed', summary: 'offline' })
   await runtime.engine.retryTicket(ticket.id)
   await runtime.idle()
   expect(runs()).toHaveLength(1)
@@ -1091,7 +1091,7 @@ it('runs the prepare command once for a new ticket, under the execution root wit
 
 it('counts a ticket whose directory the host prepared before prepare commands existed as prepared', async () => {
   const { ticket, sessionId } = await acceptedTicket()
-  await runTool(sessionId, 'personal_agent_report', { state: 'failed', summary: 'offline' })
+  await runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'failed', summary: 'offline' })
   // A ticket from before prepare commands has its worktree.
   const stored = runtime.store.tickets.get(ticket.id)!
   runtime.store.tickets.save({ ...stored, execution: { ...stored.execution!, directory } })
@@ -1219,7 +1219,7 @@ it('resumes several ended tickets on one thread from one message without the lau
   await receive(another)
   await runTool(first.sessionId, 'personal_agent_trigger_handback', { trigger_id: another.id, reason: 'Another change.' })
   const second = await acceptedTicket(another)
-  for (const ticket of [first, second]) await runTool(ticket.sessionId, 'personal_agent_report', { state: 'dropped', summary: 'nothing to do' })
+  for (const ticket of [first, second]) await runTool(ticket.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'dropped', summary: 'nothing to do' })
   await receive(feishu('32', '还有问题', { mentions: [], root_id: 'om_1', sender_id: 'ou_guest' }))
   await vi.waitFor(() => expect([first, second].map(ticket => runtime.store.tickets.get(ticket.ticket.id)!.ended)).toEqual([undefined, undefined]), { timeout: 3000 })
   await vi.waitFor(() => expect([first, second].map(ticket => runtime.store.tickets.get(ticket.ticket.id)!.assignments.at(-1)!.state)).toEqual(['running', 'running']), { timeout: 3000 })
@@ -1227,7 +1227,7 @@ it('resumes several ended tickets on one thread from one message without the lau
 
 it('attaches a message to an ended ticket and so resumes it', async () => {
   const { ticket, sessionId } = await acceptedTicket()
-  await runTool(sessionId, 'personal_agent_report', { state: 'dropped', summary: 'nothing to do' })
+  await runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'dropped', summary: 'nothing to do' })
   const other = feishu('40', '@bot 上次那个改动还要改一下', { root_id: undefined })
   await receive(other)
   await route({ kind: 'attach', ticket_id: ticket.id, trigger_id: other.id })
@@ -1322,12 +1322,12 @@ it('records a report, the PR it binds and its relay together, or none of them', 
   deliveries.mockClear()
   const before = runtime.store.tickets.get(ticket.id)!
   // A report the Engine refuses binds no PR, though the PR itself could be bound.
-  await expect(runTool(sessionId, 'personal_agent_report', { state: 'ready', summary: 'done', pr_number: 42, human_action: 'Ship it?' })).rejects.toThrow()
+  await expect(runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: 'done', pr_number: 42, human_action: 'Ship it?' })).rejects.toThrow()
   // A PR the pull request rules refuse records no report.
   vi.mocked(Commands.prototype.gh).mockImplementation(async args => args[1]?.includes('/pulls/')
     ? { state: 'open', user: { login: 'someone' }, html_url: 'https://github.com/acme/widgets/pull/7', head: { ref: 'feature/other', sha: 'h', repo: { full_name: 'acme/widgets' } } }
     : { default_branch: 'master', permissions: { push: true } })
-  await expect(runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'pr open', pr_number: 7, human_action: 'Desktop too?' })).rejects.toThrow()
+  await expect(runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'pr open', pr_number: 7, human_action: 'Desktop too?' })).rejects.toThrow()
   const after = runtime.store.tickets.get(ticket.id)!
   expect(after).not.toHaveProperty('follows')
   expect(after).not.toHaveProperty('attention')
@@ -1351,7 +1351,7 @@ it('tells the main Session of each requeue of the same Trigger', async () => {
 it('preserves bounded publications and rejects oversized standalone IM replies and acknowledgements', async () => {
   const { ticket, trigger, sessionId } = await acceptedTicket()
   const long = Array.from({ length: IM_WORDS + 1 }, () => 'word').join(' ')
-  await runTool(sessionId, 'personal_agent_report', { state: 'ready', summary: 'reviewed' })
+  await runTool(sessionId, 'personal_agent_report', { publication: { mode: 'publish', version: 1, blocks: [{ type: 'text', text: 'reviewed', format: 'markdown' }] }, state: 'ready', summary: 'reviewed' })
   await runtime.idle()
   const lark = vi.mocked(Commands.prototype.lark), calls = lark.mock.calls.length
   await expect(runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'result', text: long })).resolves.toEqual({ status: 'sent' })
@@ -1418,7 +1418,7 @@ it('releases the database and the state directory lock when it fails to start, s
 
 it('tells the conversation that the PR merged when work a restart recovered ends with it later', async () => {
   const { ticket, sessionId } = await acceptedTicket()
-  await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'pr open', pr_number: 42 })
+  await runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'pr open', pr_number: 42 })
   // The host restarted with the worker mid-work: its Assignment starts again with a recovery note.
   const before = runtime.store.tickets.get(ticket.id)!
   runtime.engine.assignmentInterrupted(ticket.id, runningAssignment(before)!.id)
@@ -1432,7 +1432,7 @@ it('tells the conversation that the PR merged when work a restart recovered ends
   const id = key('pr-terminal', '42', 'feishu', JSON.stringify({ chatId: CHAT, messageId: 'om_1' }), 'merged')
   expect(runtime.store.replyStatus(id)).toBeUndefined()
   // Its ready report ends the ticket with the PR, and the conversation hears of the merge once.
-  await runTool(sessionId, 'personal_agent_report', { state: 'ready', summary: 'Recovered and verified' })
+  await runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: 'Recovered and verified' })
   expect(runtime.store.tickets.get(ticket.id)!.ended).toMatchObject({ outcome: 'merged' })
   expect(runtime.store.replyStatus(id)).toBeDefined()
   // The report that ended the ticket was the worker's own: its turn is not cancelled inside that tool call.
@@ -1441,7 +1441,7 @@ it('tells the conversation that the PR merged when work a restart recovered ends
 
 it('restarts a worker that was mid-work when the host stopped with the recovery note, and records no end of its turn', async () => {
   const { ticket, sessionId } = await acceptedTicket()
-  await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'halfway' })
+  await runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'halfway' })
   // Stopping cancels the worker's turn: it goes idle and reports the abort as an error, which a stopping host takes as no end.
   const agent = agents.get(sessionId)! as { status: string; cancel: ReturnType<typeof vi.fn> }
   const stopping = (runtime as unknown as { ctx: Context }).ctx
@@ -1462,7 +1462,7 @@ it('restarts a worker that was mid-work when the host stopped with the recovery 
 it('keeps the report of a blocked, failed or ready worker whose turn ends, and relays nothing more', async () => {
   for (const state of ['blocked', 'failed', 'ready'] as const) {
     const { ticket, sessionId } = await acceptedTicket(feishu(String(20 + ['blocked', 'failed', 'ready'].indexOf(state)), `@bot 修 ${state}`, { root_id: undefined }))
-    await runTool(sessionId, 'personal_agent_report', { state, summary: `${state} report` })
+    await runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state, summary: `${state} report` })
     const relayed = relays(runtime.masterId).length
     const agent = agents.get(sessionId)! as { status: string }
     agent.status = 'idle'
@@ -1654,7 +1654,7 @@ it('shows the settings history when one revision holds values its Source kind no
 
 it('restarts a worker whose shell job the host stop ended with the recovery note, as a worker mid-work', async () => {
   const { ticket, sessionId } = await acceptedTicket()
-  await runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'running the tests' })
+  await runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'running the tests' })
   // Its turn ended with a test run in the background, so it is busy, not waiting.
   jobs.run(sessionId)
   const agent = agents.get(sessionId)! as { status: string }

@@ -1,7 +1,7 @@
 /** Immutable content-addressed files referenced by durable result records. */
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { constants } from 'node:fs'
-import { mkdir, open } from 'node:fs/promises'
+import { mkdir, open, link, unlink } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { z } from 'zod'
 import { artifactBytes } from '../personal/artifacts.ts'
@@ -24,11 +24,16 @@ export class ArtifactFiles {
     const file = StoredFileSchema.parse({ digest: hash(bytes), size: bytes.length, fileName: basename(path),
       mediaType: mediaTypes[extname(path).toLowerCase()] ?? 'application/octet-stream' })
     await mkdir(this.root, { recursive: true, mode: 0o700 })
-    let handle
-    try { handle = await open(join(this.root, file.digest), constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600) }
-    catch (error) { if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error }
-    if (handle) { try { await handle.writeFile(bytes); await handle.sync() } finally { await handle.close() } }
-    await this.read(file)
+    const temporary = join(this.root, `.${file.digest}-${randomUUID()}`)
+    const handle = await open(temporary, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600)
+    try {
+      try { await handle.writeFile(bytes); await handle.sync() } finally { await handle.close() }
+      try { await link(temporary, join(this.root, file.digest)) }
+      catch (error) { if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error }
+      await this.read(file)
+      const directory = await open(this.root, constants.O_RDONLY)
+      try { await directory.sync() } finally { await directory.close() }
+    } finally { await unlink(temporary) }
     return { file, bytes }
   }
   /** Validate the persisted descriptor and digest before bytes cross a channel boundary. */

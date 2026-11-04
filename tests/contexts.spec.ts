@@ -36,7 +36,7 @@ it('retains separate source records through routing, attempts, worker reports an
     const body = await h.runTool(sessionId, 'personal_agent_read', { resource: `context/${first.id}` })
     expect(JSON.stringify(body)).toContain('owner-account')
     expect(first.traceId).not.toBe('external-trace')
-    await h.runTool(sessionId, 'personal_agent_report', { state: 'progress', summary: 'Drafting the travel plan.' })
+    await h.runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'Drafting the travel plan.' })
     const waiting = h.runtime.store.tickets.get(ticket.id)!.assignments.at(-1)!
     const oldReport = `${waiting.id}:${waiting.report!.at}`
     expect(h.runtime.store.contexts.refs('report', oldReport)).toEqual([first])
@@ -49,7 +49,7 @@ it('retains separate source records through routing, attempts, worker reports an
     h.runtime.store.db.exec("DELETE FROM kv WHERE key LIKE 'personal-context%'")
     const migrated = new Store(join(h.directory, 'orchestrator.sqlite'))
     try { expect(migrated.contexts.refs('report', oldReport)).toEqual([first]) } finally { migrated.close() }
-    await h.runTool(sessionId, 'personal_agent_report', { state: 'ready', summary: 'Travel plan is ready.' })
+    await h.runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: 'Travel plan is ready.' })
     await h.runtime.idle()
     const updated = h.runtime.store.tickets.get(ticket.id)!, assignment = updated.assignments.at(-1)!
     expect(h.runtime.store.contexts.refs('report', `${assignment.id}:${assignment.report!.at}`)).toContainEqual(first)

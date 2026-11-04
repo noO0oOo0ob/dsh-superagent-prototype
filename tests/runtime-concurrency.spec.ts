@@ -365,7 +365,7 @@ describe('a worker whose work runs in the background', () => {
   it('leaves the background work of a turn a person started in the worker\'s Session after a hand-off to that turn', async () => {
     const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
     const agent = h.agents.get(one.sessionId)!
-    await h.runTool(one.sessionId, 'personal_agent_report', { state: 'blocked', summary: 'Which color?' }); await h.runtime.idle()
+    await h.runTool(one.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'blocked', summary: 'Which color?' }); await h.runtime.idle()
     // A person answers in the worker's Session, which the ticket does not record; the turn starts a subagent and a job.
     await new Promise(resolve => setTimeout(resolve, 5))
     h.ctx.emit('agent/inbox/claimed', { agent, message: { id: 'typed', role: 'user', content: [], source: { kind: 'user' } }, turn: 2 } as never)
@@ -384,7 +384,7 @@ describe('a worker whose work runs in the background', () => {
     const ticket = () => h.runtime.store.tickets.get(one.ticket.id)!
     // A second server, left too; then a note from the orchestrator wakes the worker, whose turn ends without a report.
     const server = h.jobs.run(one.sessionId, 'pnpm preview')
-    await h.runTool(one.sessionId, 'personal_agent_report', { state: 'ready', summary: 'Preview up' }); await h.runtime.idle()
+    await h.runTool(one.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: 'Preview up' }); await h.runtime.idle()
     idle(one.sessionId); await h.runtime.idle()
     await vi.waitFor(() => expect(h.jobs.service.wait).toHaveBeenCalledWith(server, expect.any(Number), one.sessionId, expect.anything()))
     await new Promise(resolve => setTimeout(resolve, 5))
@@ -398,7 +398,7 @@ describe('a worker whose work runs in the background', () => {
   it('records each end of a worker\'s turn on its Assignment, also after its ready report', async () => {
     const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
     h.runtime.engine.bindThread(one.ticket.id, { source: 'github', id: '7' }, true)
-    await h.runTool(one.sessionId, 'personal_agent_report', { state: 'ready', summary: 'PR ready' }); await h.runtime.idle()
+    await h.runTool(one.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: 'PR ready' }); await h.runtime.idle()
     const report = latestAssignment(h.runtime.store.tickets.get(one.ticket.id)!)!.report!
     await new Promise(resolve => setTimeout(resolve, 5))
     idle(one.sessionId); await h.runtime.idle()
@@ -408,7 +408,7 @@ describe('a worker whose work runs in the background', () => {
     const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
     idle(one.sessionId)
     await vi.waitFor(() => expect(latestAssignment(h.runtime.store.tickets.get(one.ticket.id)!)?.report?.state).toBe('waiting'))
-    await h.runTool(one.sessionId, 'personal_agent_report', { state: 'progress', summary: 'On it again' })
+    await h.runTool(one.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'On it again' })
     const page = await h.api('GET', `tickets/${one.ticket.id}`)
     expect((page.body as { assignments: Record<string, unknown>[] }).assignments[0]).not.toHaveProperty('turnEndedAt')
   })
@@ -416,7 +416,7 @@ describe('a worker whose work runs in the background', () => {
     const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
     const ticket = () => h.runtime.store.tickets.get(one.ticket.id)!
     h.runtime.engine.bindThread(one.ticket.id, { source: 'github', id: '7' }, true)
-    await h.runTool(one.sessionId, 'personal_agent_report', { state: 'ready', summary: 'PR ready' }); await h.runtime.idle()
+    await h.runTool(one.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: 'PR ready' }); await h.runtime.idle()
     idle(one.sessionId); await h.runtime.idle()
     // A person asks for more; the worker acknowledges it, starts the work in the background and its turn ends.
     await new Promise(resolve => setTimeout(resolve, 5))
@@ -435,7 +435,7 @@ describe('a worker whose work runs in the background', () => {
     const ticket = () => h.runtime.store.tickets.get(one.ticket.id)!
     // The ticket follows its pull request, so a ready report leaves it open.
     h.runtime.engine.bindThread(one.ticket.id, { source: 'github', id: '7' }, true)
-    await h.runTool(one.sessionId, 'personal_agent_report', { state: 'ready', summary: 'PR ready' })
+    await h.runTool(one.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: 'PR ready' })
     idle(one.sessionId); await h.runtime.idle()
     expect(h.runtime.executor.activeCount()).toBe(0)
     // A person asks for more; the worker starts the tests in the background and ends its turn.
@@ -508,7 +508,7 @@ describe('a worker whose work runs in the background', () => {
     const agent = h.agents.get(one.sessionId)!
     h.runtime.engine.bindThread(one.ticket.id, { source: 'github', id: '7' }, true)
     h.subagents.spawn(one.sessionId)
-    await h.runTool(one.sessionId, 'personal_agent_report', { state: 'ready', summary: 'PR ready' }); await h.runtime.idle()
+    await h.runTool(one.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: 'PR ready' }); await h.runtime.idle()
     // A person's message is on its way into the worker's Session, held there, as the worker hands off; the release is slow.
     const session = deferred(), drain = deferred(), release = h.subagents.service.drainChildren.getMockImplementation()!
     h.subagents.service.drainChildren.mockImplementationOnce(async (parent, ids) => { await drain.promise; await release(parent, ids) })
@@ -560,7 +560,7 @@ describe('a worker whose work runs in the background', () => {
     const one = await handsOff({ state: 'blocked', summary: 'Which color?' })
     const agent = h.agents.get(one.sessionId)!
     const server = h.jobs.run(one.sessionId, 'pnpm dev')
-    await h.runTool(one.sessionId, 'personal_agent_report', { state: 'blocked', summary: 'Which size?' }); await h.runtime.idle()
+    await h.runTool(one.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'blocked', summary: 'Which size?' }); await h.runtime.idle()
     idle(one.sessionId)
     await vi.waitFor(() => expect(h.jobs.service.wait).toHaveBeenCalledWith(server, expect.any(Number), one.sessionId, expect.anything()))
     // The server ends while the host stops, after it cancelled the workers.
@@ -583,7 +583,7 @@ describe('a worker whose work runs in the background', () => {
     const agent = h.agents.get(one.sessionId)!
     h.subagents.settle(h.subagents.spawn(one.sessionId))
     // Its ready report ends the ticket, and it ends its own turn.
-    await h.runTool(one.sessionId, 'personal_agent_report', { state: 'ready', summary: 'Done' })
+    await h.runTool(one.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: 'Done' })
     await h.runtime.idle(); await new Promise(resolve => setTimeout(resolve, 10))
     expect(agent.cancel).not.toHaveBeenCalled()
     // A release that fails after the ends woke the worker still cancels that turn.
@@ -633,7 +633,7 @@ describe('what a worker read', () => {
   /** A ticket its worker completed, and a person's thanks on its thread, which resumes it once received. */
   async function completed() {
     const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
-    await h.runTool(one.sessionId, 'personal_agent_report', { state: 'ready', summary: 'Done' }); await h.runtime.idle()
+    await h.runTool(one.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: 'Done' }); await h.runtime.idle()
     idle(one.sessionId)
     await later()
     return { one, thanks: feishu('2', '@bot 谢谢', { root_id: 'om_1' }), ticket: () => h.runtime.store.tickets.get(one.ticket.id)! }
@@ -659,12 +659,12 @@ describe('what a worker read', () => {
     const pass = failing(one.sessionId, '谢谢')
     h.runtime.receive(thanks); await h.runtime.idle()
     expect(ticket().delivery).toBeDefined()
-    await h.runTool(one.sessionId, 'personal_agent_report', { state: 'progress', summary: 'Looking' })
+    await h.runTool(one.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'progress', summary: 'Looking' })
     pass()
     // The retry steers the message in while the worker writes that nothing is left, and no step takes it before.
     await retried(async () => {
       expect(ticket().undelivered).toEqual([])
-      await h.runTool(one.sessionId, 'personal_agent_report', { state: 'dropped', summary: 'Nothing to do' })
+      await h.runTool(one.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'dropped', summary: 'Nothing to do' })
     })
     expect(h.candidates()).toContain(thanks.id)
   })
@@ -726,7 +726,7 @@ describe('what a worker read', () => {
     h.runtime.receive(thanks); await h.runtime.idle()
     h.step(one.sessionId)
     await later()
-    await h.runTool(one.sessionId, 'personal_agent_report', { state: 'dropped', summary: 'Nothing to do' })
+    await h.runTool(one.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'dropped', summary: 'Nothing to do' })
     await h.runtime.pump(); await h.runtime.idle()
     expect(h.candidates()).not.toContain(thanks.id)
   })
@@ -741,7 +741,7 @@ describe('what a worker read', () => {
     await retried(async () => {
       expect(h.agents.get(one.sessionId)!.status).toBe('running')
       vi.setSystemTime(Date.now() + 1000)
-      await h.runTool(one.sessionId, 'personal_agent_report', { state: 'dropped', summary: 'Nothing to do' })
+      await h.runTool(one.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'dropped', summary: 'Nothing to do' })
     })
     expect(h.candidates()).not.toContain(thanks.id)
   })
@@ -749,7 +749,7 @@ describe('what a worker read', () => {
     const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
     const ticket = () => h.runtime.store.tickets.get(one.ticket.id)!
     h.runtime.engine.bindThread(one.ticket.id, { source: 'github', id: '7' }, true)
-    await h.runTool(one.sessionId, 'personal_agent_report', { state: 'ready', summary: 'PR ready' }); await h.runtime.idle()
+    await h.runTool(one.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: 'PR ready' }); await h.runtime.idle()
     // A person's thanks reaches the worker after the step of its report, and its turn ends with no step taking it.
     await later()
     const thanks = feishu('2', '@bot 谢谢', { root_id: 'om_1' })
@@ -800,7 +800,7 @@ it('tells a passing failure of the provider or the network from one that a later
 })
 it('reports a worker waiting when its turn ends after a person answered its blocked report', async () => {
   const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
-  await h.runTool(one.sessionId, 'personal_agent_report', { state: 'blocked', summary: 'Which color?' })
+  await h.runTool(one.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'blocked', summary: 'Which color?' })
   // The person answers later than the report.
   await new Promise(resolve => setTimeout(resolve, 5))
   h.runtime.receive(feishu('2', '蓝色', { mentions: [], root_id: 'om_1' })); await h.runtime.idle()
@@ -818,7 +818,7 @@ it('resumes an ended ticket a person wrote to during a pause once it lifts, unde
   }
   const ended = async (id: string) => {
     const { ticket, sessionId } = await h.acceptedTicket(feishu(id, `@bot 修${id}`, { root_id: `om_${id}` }))
-    await h.runTool(sessionId, 'personal_agent_report', { state: 'ready', summary: 'Done.' })
+    await h.runTool(sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'ready', summary: 'Done.' })
     return ticket.id
   }
   const first = await ended('1'), second = await ended('3')
