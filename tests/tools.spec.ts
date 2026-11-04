@@ -246,13 +246,19 @@ it('ignores a proactive candidate from its card beside other decisions, marked s
   ])
 })
 
-it('returns where a reply stands: sent, or dropped when its conversation can no longer receive it', async () => {
+it('preserves a sent publication receipt and reports a new publication dropped when its conversation is gone', async () => {
   const { ticket, sessionId } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
   await h.runTool(sessionId, 'personal_agent_report', { state: 'ready', summary: 'Done.' })
   const reply = (text: string) => h.runTool(h.runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'result', text })
   expect(await reply('修好了。')).toEqual({ status: 'sent' })
-  vi.mocked(Commands.prototype.lark).mockRejectedValue(new CliError('the message was withdrawn', 230011))
-  expect(await reply('修好了，请看 PR。')).toEqual({ status: 'dropped' })
+  const next = await h.acceptedTicket(feishu('2', '@bot 修一下另一处回归'))
+  const lark = vi.mocked(Commands.prototype.lark), calls = lark.mock.calls.length
+  lark.mockRejectedValue(new CliError('the message was withdrawn', 230011))
+  expect(await reply('修好了，请看 PR。')).toEqual({ status: 'sent' })
+  expect(lark.mock.calls).toHaveLength(calls)
+  await h.runTool(next.sessionId, 'personal_agent_report', { state: 'ready', summary: 'Another fix.' })
+  expect(await h.runTool(h.runtime.masterId, 'personal_agent_reply', { ticket_id: next.ticket.id, purpose: 'result', text: '另一处也修好了。' }))
+    .toEqual({ status: 'dropped' })
 })
 
 it('checks an acknowledgement against the IM word limit, not a character count', async () => {

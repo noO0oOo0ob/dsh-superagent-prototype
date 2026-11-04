@@ -2,7 +2,8 @@
 import { UserError } from './errors.ts'
 import { followupOwners, reached, threadKey } from './model.ts'
 import type { Thread, ThreadRef, Ticket, Trigger } from './model.ts'
-import type { Assessor, AssessmentOutcome, DomainEvent, DomainEvents, Executor, Outbox, Policy, Repositories, SourceScope } from './ports.ts'
+import type { Assessor, AssessmentOutcome, DomainEvent, DomainEvents, Executor, OutboundMessage, Outbox, Policy, Repositories, SourceScope } from './ports.ts'
+import type { ReplyTarget } from './replies.ts'
 
 export interface EngineOptions {
   repo: Repositories
@@ -12,6 +13,8 @@ export interface EngineOptions {
   assessor: Assessor
   executor: Executor
   outbox: Outbox
+  /** Resolve an authorized reply destination to its immutable publication and shared delivery ID. */
+  resolveReply?: (target: ReplyTarget) => OutboundMessage | undefined
   /** Validate application-owned scheduled messages before subscription fanout. */
   beforeReceive?: (trigger: Trigger) => void
   /** Check current application grants before automatically adding a subscribed Trigger to a ticket. */

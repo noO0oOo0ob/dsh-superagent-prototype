@@ -182,6 +182,7 @@ export class Runtime extends Service implements SourceHost {
         settings: () => store.settings(), paused: () => this.paused(), threadContext: trigger => sources.threadContext(trigger),
         deliver: (id, text) => sessions.prompt(masterId, id, text, 'steer'), candidateCard: candidate => candidateCard(links, candidate) })
       const outbox = this.outbox = new Outbox({ store, effects, sources, commands, paused: () => this.paused(),
+        current: message => !message.attentionId || store.tickets.get(message.ticketId ?? '')?.attention?.id === message.attentionId,
         onStatus: (message, status) => {
           const ticket = message.ticketId ? store.tickets.get(message.ticketId) : undefined
           if (!ticket) return
@@ -189,12 +190,13 @@ export class Runtime extends Service implements SourceHost {
           this.hooks.record({ version: 1, kind: 'delivery.status', id: key('delivery', message.id, status, at), at,
             taskId: ticket.id, contexts: store.contexts.references(ticketContexts(ticket)), deliveryId: message.id, status })
         } })
-      this.results = new Results({ store, effects, sessions, outbox, masterId, vault: this.vault, port: ctx.webServer.port,
+      this.results = new Results({ store, effects, outbox, masterId, vault: this.vault, port: ctx.webServer.port,
         onSaved: result => this.hooks.record({ version: 1, kind: 'result.saved', id: key('hook-result', result.id), at: result.at,
           taskId: result.ticketId, resultId: result.id, contexts: result.contexts, artifactIds: this.vault.list(result.id).map(item => item.id) }) })
       const { assessor, executor } = this
       const policy = () => scheduledPolicy(settingsPolicy(store.settings(), sources), this.schedules)
       const engine = this.engine = new Engine({ repo: store, scope: sources, policy, assessor, executor,
+        resolveReply: target => this.results.replyMessage(target),
         beforeReceive: trigger => {
           if (trigger.source !== 'schedule') return
           const origin = this.schedules.originFor(trigger)

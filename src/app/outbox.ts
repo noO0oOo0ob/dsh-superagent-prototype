@@ -11,6 +11,8 @@ export interface OutboxHost {
   readonly effects: Pick<Effects, 'enqueue' | 'cancel' | 'handle' | 'idle'>
   readonly sources: Pick<SourceRegistry, 'instance' | 'channelAllowed' | 'send'>
   readonly commands: Commands
+  /** A superseded publication settles without calling its Source. */
+  current?(message: OutboundMessage): boolean
   onStatus?(message: OutboundMessage, status: 'pending' | 'sending' | 'sent' | 'dropped' | 'cancelled' | 'unknown'): void
   paused(): boolean
 }
@@ -41,6 +43,7 @@ export class Outbox implements OutboxPort {
     const { store, sources, commands } = this.host
     const receipt = store.receipts.get(id)
     if (receipt?.status !== 'pending') return
+    if (this.host.current?.(receipt) === false) { store.receipts.settle(receipt, 'channelGone'); this.host.onStatus?.(receipt, 'dropped'); return }
     if (!sources.instance(receipt.channel.source)?.enabled) throw new Later('The Source is off or not installed')
     // Hold later messages for the same ticket and conversation behind an earlier pending message until it exceeds the failure threshold.
     if (store.receipts.behind(id, FAILURES_BEFORE_ERROR)) throw new Later('An earlier message of this ticket to this conversation waits')

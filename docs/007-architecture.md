@@ -328,7 +328,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/core/context.ts` | Stable source context references and logged model projections |
 | `src/app/contexts.ts` | Immutable source context records and task, attempt, report, Session and delivery relations |
 | `src/app/main-input.ts` | Native Main Session request capture and explicit background delegation |
-| `src/app/results.ts` | Durable result snapshots, automatic delivery and escaped local result views |
+| `src/app/results.ts` | Durable result snapshots, shared automatic/manual publication receipts and escaped local result views |
 | `src/app/runtime.ts` | The Runtime, the composition root, with its start and stop |
 | `src/app/setup.ts` | Setup, and `setupChanged`, whether a save changes a field setup reads |
 | `src/app/passes.ts` | Passes, the pass scheduler |
@@ -434,6 +434,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/panel-source.spec.tsx` | Personal feature lifecycle and isolation checks |
 | `tests/panel-trigger.spec.tsx` | Personal feature lifecycle and isolation checks |
 | `tests/personal-integration.spec.ts` | Personal feature lifecycle and isolation checks |
+| `tests/result-delivery.spec.ts` | Shared publication receipts, uncertain sends, restart recovery, new results and Connector redelivery |
 | `tests/personal-tools.spec.ts` | Personal feature lifecycle and isolation checks |
 | `tests/repositories.spec.ts` | Personal feature lifecycle and isolation checks |
 | `tests/routing.spec.ts` | Personal feature lifecycle and isolation checks |

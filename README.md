@@ -12,6 +12,8 @@ Start with [SETUP.md](SETUP.md), or follow the [phase-one local inbox walkthroug
 
 Personal settings provide account discovery and selection for dsh-im, Obsidian exports, repository resources, schedules, hooks and explicit cross-conversation routing. The retained GitHub adapter still watches one repository; this does not limit local tasks or workspace preparation.
 
+Automatic results and Main's reply tool share a persistent delivery receipt per result and destination. Rewording a reply or restarting the plugin does not resend a published result. Switching a bot from ordinary dsh-im chats requires a separate handover: those chats do not share this plugin's intake ledger. See [Connector ownership and handover](docs/014-connectors.md#consumer-mode-handover).
+
 ## Documentation
 
 Read the numbered documents in order; each builds only on the ones before it.

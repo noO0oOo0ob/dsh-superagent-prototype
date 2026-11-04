@@ -32,7 +32,14 @@ export class MainInput {
       channel: { allowed: address => address.sessionId === host.masterId,
         link: () => ({ url: '', label: { zh: '主会话', en: 'Main Session' } }),
         send: async (_source, message) => {
-          await host.sessions.prompt(host.masterId, `main-reply:${message.id}`, message.text, { inject: message.text })
+          const current = () => !message.attentionId || host.store.tickets.get(message.ticketId ?? '')?.attention?.id === message.attentionId
+          if (!current()) return 'gone'
+          const superseded = new Error('The question was superseded before delivery')
+          try {
+            // Preserve the original result request ID so pre-upgrade Session deliveries also deduplicate.
+            await host.sessions.prompt(host.masterId, message.resultId ? `result:${message.resultId}` : `main-reply:${message.id}`,
+              message.text, { inject: message.text }, () => { if (!current()) throw superseded })
+          } catch (error) { if (error === superseded) return 'gone'; throw error }
           return 'sent'
         } },
     }

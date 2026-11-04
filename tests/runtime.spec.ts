@@ -1348,11 +1348,17 @@ it('tells the main Session of each requeue of the same Trigger', async () => {
   expect(requeued()).toBe(2)
 })
 
-it('keeps replies and acknowledgements to an IM conversation within the IM limit', async () => {
+it('preserves bounded publications and rejects oversized standalone IM replies and acknowledgements', async () => {
   const { ticket, trigger, sessionId } = await acceptedTicket()
   const long = Array.from({ length: IM_WORDS + 1 }, () => 'word').join(' ')
   await runTool(sessionId, 'personal_agent_report', { state: 'ready', summary: 'reviewed' })
-  await expect(runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'result', text: long })).rejects.toThrow(`maximum is ${IM_WORDS}`)
+  await runtime.idle()
+  const lark = vi.mocked(Commands.prototype.lark), calls = lark.mock.calls.length
+  await expect(runTool(runtime.masterId, 'personal_agent_reply', { ticket_id: ticket.id, purpose: 'result', text: long })).resolves.toEqual({ status: 'sent' })
+  expect(lark.mock.calls).toHaveLength(calls)
+  const question = feishu('99', 'A separate quick question')
+  await receive(question)
+  await expect(runTool(runtime.masterId, 'personal_agent_reply', { trigger_id: question.id, purpose: 'answer', text: long })).rejects.toThrow(`maximum is ${IM_WORDS}`)
   const follow = feishu('3', '还有一个问题', { mentions: [], root_id: trigger.meta.messageId as string, sender_id: MEMBER })
   await receive(follow)
   await expect(runTool(sessionId, 'personal_agent_ack', { trigger_id: follow.id, text: long })).rejects.toThrow(`at most ${IM_WORDS} words`)
