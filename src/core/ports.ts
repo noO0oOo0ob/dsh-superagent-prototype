@@ -84,6 +84,7 @@ export interface Outbox {
 
 /** What the Engine reports after a change, by event type. */
 export interface DomainEvents {
+  'assignment.reported': { ticketId: string; assignmentId: string; replyTo?: string }
   'trigger.received': { triggerId: string; threads: string[] }
   'eval.started': { evalId: string; threadKey: string; triggerIds: string[]; strength: Strength }
   'decision.recorded': { decisionId: string; kind: DecisionKind; threadKey: string }

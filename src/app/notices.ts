@@ -109,7 +109,7 @@ export function followupRelay(message: { trigger_id: string },
 export function resultRelay(ticket: Ticket, state: string, text: string, replyTo?: string): Relay {
   const id = key('spa-worker-result', ticket.id, ticket.updatedAt, text)
   const summary = text.length > 600 ? { summary: text.slice(0, 600), chars: text.length } : { summary: text }
-  const report = { kind: 'worker_report', ticket: brief(ticket), trigger_id: ticket.origin.triggerId, source_contexts: ticketContexts(ticket), state, ...replyTo ? { answer_to: replyTo } : {},
+  const report = { kind: 'worker_report', automatic_delivery: true, ticket: brief(ticket), trigger_id: ticket.origin.triggerId, source_contexts: ticketContexts(ticket), state, ...replyTo ? { answer_to: replyTo } : {},
     ...summary, read: `ticket/${ticket.id}/result` }
   return { id: `report:${id}`, text: JSON.stringify(report) }
 }
@@ -123,7 +123,7 @@ export function reportRelay(ticket: Ticket, report: Pick<WorkerReport, 'state' |
   const asked = report.question ? ticket.attention : undefined
   if (asked) {
     return { id: `attention:${ticket.id}:${asked.id}`,
-      text: JSON.stringify({ kind: 'worker_attention', ticket: brief(ticket), state: report.state, read: `ticket/${ticket.id}/result` }) }
+      text: JSON.stringify({ kind: 'worker_attention', automatic_delivery: true, ticket: brief(ticket), state: report.state, read: `ticket/${ticket.id}/result` }) }
   }
   if (report.state === 'progress' && !report.answers) return undefined
   return resultRelay(ticket, report.state, report.summary, report.answers)

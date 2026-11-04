@@ -26,6 +26,20 @@ beforeEach(() => {
 afterEach(() => { store.close(); rmSync(directory, { recursive: true, force: true }) })
 const relay = (text: string) => ({ text })
 
+it('reserves an effect before its handler drains another kind', async () => {
+  const notice = vi.fn(async () => {})
+  const run = vi.fn(async () => {
+    effects.enqueue('notice', 'nested', { value: {}, summary: 'Done' })
+    await effects.idle('notice')
+  })
+  effects.handle('notice', notice)
+  effects.handle('relay', run)
+  effects.enqueue('relay', 'outer', relay('go'))
+  await effects.idle()
+  expect(run).toHaveBeenCalledOnce()
+  expect(notice).toHaveBeenCalledOnce()
+})
+
 it('runs an effect queued inside a transaction once it commits, and none from a transaction that rolled back', async () => {
   const run = vi.fn(async () => {})
   effects.handle('relay', run)

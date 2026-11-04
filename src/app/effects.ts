@@ -9,6 +9,8 @@ import type { HealthBoard, HealthEntry } from '../infra/health.ts'
 import type { Store } from './store.ts'
 
 export interface EffectPayloads {
+  /** Publish a persisted result to the Main Session and the source channel. */
+  result: { id: string }
   /** Build an Eval's candidate card and relay it to the main Session; the key is the Eval ID. */
   assessment: { triggerId: string }
   /** Launch a pending Assignment; the key is the Assignment ID. */
@@ -122,10 +124,10 @@ export class Effects {
   }
   private run(kind: EffectKind, handler: Handler<never>, row: Row): void {
     const task: Task = { kind, key: row.key, done: Promise.resolve() }
+    this.tasks.add(task)
     task.done = this.attempt(kind, handler, row)
       .catch((error: unknown) => { this.failed(kind, error) })
       .finally(() => { this.tasks.delete(task); this.kick() })
-    this.tasks.add(task)
   }
   private async attempt(kind: EffectKind, handler: Handler<never>, row: Row): Promise<void> {
     let failure: { error: unknown } | undefined

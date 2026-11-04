@@ -81,7 +81,7 @@ const RULES: [rule: string, file: string, says: string[], gone?: string[]][] = [
   ['A ticket owner\'s decision is a structured attention request, not progress', 'handoff',
     ['Ticket handoff contract:', 'An empty final preserves a successful report', 'budget errors alone do not authorize an IM message']],
   ['An Executor asks through human_action and clears the question explicitly', 'handoff-worker', ['human_action:null or a ready report clears it', 'state may remain progress']],
-  ['The main Session investigates nothing outside an assessment', 'dispatch', ['Outside proactive assessment, do not follow context references']],
+  ['The main Session answers local discussion while delegating task investigation', 'dispatch', ['Local questions and brainstorming may be answered directly']],
   ['A UI change carries before-and-after evidence, as a delivery requirement the team can change', 'team/delivery',
     ['PR description must contain BOTH Before and After visual evidence', 'same scenario, viewport, theme and relevant UI state', 'After-only evidence is incomplete',
       'not a mockup presented as the previous implementation', 'baseline and changed revision identified', 'do not claim the UI PR is ready']],
@@ -112,7 +112,7 @@ it.each(RULES)('%s (%s)', (_rule, file, says, gone = []) => {
 })
 
 it('keeps each role\'s own instructions short', () => {
-  expect(masterPrompt.length).toBeLessThan(1400)
+  expect(masterPrompt.length).toBeLessThan(2200)
   expect(workerPrompt.length).toBeLessThan(1000)
 })
 

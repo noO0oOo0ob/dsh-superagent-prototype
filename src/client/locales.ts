@@ -42,6 +42,7 @@ const TEXT = {
   'health.delivery': ['输入送达', 'Input delivery to Assignments'],
   'health.relay': ['转达给主 Session 的消息', 'Relays to the main Session'],
   'health.notice': ['给主 Session 的通知', 'Notices to the main Session'],
+  'health.result': ['任务结果送达', 'Result delivery'],
   'health.reply': ['发往渠道的消息', 'Messages to Channels'],
   'health.worker': ['执行器事件处理', 'Executor event handling'],
   'health.evals': ['未完成的评估', 'Unavailable Evals'],

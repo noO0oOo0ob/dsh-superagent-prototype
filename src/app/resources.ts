@@ -19,9 +19,11 @@ import type { Settings } from './settings.ts'
 import { KV } from '../kv.ts'
 import type { Store } from './store.ts'
 import type { TextCache } from './cache.ts'
+import type { Results } from './results.ts'
 
 /** Resource descriptors exposed via personal_agent_read, marking which resources worker sessions may also read for their own ticket. */
 export const RESOURCES: readonly { name: string; holds: string; executor?: true }[] = [
+  { name: 'result/<id>', holds: 'one immutable result snapshot, its source references and local result URL', executor: true },
   { name: 'context/<id>', holds: 'immutable source context, trace reference and original metadata; restricted to this worker’s reachable triggers', executor: true },
   { name: 'tickets', holds: 'ticket cards, newest first; a card\'s state is person/review after a ready report, person/blocked or person/failed after those reports, person/answer with a question, person/delivery when an input could not reach the worker, working or working/queued while it works, idle once the worker ended its turn without a report, else how the ticket ended' },
   { name: 'triggers', holds: 'trigger cards with where each went, newest first' },
@@ -63,6 +65,7 @@ export interface ResourceHost {
   readonly prompts: Pick<Prompts, 'current' | 'version' | 'history' | 'skills' | 'defaultChanged'>
   readonly commands: Commands
   readonly masterId: string
+  readonly results?: Results
   readonly context: Context
   promptVersion(sessionId: string): PromptVersion
   /** Whether a Session may read `revision` (the revision it currently runs under or any revision it ran under previously). */
@@ -117,6 +120,12 @@ async function transcript(host: ResourceHost, ticketId: string) {
 }
 
 const ROUTES: readonly Route[] = [
+  ['result/', read => {
+    const result = read.host.results?.get(read.rest)
+    if (!result) throw new Error('Unknown result')
+    if (read.ticketId && result.ticketId !== read.ticketId) throw new Error('Result does not belong to this worker')
+    return text(read, JSON.stringify(result))
+  }],
   ['context/', read => {
     const record = read.host.store.contexts.get(read.rest)
     if (!record) throw new Error('Unknown source context')

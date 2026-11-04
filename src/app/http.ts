@@ -27,6 +27,7 @@ import { settingsView } from './views/settings.ts'
 import { sourcesStatus, type SetupState } from './views/sources.ts'
 import { decisionList, search, threadDetail, threadList } from './views/threads.ts'
 import { executorLoad, ticketDetail, ticketList } from './views/tickets.ts'
+import { resultHtml, type Results } from './results.ts'
 
 export interface HttpHost {
   readonly store: Store
@@ -41,6 +42,7 @@ export interface HttpHost {
   readonly health: Record<string, Health>
   readonly machine: Machine
   readonly masterId: string
+  readonly results?: Results
   /** Resolves once startup finishes or setup determines what is still missing. */
   readonly ready: Promise<void>
   /** Resolved deployment; throws if read while waiting for setup (`!configured()`). */
@@ -77,6 +79,16 @@ export function sameOrigin(req: Pick<IncomingMessage, 'headers'>, port: number):
   const host = req.headers.host
   if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return false
   return req.headers['x-super-personal-agent-request'] === '1' && (req.headers.origin === undefined || req.headers.origin === `http://${host}`)
+}
+/** Allows local result navigation from either supported loopback origin, without allowing cross-origin embedding. */
+export function resultNavigationAllowed(headers: IncomingMessage['headers'], port: number): boolean {
+  const allowed = new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`])
+  if (!allowed.has(`http://${headers.host}`) || headers.origin !== undefined && !allowed.has(headers.origin)) return false
+  const site = headers['sec-fetch-site']
+  if (site === undefined || site === 'none' || site === 'same-origin') return true
+  try { return typeof headers.referer === 'string' && allowed.has(new URL(headers.referer).origin)
+    && headers['sec-fetch-mode'] === 'navigate' && headers['sec-fetch-dest'] === 'document' }
+  catch { return false }
 }
 /** Maps errors to HTTP status codes and structured payloads that the panel localizes in the interface language. */
 function failure(error: unknown): [number, Record<string, unknown>] {
@@ -234,6 +246,17 @@ export function registerHttp(ctx: Context, runtime: HttpHost): () => void {
   const disposers = [
     ctx.webServer.register({ kind: 'prefix', path: '/super-personal-agent', handler: async (req, res) => {
       const url = new URL(req.url ?? '/', 'http://localhost')
+      if (url.pathname.startsWith('/super-personal-agent/result/') && req.method === 'GET') {
+        if (!resultNavigationAllowed(req.headers, ctx.webServer.port)) {
+          json(res, 403, { error: 'Local result navigation required' }); return
+        }
+        await runtime.ready
+        const result = runtime.results?.get(url.pathname.slice('/super-personal-agent/result/'.length))
+        if (!result) { json(res, 404, { error: 'Result not found' }); return }
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
+          'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'", 'referrer-policy': 'no-referrer' })
+        res.end(resultHtml(result)); return
+      }
       if (!url.pathname.startsWith('/super-personal-agent/api/')) { res.writeHead(404); res.end(); return }
       if (!sameOrigin(req, ctx.webServer.port)) { json(res, 403, { error: 'Same-origin management request required' }); return }
       try {

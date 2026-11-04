@@ -179,7 +179,7 @@ export class Sessions {
   /** Injects a notice into the main Session without waking it; no-op if the main Session does not exist yet. */
   private async inject(name: string, value: Record<string, unknown>, summary: string): Promise<void> {
     const resolved = await this.ctx.sessionController.resolveAgent(this.host.masterId as SessionId)
-    if ('error' in resolved) return
+    if ('error' in resolved) throw new Error('Main Session is unavailable; notification remains queued')
     // Deduplicate by notice name and payload hash so retries are idempotent while updated payloads still deliver.
     const text = JSON.stringify(value)
     await this.agentDelivery.send(resolved.agent, `notice:${name}:${key(text)}`, text, { inject: summary }, this.host.lifetime)
