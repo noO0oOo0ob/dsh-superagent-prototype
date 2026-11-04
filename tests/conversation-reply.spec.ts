@@ -1,7 +1,7 @@
 /** Addressed IM conversation receives a checked reply without creating background work. */
 import { afterEach, expect, it, vi } from 'vitest'
 import { key, UserError } from '../src/core/index.ts'
-import { ImEventSchema, type DshImService } from '../src/connectors/dsh-im.ts'
+import { ImEventSchema, type ConnectorService } from '../src/connectors/protocol.ts'
 import { decisionCard } from '../src/app/cards.ts'
 import { decisionView, snapshot, triggerView } from '../src/app/views/records.ts'
 import { startRuntime } from './fixtures/host.ts'
@@ -12,9 +12,9 @@ async function conversation(kind: 'dm' | 'group' = 'dm', mentioned = false, text
   const h = await startRuntime(store => store.saveSettings({ ...store.settings(), sources: {} }))
   cleanups.push(() => h.stop())
   const fingerprint = 'b'.repeat(64)
-  let consumer: Parameters<DshImService['consumeInbound']>[1] | undefined
-  const replyChecked = vi.fn<DshImService['replyChecked']>(async () => ({ sent: true }))
-  const service: DshImService = {
+  let consumer: Parameters<ConnectorService['consumeInbound']>[1] | undefined
+  const replyChecked = vi.fn<ConnectorService['replyChecked']>(async () => ({ sent: true }))
+  const service: ConnectorService = {
     contractVersion: 1, inboundVersion: 1,
     listBots: async () => [{ botId: 'bot', channel: 'feishu' }],
     describeBot: async () => ({ version: 1, botId: 'bot', channel: 'feishu', connected: true, account: { fingerprint },

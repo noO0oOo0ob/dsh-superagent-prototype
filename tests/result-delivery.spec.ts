@@ -3,7 +3,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, expect, it, vi } from 'vitest'
 import { key } from '../src/core/index.ts'
-import { ImEventSchema, type DshImService } from '../src/connectors/dsh-im.ts'
+import { ImEventSchema, type ConnectorService } from '../src/connectors/protocol.ts'
 import { Runtime } from '../src/app/runtime.ts'
 import { resultRecords } from '../src/app/results.ts'
 import { startRuntime, type Host } from './fixtures/host.ts'
@@ -15,9 +15,9 @@ async function imTask() {
   const h = await startRuntime(store => store.saveSettings({ ...store.settings(), sources: {} }))
   cleanups.push(() => h.stop())
   const fingerprint = 'a'.repeat(64)
-  const consumers = new Map<string, Parameters<DshImService['consumeInbound']>[1]>()
-  const replyChecked = vi.fn<DshImService['replyChecked']>(async () => ({ sent: true }))
-  const service: DshImService = {
+  const consumers = new Map<string, Parameters<ConnectorService['consumeInbound']>[1]>()
+  const replyChecked = vi.fn<ConnectorService['replyChecked']>(async () => ({ sent: true }))
+  const service: ConnectorService = {
     contractVersion: 1, inboundVersion: 1, listBots: async () => [{ botId: 'bot', channel: 'feishu' }],
     describeBot: async () => ({ version: 1, botId: 'bot', channel: 'feishu', connected: true,
       account: { fingerprint }, capabilities: ['exclusive-text-consumer', 'reply-text-checked'] }),

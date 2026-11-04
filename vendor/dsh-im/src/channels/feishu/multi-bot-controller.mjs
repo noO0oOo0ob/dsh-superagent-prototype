@@ -138,6 +138,7 @@ function optionalNonEmptyString(value) {
 export class MultiBotDshFeishuController {
   #diagnostics;
   #registerApp;
+  #secretRefFor;
   #verifyApp;
   #credentials;
   #configStore;
@@ -160,6 +161,7 @@ export class MultiBotDshFeishuController {
 
   constructor({
     registerApp,
+    secretRefForBot = secretRefFor,
     verifyApp,
     logger = console,
     credentials,
@@ -185,6 +187,7 @@ export class MultiBotDshFeishuController {
     }
     this.#diagnostics = createConnectionDiagnostics({ channel: 'feishu', logger });
     this.#registerApp = registerApp;
+    this.#secretRefFor = secretRefForBot;
     this.#verifyApp = verifyApp;
     this.#credentials = credentials;
     this.#configStore = configStore;
@@ -471,7 +474,7 @@ export class MultiBotDshFeishuController {
         || (!existing && this.#configStore.getBot(botId))) {
         throw new Error('Bot id generator returned an invalid or duplicate id');
       }
-      const secretRef = existing?.secretRef ?? secretRefFor(botId);
+      const secretRef = existing?.secretRef ?? this.#secretRefFor(botId);
       const previousSecret = await atConnectionStage('credential.read', () => this.#credentials.resolve(secretRef), 'credential-store').catch(() => undefined);
       const config = {
         ...existing,
@@ -667,6 +670,21 @@ export class MultiBotDshFeishuController {
       this.#assertOpen('capability-unavailable');
       readSignal.throwIfAborted();
       return result;
+    });
+  }
+
+  async withNativeRoute(botId, route, operation, { expectedFingerprint, signal } = {}) {
+    this.#assertOpen();
+    return this.#withBotTransition(botId, async () => {
+      this.#assertOpen();
+      const config = this.#requireBot(botId);
+      const account = await this.#deliveryAccount(config);
+      this.#assertOpen();
+      signal?.throwIfAborted();
+      if (account.fingerprint !== expectedFingerprint) throw Object.assign(new Error('account-changed'), { code: 'account-changed' });
+      const runtime = this.#runtimes.get(botId);
+      if (!runtime || !isConnected(connectionStatus(runtime))) throw Object.assign(new Error('bot-not-connected'), { code: 'bot-not-connected' });
+      return runtime.withNativeRoute(route, operation, { signal });
     });
   }
 
@@ -1363,7 +1381,7 @@ export class MultiBotDshFeishuController {
       || (!existing && this.#configStore.getBot(botId))) {
       throw new Error('Bot id generator returned an invalid or duplicate id');
     }
-    const secretRef = existing?.secretRef ?? secretRefFor(botId);
+    const secretRef = existing?.secretRef ?? this.#secretRefFor(botId);
     const previousOwnership = this.#botOwnership.get(botId);
     const previousSecret = await atConnectionStage('credential.read', () => this.#credentials.resolve(secretRef), 'credential-store').catch(() => undefined);
     await atConnectionStage('credential.save', () => this.#credentials.set(secretRef, appSecret), 'credential-store');

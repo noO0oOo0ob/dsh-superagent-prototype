@@ -34,6 +34,8 @@ import type { Routing } from '../personal/routing.ts'
 import { ScheduleConflict, type Schedules } from '../personal/schedules.ts'
 import type { Hooks } from '../personal/hooks.ts'
 import type { Effects } from './effects.ts'
+import type { NativeFeishu } from '../connectors/native-feishu.mjs'
+import type { MessageDelivery } from '../messaging/delivery.ts'
 import type { Connectors } from './connectors.ts'
 
 export interface HttpHost {
@@ -52,6 +54,8 @@ export interface HttpHost {
   readonly results?: Results
   readonly personal?: PersonalSettings
   readonly connectors?: Connectors
+  readonly nativeFeishu?: NativeFeishu
+  readonly messageDelivery?: MessageDelivery
   readonly vault?: Vault
   readonly routing?: Routing
   readonly schedules?: Schedules
@@ -191,6 +195,19 @@ function routes(runtime: HttpHost): Routes {
       const saved = runtime.personal.save(value.config, value.revision)
       await runtime.connectors.refresh()
       return saved
+    },
+    'POST personal/feishu': async ({ body }) => {
+      if (!runtime.nativeFeishu) throw new RouteError(404, 'Native Feishu requires the DSH credentials service')
+      const input = z.object({ endpoint: z.string().min(1).max(100), payload: z.unknown() }).strict().parse(await body(64_000))
+      return runtime.nativeFeishu.rpc(input.endpoint, input.payload)
+    },
+    'GET personal/messages': () => runtime.messageDelivery?.list() ?? [],
+    'POST personal/messages/:id': async ({ params, body }) => {
+      if (!runtime.messageDelivery) throw new RouteError(404, 'Message center unavailable')
+      const input = z.object({ partId: z.string(), action: z.enum(['confirm_sent', 'retry']), note: z.string().trim().min(1).max(2000) }).strict().parse(await body())
+      runtime.messageDelivery.reconcile(params.id, input.partId, input.action, input.note)
+      runtime.effects?.enqueue('reply', params.id, {})
+      return { recorded: true }
     },
     'GET personal/bots': async () => ({ bots: await runtime.connectors?.discover() ?? [] }),
     'POST personal/deliveries/:id': async ({ params, body }) => {

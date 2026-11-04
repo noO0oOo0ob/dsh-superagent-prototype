@@ -124,6 +124,7 @@ export class FeishuRuntime {
   #sessionSyncTargetsFor;
   #ownerOpenIds;
   #harness;
+  #nativeCallbacks;
   #state;
   #contextEnhancement;
   #groupHistory;
@@ -164,6 +165,7 @@ export class FeishuRuntime {
     lark,
     consumerMode = 'standalone',
     acceptExternal,
+    nativeCallbacks = null,
     botId,
     appId,
     appSecret,
@@ -208,6 +210,7 @@ export class FeishuRuntime {
 
     this.#consumerMode = consumerMode;
     this.#acceptExternal = acceptExternal;
+    this.#nativeCallbacks = nativeCallbacks;
     this.#lark = lark;
     this.#botId = nonEmptyString(botId);
     this.#appId = appId;
@@ -237,7 +240,7 @@ export class FeishuRuntime {
     this.#replyTimeoutMs = replyTimeoutMs;
     this.#connectTimeoutMs = connectTimeoutMs;
     this.#requestTimeoutMs = requestTimeoutMs;
-    this.#slashCommands = consumerMode !== 'external-consumer' && Boolean(slashCommands);
+    this.#slashCommands = (consumerMode !== 'external-consumer' || nativeCallbacks !== null) && Boolean(slashCommands);
     this.#slashPanel = normalizeSlashPanelConfig(slashPanel);
     this.#wsAgent = wsAgent;
     this.#logger = logger; this.#diagnostics = createConnectionDiagnostics({ channel: 'feishu', logger });
@@ -416,7 +419,11 @@ export class FeishuRuntime {
         // subscribes card.action.trigger; the number-reply fallback covers
         // apps that do not).
         'card.action.trigger': (event) => {
-          if (!isCurrentStart() || this.#consumerMode === 'external-consumer') return;
+          if (!isCurrentStart()) return;
+          if (this.#consumerMode === 'external-consumer') {
+            if (this.#consumeCardActionProbe(event)) return;
+            return this.#nativeCallbacks?.onCard?.(event);
+          }
           this.#status.cardActionsReceived += 1;
           this.#status.lastCardActionAt = new Date().toISOString();
           if (!this.#consumeCardActionProbe(event)) void bridge.onCardAction(event);
@@ -791,6 +798,28 @@ export class FeishuRuntime {
     if (this.#client !== client)
       throw Object.assign(new Error('bot-not-connected'), { code: 'bot-not-connected' });
     return result;
+  }
+
+  async withNativeRoute(route, operation, { signal } = {}) {
+    if (!route || typeof route.messageId !== 'string' || typeof route.conversationId !== 'string'
+      || typeof route.actorId !== 'string')
+      throw Object.assign(new Error('bad-request'), { code: 'bad-request' });
+    const client = this.#client;
+    if (!client || this.#consumerMode !== 'external-consumer')
+      throw Object.assign(new Error('bot-not-connected'), { code: 'bot-not-connected' });
+    signal?.throwIfAborted();
+    let current;
+    try { current = await client.im.v1.message.get({ path: { message_id: route.messageId } }); }
+    catch (cause) { throw Object.assign(new Error('route-check-failed', { cause }), { code: 'route-check-failed' }); }
+    const source = current?.data?.items?.find(item => item.message_id === route.messageId);
+    if (current?.code || !source || source.deleted === true || source.chat_id !== route.conversationId
+      || source.sender?.sender_type !== 'user' || source.sender?.id_type !== 'open_id'
+      || source.sender?.id !== route.actorId || (source.thread_id || undefined) !== route.threadId
+      || (source.root_id || undefined) !== route.rootId || (source.parent_id || undefined) !== route.parentId)
+      throw Object.assign(new Error('stale-route'), { code: 'stale-route' });
+    signal?.throwIfAborted();
+    if (this.#client !== client) throw Object.assign(new Error('bot-not-connected'), { code: 'bot-not-connected' });
+    return operation({ client, channel: new VerifiedFeishuChannel({ client }) });
   }
 
   async replyChecked(route, text, { signal } = {}) {

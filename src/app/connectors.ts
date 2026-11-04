@@ -2,7 +2,7 @@
 import { z } from 'zod'
 import { key, type Trigger, type OutboundMessage } from '../core/index.ts'
 import { family } from '../kv.ts'
-import { ImBotSchema, ImEventSchema, ReplyRouteSchema, IM_PRE_SEND_FAILURES, imErrorCode, type DshImService, type ImEvent } from '../connectors/dsh-im.ts'
+import { ImBotSchema, ImEventSchema, ReplyRouteSchema, IM_PRE_SEND_FAILURES, imErrorCode, type ConnectorService, type ImEvent } from '../connectors/protocol.ts'
 import { ConnectorConfigSchema, type ConnectorConfig, type PersonalSettings } from '../personal/config.ts'
 import type { Settings } from '../policy.ts'
 import type { SourceKind } from '../sources/kind.ts'
@@ -22,7 +22,7 @@ interface ConnectorHost {
   receive(trigger: Trigger): unknown
   policyChanged(before: Settings, after: Settings): void
 }
-interface Connecting { signature: string; abort: AbortController; service: DshImService }
+interface Connecting { signature: string; abort: AbortController; service: ConnectorService }
 interface Active extends Connecting { release: () => void }
 const SourceConfigSchema = z.object({ binding: ConnectorConfigSchema.optional() }).strict()
 const messageId = (config: ConnectorConfig, conversationId: string, id: string) => key('dsh-im', config.id, config.fingerprint, conversationId, id)
@@ -43,7 +43,7 @@ function cancellable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> 
 
 /** Uses one exclusive consumer per configured account; no bot is discovered or enabled implicitly. */
 export class Connectors {
-  private service?: DshImService
+  private service?: ConnectorService
   private readonly registered = new Map<string, () => void>()
   private readonly active = new Map<string, Active>()
   private readonly connecting = new Map<string, Connecting>()
@@ -54,7 +54,7 @@ export class Connectors {
   private closed = false
   private binding = 0
   constructor(private readonly host: ConnectorHost) {}
-  bind(service: DshImService): () => void {
+  bind(service: ConnectorService): () => void {
     if (this.closed || this.host.lifetime.aborted) throw new Error('Connector manager is stopping')
     for (const id of this.active.keys()) this.release(id)
     for (const item of this.connecting.values()) item.abort.abort()
@@ -66,7 +66,7 @@ export class Connectors {
       this.service = undefined
       for (const id of this.active.keys()) this.release(id)
       for (const item of this.connecting.values()) item.abort.abort()
-      for (const [id, state] of this.states) if (state.state === 'ready') this.states.set(id, { state: 'waiting', detail: 'dsh-im service is unavailable' })
+      for (const [id, state] of this.states) if (state.state === 'ready') this.states.set(id, { state: 'waiting', detail: 'Native Connector service is unavailable' })
     }
   }
   async discover(): Promise<unknown[]> {
@@ -151,7 +151,7 @@ export class Connectors {
       if (!config.enabled) { this.release(config.id); this.states.set(config.id, { state: 'disabled', detail: 'Connector disabled' }); continue }
       if (this.active.has(config.id)) continue
       const service = this.service
-      if (!service) { this.states.set(config.id, { state: 'waiting', detail: 'dsh-im is not installed in this Host' }); continue }
+      if (!service) { this.states.set(config.id, { state: 'waiting', detail: 'Native account service is unavailable' }); continue }
       const abort = new AbortController(), signal = AbortSignal.any([abort.signal, this.host.lifetime])
       this.connecting.set(config.id, { signature: sig, abort, service })
       try {
@@ -267,26 +267,34 @@ export class Connectors {
     if (!service || !config?.enabled || !active || active.service !== service || active.signature !== signature(config)) throw new Error('Connector is unavailable')
     if (message.channel.source !== sourceId(id) || !this.allowed(config, message.channel.address)) throw new Error('Connector reply route is no longer allowed')
     const route = ReplyRouteSchema.parse(parseRoute(message.channel.address.route)), prior = this.host.store.get(deliveries(message.id))
-    const routeHash = key(JSON.stringify(route)), textHash = key(message.text)
+    const routeHash = key(JSON.stringify(route)), textHash = message.blocks ? key(message.text, JSON.stringify(message.blocks)) : key(message.text)
     if (prior && (prior.connectorId !== id || prior.fingerprint !== config.fingerprint || prior.routeHash !== routeHash || prior.textHash !== textHash)) throw new Error('Delivery identity changed')
     if (prior?.state === 'sent') return 'sent'
     if (prior?.state === 'gone') return 'gone'
     if (prior?.state === 'sending' || prior?.state === 'uncertain') throw new Error('Delivery outcome is unknown; inspect the conversation and reconcile before retrying')
+    if (service.deliverChecked) {
+      // The native message center owns all part outcomes, including crash recovery. Do not create a second send lock.
+      const response = await service.deliverChecked(config.botId, route, message,
+        { expectedFingerprint: config.fingerprint, signal: AbortSignal.any([active.abort.signal, this.host.lifetime]) })
+      z.object({ sent: z.literal(true) }).passthrough().parse(response)
+      return 'sent'
+    }
     const intent: ImDelivery = { id: message.id, connectorId: id, state: 'sending', at: new Date().toISOString(), fingerprint: config.fingerprint,
       routeHash, textHash, attempts: (prior?.attempts ?? 0) + 1, ...(prior?.resolution ? { resolution: prior.resolution } : {}) }
     this.host.store.set(deliveries(message.id), intent)
     this.sending.add(message.id)
     try {
-      const response = await service.replyChecked(config.botId, route, message.text, { expectedFingerprint: config.fingerprint,
-        signal: AbortSignal.any([active.abort.signal, this.host.lifetime]), format: 'markdown' })
+      const options = { expectedFingerprint: config.fingerprint, signal: AbortSignal.any([active.abort.signal, this.host.lifetime]) }
+      if (message.blocks?.some(block => block.type !== 'text')) throw unavailable('capability-unavailable')
+      const response = await service.replyChecked(config.botId, route, message.text, { ...options, format: 'markdown' })
       z.object({ sent: z.literal(true) }).passthrough().parse(response)
       this.host.store.set(deliveries(message.id), { ...intent, state: 'sent' })
       return 'sent'
     } catch (error) {
       const code = imErrorCode(error)
-      this.host.store.set(deliveries(message.id), { ...intent, state: code === 'stale-route' ? 'gone' : IM_PRE_SEND_FAILURES.has(code) ? 'retryable' : 'uncertain', error: code })
+      this.host.store.set(deliveries(message.id), { ...intent, state: code === 'stale-route' ? 'gone' : (IM_PRE_SEND_FAILURES.has(code) || code === 'delivery-incomplete') ? 'retryable' : 'uncertain', error: code })
       if (code === 'stale-route') return 'gone'
-      throw new Error(`IM reply: ${code}`)
+      throw new Error(`IM reply: ${code}`, { cause: error })
     } finally { this.sending.delete(message.id) }
   }
   async stop(): Promise<void> {

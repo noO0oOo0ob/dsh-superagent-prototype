@@ -15,7 +15,7 @@ The Personal Agent owns account onboarding, inbound commands, conversation conte
 
 1. [x] Pin and copy upstream Feishu/shared/UI source and focused tests.
 2. [x] Rich publication protocol, binary artifacts and durable part receipts.
-3. [ ] Native Feishu inbound and text/image/file delivery without dsh-im.
+3. [x] Native Feishu account lifecycle, text intake and text/image/file delivery without dsh-im. Attachment intake is completed with conversation integration.
 4. [ ] Stable conversation Threads, commands and isolated context generations.
 5. [ ] QR/manual onboarding and account management UI.
 6. [ ] Feishu interaction parity, Main/Vault presentation and failure recovery UI.

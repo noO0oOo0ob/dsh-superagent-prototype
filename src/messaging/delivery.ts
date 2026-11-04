@@ -1,4 +1,6 @@
 /** Durable per-destination, per-part delivery with explicit uncertain outcomes. */
+import { deliveryState } from './delivery-state.ts'
+export { deliveryState } from './delivery-state.ts'
 import { z } from 'zod'
 import { key, type OutboundMessage } from '../core/index.ts'
 import { family } from '../kv.ts'
@@ -21,13 +23,6 @@ export interface DeliveryAdapter {
 /** A failed operation is safe to retry only when the provider guarantees no message was accepted. */
 export class DeliveryFailure extends Error {
   constructor(readonly outcome: 'failed' | 'unknown' | 'unsupported', readonly code: string, options?: ErrorOptions) { super(code, options) }
-}
-export function deliveryState(record: DeliveryRecord): 'pending' | 'sent' | 'partial' | 'failed' | 'unknown' {
-  if (record.parts.every(part => part.state === 'sent')) return 'sent'
-  if (record.parts.some(part => part.state === 'unknown')) return 'unknown'
-  if (record.parts.some(part => part.state === 'sent')) return 'partial'
-  if (record.parts.some(part => ['failed', 'unsupported'].includes(part.state))) return 'failed'
-  return 'pending'
 }
 /** All publishers reuse the frozen first payload; retries address only unfinished parts. */
 export class MessageDelivery {

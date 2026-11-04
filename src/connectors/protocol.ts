@@ -1,4 +1,5 @@
-/** Public same-Host dsh-im v1 protocol, verified against @xmanrui/dsh-im 5.10.0. */
+/** Native Connector account, captured source and checked transport interfaces. */
+import type { OutboundMessage } from '../core/index.ts'
 import { z } from 'zod'
 
 const identifier = z.string().min(1).max(512)
@@ -18,18 +19,18 @@ export const ImEventSchema = z.object({ version: z.literal(1), channel: z.enum([
 export type ImEvent = z.infer<typeof ImEventSchema>
 export const ImBotSchema = z.object({ version: z.literal(1), botId: z.string().min(1), channel: z.string(), connected: z.boolean(),
   account: z.object({ fingerprint: z.string().regex(/^[0-9a-f]{64}$/), name: z.string().optional() }), capabilities: z.array(z.string()) }).passthrough()
-export interface DshImService {
+export interface ConnectorService {
   contractVersion: number
   inboundVersion: number
   listBots(): Promise<{ botId: string; channel: string }[]>
   describeBot(botId: string): Promise<unknown>
   consumeInbound(botId: string, options: { expectedFingerprint: string; signal: AbortSignal;
     onEvent(event: unknown, context: { signal: AbortSignal }): Promise<{ accepted: true }> }): Promise<() => void>
+  deliverChecked?(botId: string, route: ImReplyRoute, message: OutboundMessage, options: { expectedFingerprint: string; signal: AbortSignal }): Promise<{ sent: true }>
   replyChecked(botId: string, route: ImReplyRoute, text: string, options: { expectedFingerprint: string; signal: AbortSignal; format?: 'markdown' }): Promise<unknown>
   historyChecked?(botId: string, route: ImReplyRoute, query: { scope: 'group' | 'nearby' | 'thread'; limit: number; cursor?: string },
     options: { expectedFingerprint: string; signal: AbortSignal }): Promise<unknown>
 }
-declare module '@deepseek-ai/cordis' { interface Context { dshIm: DshImService } }
 
 /** Only documented failures that guarantee no external reply was attempted may be retried automatically. */
 export const IM_PRE_SEND_FAILURES = new Set(['account-unverified', 'account-changed', 'capability-unavailable', 'bot-not-connected',

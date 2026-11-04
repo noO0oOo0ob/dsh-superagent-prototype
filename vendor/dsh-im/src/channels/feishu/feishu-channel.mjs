@@ -425,8 +425,8 @@ export class VerifiedFeishuChannel {
       || !Buffer.isBuffer(file.bytes)) {
       throw new TypeError('A materialized result file is required');
     }
-    let uploaded;
-    try {
+    let uploaded = file.resourceKey ? { data: { file_key: file.resourceKey, image_key: file.resourceKey } } : undefined;
+    if (!uploaded) try {
       uploaded = await waitForFileOperation((operationSignal) => {
         operationSignal.throwIfAborted();
         const pending = messageType === 'image'
@@ -462,6 +462,7 @@ export class VerifiedFeishuChannel {
       throw fileDeliveryError('upload', undefined, uploaded?.code);
     }
 
+    file.onUploaded?.(resourceKey);
     const uuid = deliveryUuid(file, chatId, messageType);
     const content = JSON.stringify(messageType === 'image'
       ? { image_key: resourceKey }

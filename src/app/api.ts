@@ -26,6 +26,9 @@ type Delivery = 'injected' | 'pending'
 export interface Api {
   'GET personal': { response: { revision: number; config: PersonalConfig; connectors: Record<string, { state: string; detail: string }>; deliveries: ImDelivery[]; vault: VaultExport[]; routeDecisions: RouteDecision[]; schedules: ScheduleRecord[]; runs: ScheduleRun[]; hooks: HookDelivery[] } }
   'PUT personal': { body: { revision: number; config: unknown }; response: { revision: number; config: PersonalConfig } }
+  'POST personal/feishu': { body: { endpoint: string; payload: unknown }; response: unknown }
+  'GET personal/messages': { response: import('../messaging/delivery.ts').DeliveryRecord[] }
+  'POST personal/messages/:id': { body: { partId: string; action: 'confirm_sent' | 'retry'; note: string }; response: { recorded: true } }
   'GET personal/bots': { response: { bots: unknown[] } }
   'POST personal/deliveries/:id': { body: { action: 'confirm_sent' | 'retry'; note: string }; response: { recorded: true } }
   'POST personal/schedules': { body: { spec: unknown }; response: ScheduleRecord }

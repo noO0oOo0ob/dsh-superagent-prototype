@@ -51,6 +51,9 @@ import type { ResourceHost } from './resources.ts'
 import { mainTools, type MainToolsHost } from './tools/main.ts'
 import { executorTools, type ExecutorToolsHost } from './tools/executor.ts'
 import { MainInput } from './main-input.ts'
+import { createNativeFeishu, type NativeFeishu, type NativeAccount } from '../connectors/native-feishu.mjs'
+import { nativeConnectorConfigs } from '../connectors/native-accounts.ts'
+import { nativeDelivery } from '../connectors/native-delivery.ts'
 import { ArtifactFiles } from '../messaging/files.ts'
 import { MessageDelivery } from '../messaging/delivery.ts'
 import { Results } from './results.ts'
@@ -100,6 +103,7 @@ export class Runtime extends Service implements SourceHost {
   readonly routing: Routing
   readonly personal: PersonalSettings
   readonly connectors: Connectors
+  nativeFeishu?: NativeFeishu
   private readonly board = new HealthBoard()
   private readonly runtimeHealth = this.board.claim('runtime', { state: 'starting', detail: '' })
   readonly masterId: string
@@ -259,8 +263,7 @@ export class Runtime extends Service implements SourceHost {
       this.connectors = new Connectors({ store, sources, personal: this.personal, lifetime: this.lifetime, receive: trigger => passes.receive(trigger),
         policyChanged: (before, after) => engine.policyChanged(policyVersion(before), policyVersion(after),
           policyEffects(store.tickets.open(), before, after, settings => ({ scope: input => sources.scope(input, settings) }))) })
-      const imBinding = ctx.inject(['dshIm'], child => { child.effect(() => this.connectors.bind(child.dshIm)) })
-      this.disposers.push(() => { imBinding.dispose().catch(report) })
+
       this.sourceDeps = { store, engine, outbox, commands, sources, get ready() { return runtime.ready },
         get deployment() { return setup.deployment }, configured: () => setup.configured(),
         get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, get githubProblem() { return setup.githubProblem }, receive: trigger => passes.receive(trigger) }
@@ -276,6 +279,22 @@ export class Runtime extends Service implements SourceHost {
     }
   }
   get health(): Readonly<Record<string, Health>> { return this.board.all }
+  /** Native accounts are independent of any installed IM plugin. */
+  private async startNativeFeishu(): Promise<void> {
+    if (!this.ctx.get('credentials')) return
+    const native = await createNativeFeishu({ context: this.ctx, stateDir: this.machine.stateDir, lifetime: this.lifetime, logger: this.ctx.logger,
+      onAccounts: accounts => this.syncNativeAccounts(accounts) })
+    this.nativeFeishu = native
+    nativeDelivery(native, this.messageDelivery, this.results)
+    this.disposers.push(this.connectors.bind(native.service))
+    await native.start()
+  }
+  private async syncNativeAccounts(accounts: NativeAccount[]): Promise<void> {
+    const current = this.personal.view(), existing = current.config.connectors
+    const connectors = nativeConnectorConfigs(existing, accounts)
+    if (JSON.stringify(connectors) !== JSON.stringify(existing)) this.personal.save({ ...current.config, connectors }, current.revision)
+    await this.connectors.refresh()
+  }
   /** Aborted when dsh-super-personal-agent stops or loses its state directory lock, cancelling running reads and subprocesses. */
   get lifetime(): AbortSignal { return this.stopped.signal }
   context(kind: { kind: string; health: readonly string[] }): SourceContext { return sourceContextOf(this.sourceDeps, kind) }
@@ -317,6 +336,7 @@ export class Runtime extends Service implements SourceHost {
     this.executor.install()
     await this.sessions.ensure(this.masterId, this.machine.stateDir, 'dsh-super-personal-agent orchestrator', 'orchestrator')
     await this.main.restore()
+    await this.startNativeFeishu()
     await this.connectors.refresh()
     for (const id of this.settings.syncable()) await this.settings.sync(id).catch(() => { /* sync() records its failure in health. */ })
     // If stop() was called while awaiting setup, session creation, or policy sync, do not start background loops.
@@ -330,7 +350,7 @@ export class Runtime extends Service implements SourceHost {
     const runtime = this
     const { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, setup, passes } = this
     return { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, results: this.results,
-      personal: this.personal, connectors: this.connectors, vault: this.vault, routing: this.routing, schedules: this.schedules, hooks: this.hooks, effects: this.effects,
+      personal: this.personal, connectors: this.connectors, get nativeFeishu() { return runtime.nativeFeishu }, messageDelivery: this.messageDelivery, vault: this.vault, routing: this.routing, schedules: this.schedules, hooks: this.hooks, effects: this.effects,
       get deployment() { return setup.deployment },
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, get githubProblem() { return setup.githubProblem },
       configured: () => setup.configured(), links: () => runtime.links(), ticketEnvironment: ticket => runtime.ticketEnvironment(ticket),
@@ -343,6 +363,7 @@ export class Runtime extends Service implements SourceHost {
     this.main.dispose()
     try {
       await this.connectors.stop()
+      await this.nativeFeishu?.close()
       this.assessor.stop()
       const ids = [this.masterId, ...this.store.tickets.list().map(ticket => workerSessionId(ticket.id))]
       const agents = ids.map(id => this.ctx.agents.get(id as SessionId)).filter((agent): agent is Agent => agent !== undefined)

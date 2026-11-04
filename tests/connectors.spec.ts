@@ -6,13 +6,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Connectors } from '../src/app/connectors.ts'
 import { Store } from '../src/app/store.ts'
 import type { OutboundMessage, Trigger } from '../src/core/index.ts'
-import { ImEventSchema, type DshImService, type ImEvent } from '../src/connectors/dsh-im.ts'
+import { ImEventSchema, type ConnectorService, type ImEvent } from '../src/connectors/protocol.ts'
 import { ConnectorConfigSchema, PersonalSettings, type ConnectorConfig } from '../src/personal/config.ts'
 import { settingsPolicy, type Settings } from '../src/policy.ts'
 import { SourceRegistry } from '../src/sources/registry.ts'
 
 const fingerprint = 'a'.repeat(64), otherFingerprint = 'b'.repeat(64)
-type ConsumerOptions = Parameters<DshImService['consumeInbound']>[1]
+type ConsumerOptions = Parameters<ConnectorService['consumeInbound']>[1]
 const cleanups: (() => Promise<void>)[] = []
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); vi.restoreAllMocks() })
 
@@ -31,17 +31,17 @@ function event(fields: { botId?: string; fingerprint?: string; chat?: string; ac
 
 function fakeService() {
   const consumers = new Map<string, ConsumerOptions>(), releases: ReturnType<typeof vi.fn>[] = []
-  const describeBot = vi.fn<DshImService['describeBot']>(async botId => ({ version: 1, botId, channel: 'feishu', connected: true,
+  const describeBot = vi.fn<ConnectorService['describeBot']>(async botId => ({ version: 1, botId, channel: 'feishu', connected: true,
     account: { fingerprint: botId === 'bot-2' ? otherFingerprint : fingerprint }, capabilities: ['exclusive-text-consumer', 'reply-text-checked'] }))
-  const consumeInbound = vi.fn<DshImService['consumeInbound']>(async (botId, options) => {
+  const consumeInbound = vi.fn<ConnectorService['consumeInbound']>(async (botId, options) => {
     consumers.set(botId, options)
     const release = vi.fn(() => { if (consumers.get(botId) === options) consumers.delete(botId) })
     releases.push(release)
     return release
   })
-  const replyChecked = vi.fn<DshImService['replyChecked']>(async () => ({ sent: true }))
-  const historyChecked = vi.fn<NonNullable<DshImService['historyChecked']>>(async () => ({ events: [event()], hasMore: false }))
-  const service: DshImService = { contractVersion: 1, inboundVersion: 1, listBots: async () => [{ botId: 'bot-1', channel: 'feishu' }],
+  const replyChecked = vi.fn<ConnectorService['replyChecked']>(async () => ({ sent: true }))
+  const historyChecked = vi.fn<NonNullable<ConnectorService['historyChecked']>>(async () => ({ events: [event()], hasMore: false }))
+  const service: ConnectorService = { contractVersion: 1, inboundVersion: 1, listBots: async () => [{ botId: 'bot-1', channel: 'feishu' }],
     describeBot, consumeInbound, replyChecked, historyChecked }
   return { service, consumers, releases, describeBot, consumeInbound, replyChecked, historyChecked }
 }
@@ -343,4 +343,19 @@ describe('dsh-im Connector', () => {
     await h.connectors.refresh()
     expect(h.connectors.status().work).toMatchObject({ state: 'ready' })
   })
+})
+
+it('uses the native per-part ledger without leaving a second whole-message recovery lock', async () => {
+  const h = host()
+  const native = vi.fn<NonNullable<ConnectorService['deliverChecked']>>()
+  h.fake.service.deliverChecked = native
+  native.mockRejectedValueOnce(failure('delivery-incomplete')).mockResolvedValue({ sent: true })
+  await h.start()
+  const message = await h.outgoing()
+  const kind = h.sources.kind('im-work')!
+  await expect(kind.channel!.send!(undefined as never, message)).rejects.toThrow('delivery-incomplete')
+  expect(h.connectors.pending()).toEqual([])
+  await expect(kind.channel!.send!(undefined as never, message)).resolves.toBe('sent')
+  expect(native).toHaveBeenCalledTimes(2)
+  expect(h.fake.replyChecked).not.toHaveBeenCalled()
 })
