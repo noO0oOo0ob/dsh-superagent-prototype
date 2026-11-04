@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { CHAT, feishu, startRuntime, type Host } from './fixtures/host.ts'
 import { repliedTo } from '../src/app/links.ts'
 import { inputMessage } from '../src/executor/dsh.ts'
+import { messageContext } from '../src/core/context.ts'
 
 let h: Host | undefined
 afterEach(async () => { await h?.stop(); h = undefined })
@@ -19,7 +20,7 @@ it('delivers a follow-up to the worker and tells the main Session with a card, w
   h.runtime.receive(message)
   await h.runtime.idle()
   expect(h.relays(sessionId)).toEqual([expect.objectContaining({ trigger_id: message.id, text: '顺便把标题也改了' })])
-  expect(notices(h)).toEqual([{ kind: 'follow_up', trigger_id: message.id, from: 'ou_alice', thread: THREAD, at: message.at,
+  expect(notices(h)).toEqual([{ kind: 'follow_up', trigger_id: message.id, source_context: messageContext(message), from: 'ou_alice', thread: THREAD, at: message.at,
     text: '顺便把标题也改了',
     replies_to: { trigger_id: ticket.origin.triggerId, preview: '@bot 修一下回归' },
     delivered_to: [{ ticket_id: ticket.id, title: ticket.title, state: 'working' }],

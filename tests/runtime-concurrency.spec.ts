@@ -1,6 +1,7 @@
 /** Concurrent runtime behavior across overlapping triggers, deliveries, and worker launches. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { latestAssignment, waitsForPerson, type Ticket, type Trigger } from '../src/core/index.ts'
+import { messageContext } from '../src/core/context.ts'
 import { Later } from '../src/app/effects.ts'
 import { reportRelay } from '../src/app/notices.ts'
 import { WorkerSlots, inputMessage, mandateInstructions, ticketExecution, transient, triggerMessage } from '../src/executor/dsh.ts'
@@ -906,10 +907,10 @@ describe('the Executor\'s parts', () => {
       at: '2026-09-01T00:00:00Z', text: 'Which page?', meta: {} } as Trigger
     const reply = { ...asked, id: 'tr2', text: 'The login page. '.repeat(50) }
     const card = triggerMessage(reply, { source_url: 'https://x' }, 'see the log', asked)
-    expect(card).toEqual({ trigger_id: 'tr2', from: 'ou_a', thread: 'feishu:oc:om_1', at: '2026-09-01T00:00:00Z', text: expect.stringMatching(/^The login page\./),
+    expect(card).toEqual({ trigger_id: 'tr2', source_context: messageContext(reply), from: 'ou_a', thread: 'feishu:oc:om_1', at: '2026-09-01T00:00:00Z', text: expect.stringMatching(/^The login page\./),
       chars: reply.text.length, read: 'trigger/tr2', source_url: 'https://x', routing_note: 'see the log', replies_to: { trigger_id: 'tr1', preview: 'Which page?' } })
     expect(card.text).toHaveLength(601)
-    expect(triggerMessage(asked, {})).toEqual({ trigger_id: 'tr1', from: 'ou_a', thread: 'feishu:oc:om_1', at: asked.at, text: 'Which page?' })
+    expect(triggerMessage(asked, {})).toEqual({ trigger_id: 'tr1', source_context: messageContext(asked), from: 'ou_a', thread: 'feishu:oc:om_1', at: asked.at, text: 'Which page?' })
     expect(JSON.parse(inputMessage({ id: 'i1', kind: 'trigger', triggerId: 'tr2', at: '' }, card)!)).toEqual(card)
     expect(JSON.parse(inputMessage({ id: 'i1', kind: 'trigger', triggerId: 'gone', at: '' })!)).toEqual({ trigger_id: 'gone', read: 'trigger/gone' })
     expect(inputMessage({ id: 'i2', kind: 'text', at: '', text: 'Please also update the docs' })).toBe('Please also update the docs')
@@ -931,7 +932,7 @@ describe('the Executor\'s parts', () => {
   })
   it('relays a worker\'s question, result or answer to the main Session, and keeps its progress internal', () => {
     const ticket = { id: 't1', title: 'Fix', updatedAt: '2026-09-01T00:00:00Z', attention: { id: 'a1', question: 'Which color?' }, assignments: [],
-      mandate: { strength: 'explicit' }, origin: { triggerId: 'tr1' } } as unknown as Ticket
+      mandate: { strength: 'explicit' }, origin: { triggerId: 'tr1', triggerIds: ['tr1'] }, inputs: [] } as unknown as Ticket
     expect(reportRelay(ticket, { state: 'progress', summary: 'halfway' })).toBeUndefined()
     expect(reportRelay(ticket, { state: 'blocked', summary: 'need input', question: 'Which color?' }))
       .toMatchObject({ id: 'attention:t1:a1', text: expect.stringContaining('"kind":"worker_attention"') })

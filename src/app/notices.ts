@@ -6,6 +6,7 @@ import type { SourceRegistry } from '../sources/registry.ts'
 import { repliedTo } from './links.ts'
 import type { Store } from './store.ts'
 import { ticketCard } from './cards.ts'
+import { ticketContexts } from '../core/context.ts'
 
 /**
  * A background notice tuple for the main Session: `[name, value, summary]`, where `name` is the coalescing key in
@@ -108,7 +109,7 @@ export function followupRelay(message: { trigger_id: string },
 export function resultRelay(ticket: Ticket, state: string, text: string, replyTo?: string): Relay {
   const id = key('spa-worker-result', ticket.id, ticket.updatedAt, text)
   const summary = text.length > 600 ? { summary: text.slice(0, 600), chars: text.length } : { summary: text }
-  const report = { kind: 'worker_report', ticket: brief(ticket), trigger_id: ticket.origin.triggerId, state, ...replyTo ? { answer_to: replyTo } : {},
+  const report = { kind: 'worker_report', ticket: brief(ticket), trigger_id: ticket.origin.triggerId, source_contexts: ticketContexts(ticket), state, ...replyTo ? { answer_to: replyTo } : {},
     ...summary, read: `ticket/${ticket.id}/result` }
   return { id: `report:${id}`, text: JSON.stringify(report) }
 }

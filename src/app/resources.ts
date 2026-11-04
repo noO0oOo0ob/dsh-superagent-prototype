@@ -22,6 +22,7 @@ import type { TextCache } from './cache.ts'
 
 /** Resource descriptors exposed via personal_agent_read, marking which resources worker sessions may also read for their own ticket. */
 export const RESOURCES: readonly { name: string; holds: string; executor?: true }[] = [
+  { name: 'context/<id>', holds: 'immutable source context, trace reference and original metadata; restricted to this worker’s reachable triggers', executor: true },
   { name: 'tickets', holds: 'ticket cards, newest first; a card\'s state is person/review after a ready report, person/blocked or person/failed after those reports, person/answer with a question, person/delivery when an input could not reach the worker, working or working/queued while it works, idle once the worker ended its turn without a report, else how the ticket ended' },
   { name: 'triggers', holds: 'trigger cards with where each went, newest first' },
   { name: 'threads', holds: 'subscribed threads, newest activity first, with their labels, tickets, current assessment and polling errors' },
@@ -57,7 +58,7 @@ export const resourceGrammar = (executor: boolean): string => RESOURCES.filter(r
   .map(resource => `${resource.name}: ${resource.holds}`).join('; ')
 
 export interface ResourceHost {
-  readonly store: Pick<Store, 'get' | 'settings' | 'triggers' | 'tickets' | 'threads' | 'read' | 'decisions' | 'replyStatus'>
+  readonly store: Pick<Store, 'get' | 'settings' | 'triggers' | 'tickets' | 'threads' | 'read' | 'decisions' | 'replyStatus' | 'contexts'>
   readonly pages: TextCache
   readonly prompts: Pick<Prompts, 'current' | 'version' | 'history' | 'skills' | 'defaultChanged'>
   readonly commands: Commands
@@ -116,6 +117,12 @@ async function transcript(host: ResourceHost, ticketId: string) {
 }
 
 const ROUTES: readonly Route[] = [
+  ['context/', read => {
+    const record = read.host.store.contexts.get(read.rest)
+    if (!record) throw new Error('Unknown source context')
+    const original = trigger(read.host, record.ref.triggerId, read.ticketId)
+    return text(read, JSON.stringify({ ...record, metadata: original.meta }))
+  }],
   ['tickets', read => {
     const host = main(read), tickets = host.store.tickets.list()
     const card = (ticket: Ticket) => ({ ...ticketCard(ticket), ...host.sessions.modelRetry(runningAssignment(ticket) && workerSessionId(ticket.id)) })

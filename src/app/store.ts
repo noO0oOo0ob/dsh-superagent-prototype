@@ -9,6 +9,7 @@ import { SettingsSchema, type Settings, type SettingsOrigin, type SettingsSave }
 import { OLDEST_SCHEMA, SCHEMA_VERSION, migrateTo11, tooOld } from './migration.ts'
 import { Versions } from './versions.ts'
 import { storeReads } from './store-read.ts'
+import { Contexts } from './contexts.ts'
 
 /** A Trigger's position on its thread timeline, ordered by timestamp and then `id` as tie-breaker. */
 export interface TimelinePlace { at: string; id: string }
@@ -50,6 +51,7 @@ export { SCHEMA_VERSION }
  */
 export class Store implements Repositories {
   readonly db: DatabaseSync
+  readonly contexts = new Contexts(this)
   /**
    * Opens or creates the SQLite database at `path`, migrating schema 10 to schema 11 in a single transaction.
    * @param report - Receives errors thrown by `afterCommit` callbacks without failing the committed transaction.
@@ -88,6 +90,12 @@ export class Store implements Repositories {
           this.addColumns()
           if (migrating) migrateTo11(this)
           if (version !== SCHEMA_VERSION) this.set(KV.store.schema, SCHEMA_VERSION)
+          if (this.get<number>('personal-context-version') !== 1) {
+            for (const trigger of this.values<Trigger>('SELECT value FROM trigger')) this.contexts.capture(trigger)
+            for (const ticket of this.tickets.list()) this.contexts.ticket(ticket, true)
+            for (const message of this.values<OutboundMessage>('SELECT value FROM outbox')) this.contexts.delivery(message)
+            this.set('personal-context-version', 1)
+          }
         })
       } catch (error) {
         if (!migrating) throw error
@@ -203,6 +211,7 @@ export class Store implements Repositories {
     save: (trigger: Trigger): void => this.atomic(() => {
       this.db.prepare('INSERT INTO trigger VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value, at=excluded.at').run(trigger.id, JSON.stringify(trigger), trigger.at)
       this.indexThreads(trigger)
+      this.contexts.capture(trigger)
     }),
     disposition: (id: string): TriggerDisposition | undefined => { const row = this.db.prepare('SELECT value FROM disposition WHERE id=?').get(id); return row ? JSON.parse(String(row.value)) as TriggerDisposition : undefined },
     saveDisposition: (id: string, value: TriggerDisposition): void => { this.db.prepare('INSERT INTO disposition VALUES (?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value').run(id, JSON.stringify(value)) },
@@ -232,7 +241,10 @@ export class Store implements Repositories {
   }
   readonly tickets = {
     get: (id: string): Ticket | undefined => { const row = this.db.prepare('SELECT value FROM ticket WHERE id=?').get(id); return row ? JSON.parse(String(row.value)) as Ticket : undefined },
-    save: (ticket: Ticket): void => { this.db.prepare('INSERT INTO ticket VALUES (?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value').run(ticket.id, JSON.stringify(ticket)) },
+    save: (ticket: Ticket): void => this.atomic(() => {
+      this.db.prepare('INSERT INTO ticket VALUES (?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value').run(ticket.id, JSON.stringify(ticket))
+      this.contexts.ticket(ticket)
+    }),
     /** Newest first. */
     list: (): Ticket[] => this.values('SELECT value FROM ticket ORDER BY rowid DESC'),
     /** Newest first. */
@@ -265,7 +277,11 @@ export class Store implements Repositories {
      */
     add: (message: OutboundMessage): boolean => {
       const receipt: Receipt = { ...message, status: 'pending' }
-      return Number(this.db.prepare('INSERT OR IGNORE INTO outbox (id, value) VALUES (?, ?)').run(message.id, JSON.stringify(receipt)).changes) > 0
+      return this.atomic(() => {
+        const added = Number(this.db.prepare('INSERT OR IGNORE INTO outbox (id, value) VALUES (?, ?)').run(message.id, JSON.stringify(receipt)).changes) > 0
+        if (added) this.contexts.delivery(message)
+        return added
+      })
     },
     /**
      * Marks a pending receipt as sent or dropped (with drop reason and timestamp), recreating the receipt if the message

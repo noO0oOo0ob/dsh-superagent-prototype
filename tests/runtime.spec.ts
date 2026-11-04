@@ -23,6 +23,7 @@ import { feishuKind } from '../src/sources/feishu.ts'
 import { githubKind, pollRound } from '../src/sources/github.ts'
 import { CliError, Commands } from '../src/infra/commands.ts'
 import { UserError, key, runningAssignment, said, threadKey, waitsForPerson, type Trigger } from '../src/core/index.ts'
+import { messageContext } from '../src/core/context.ts'
 import { feishuTrigger } from '../src/sources/feishu.ts'
 import { feishuChannel } from '../src/sources/feishu-trigger.ts'
 import { commentTrigger, githubChannel } from '../src/sources/github-trigger.ts'
@@ -254,7 +255,7 @@ it('fans a person\'s later thread message out to the live worker as context and 
   expect(JSON.parse(((await runTool(sessionId, 'personal_agent_read', { resource })) as { text: string }).text)).toEqual(worker[0])
   expect(runtime.store.get(resource)).toBeUndefined()
   expect(runtime.store.tickets.get(ticket.id)!.inputs).toEqual([expect.objectContaining({ kind: 'trigger', triggerId: followup.id })])
-  expect(relays(runtime.masterId)).toEqual([{ kind: 'follow_up', trigger_id: followup.id, from: 'ou_guest', thread: `feishu:${CHAT}:om_1`,
+  expect(relays(runtime.masterId)).toEqual([{ kind: 'follow_up', trigger_id: followup.id, source_context: messageContext(followup), from: 'ou_guest', thread: `feishu:${CHAT}:om_1`,
     at: followup.at, text: '顺便看看日志', delivered_to: [{ ticket_id: ticket.id, title: '修复回归', state: 'working' }],
       note: expect.stringContaining('worker has it and decides') }])
   expect(runtime.store.decisions.byThread(`feishu:${CHAT}:om_1`).map(decision => decision.triggerIds)).toEqual([[ticket.origin.triggerId]])
