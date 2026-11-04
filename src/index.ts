@@ -18,8 +18,13 @@ export async function apply(ctx: Context, config: DeploymentConfig): Promise<voi
   const restart = (): void => {
     ctx.fiber.restart().then(() => { ctx.get('settings')?.describe() }).catch((error: unknown) => { ctx.logger.error('dsh-super-personal-agent restart failed: %s', String(error)) })
   }
-  const runtime = new Runtime(ctx, machine, restart)
-  ctx.effect(() => async () => { await runtime.stop() })
+  // Preset subprocess providers consume this service while Main Session initialization is still in progress.
+  // Publish it from a settled child fiber before the enclosing plugin waits for the Session.
+  let runtime!: Runtime
+  await ctx.plugin({ name: 'dsh-super-personal-agent-runtime', inject, apply(child: Context) {
+    runtime = new Runtime(child, machine, restart)
+    child.effect(() => async () => { await runtime.stop() })
+  } })
   await runtime.ready
   ctx.logger.info(runtime.configured() ? 'dsh-super-personal-agent ready; the super-personal-Agent sidebar entry opens the management panel' : `dsh-super-personal-agent is waiting for setup: ${runtime.setupProblem?.detail ?? ''}`)
 }
