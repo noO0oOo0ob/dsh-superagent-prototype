@@ -22,6 +22,8 @@ export function prepareFeishuBlocks(blocks: ContentBlock[], maxCharacters = 3500
 /** The transport never chooses recipients; it uses the validated captured route. */
 export function nativeDelivery(native: NativeFeishu, ledger: MessageDelivery, results: Results): void {
   native.service.deliverChecked = async (botId, route, message, options) => {
+    const kind = message.channel.address.conversationKind
+    const conversationKind = kind === 'dm' || kind === 'group' ? kind : undefined
     await ledger.deliver(message, { supported: ['text', 'image', 'file', 'link', 'card'], prepare: prepareFeishuBlocks,
       send: async (block, part) => {
         let file
@@ -29,7 +31,7 @@ export function nativeDelivery(native: NativeFeishu, ledger: MessageDelivery, re
           try { file = await results.materialize(block.artifactId) }
           catch (cause) { throw new DeliveryFailure('failed', 'artifact-unavailable', { cause }) }
         }
-        try { return await native.sendPart(botId, route, block, { ...part, ...options, ...(file ? { file } : {}) }) }
+        try { return await native.sendPart(botId, route, block, { ...part, ...options, conversationKind, ...(file ? { file } : {}) }) }
         catch (cause) {
           const outcome = cause instanceof Error && 'outcome' in cause ? cause.outcome : undefined
           const code = cause instanceof Error && 'code' in cause && typeof cause.code === 'string' ? cause.code : 'provider-outcome-unknown'

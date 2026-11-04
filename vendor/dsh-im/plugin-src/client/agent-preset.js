@@ -77,25 +77,25 @@ export function AgentPresetEditor({ agentPreset = '', disabled = false, onSave }
     }
   };
 
-  return h('div', { className: 'dim-preset' },
-    h('div', { className: 'dim-presetHeader' },
-      h('span', { className: 'dim-presetTitle' },
+  return h('div', { className: 'spa-im-preset' },
+    h('div', { className: 'spa-im-presetHeader' },
+      h('span', { className: 'spa-im-presetTitle' },
         h('span', null, 'Agent Preset'),
-        h('span', { className: 'dim-presetHelp' },
+        h('span', { className: 'spa-im-presetHelp' },
           h('button', {
             type: 'button',
-            className: 'dim-presetHelpButton',
+            className: 'spa-im-presetHelpButton',
             'aria-label': '查看 Agent Preset 说明',
             'aria-describedby': helpId,
           }, h('span', { 'aria-hidden': 'true' }, '?')),
           h('span', {
             id: helpId,
-            className: 'dim-presetTooltip',
+            className: 'spa-im-presetTooltip',
             role: 'tooltip',
           }, '只影响新建会话；若当前聊天已有会话，先发送 /new，再发送普通消息生效。'))),
-      saving ? h('span', { className: 'dim-presetStatus' }, '保存中…') : null),
+      saving ? h('span', { className: 'spa-im-presetStatus' }, '保存中…') : null),
     React.createElement('select', {
-      className: 'dim-presetSelect',
+      className: 'spa-im-presetSelect',
       value: current,
       disabled: disabled || saving,
       'aria-label': 'Agent Preset',
@@ -112,7 +112,7 @@ export function AgentPresetEditor({ agentPreset = '', disabled = false, onSave }
     ),
     error || currentUnavailable ? h(
       'p',
-      { className: 'dim-presetError', role: error ? 'alert' : 'status' },
+      { className: 'spa-im-presetError', role: error ? 'alert' : 'status' },
       error ?? '当前 Agent Preset 已不可用，请选择其他 Preset 或跟随 Host 默认。',
     ) : null,
   );

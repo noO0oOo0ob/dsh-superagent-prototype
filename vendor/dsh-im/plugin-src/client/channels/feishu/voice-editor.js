@@ -49,11 +49,11 @@ export function VoiceEditor({ value = null, disabled = false, onSave }) {
     if (!next) void persist(null);
   };
 
-  const input = (label, state, setState, placeholder) => h('label', { className: 'dim-feishuVoiceField' },
-    h('span', { className: 'dim-feishuVoiceLabel' }, label),
+  const input = (label, state, setState, placeholder) => h('label', { className: 'spa-im-feishuVoiceField' },
+    h('span', { className: 'spa-im-feishuVoiceLabel' }, label),
     h('input', {
       type: 'text',
-      className: 'dim-feishuVoiceInput',
+      className: 'spa-im-feishuVoiceInput',
       value: state,
       placeholder,
       disabled: disabled || saving,
@@ -62,29 +62,29 @@ export function VoiceEditor({ value = null, disabled = false, onSave }) {
   );
 
   return h('section', {
-    className: 'dim-feishuGroupControl',
+    className: 'spa-im-feishuGroupControl',
     "aria-labelledby": titleId,
   },
-  h('div', { className: 'dim-feishuGroupControlHeader' },
-    h('div', { className: 'dim-presetTitle' },
+  h('div', { className: 'spa-im-feishuGroupControlHeader' },
+    h('div', { className: 'spa-im-presetTitle' },
       h('h3', { id: titleId }, '语音交互'),
-      h('span', { className: 'dim-presetHelp' },
+      h('span', { className: 'spa-im-presetHelp' },
         h('button', {
           type: 'button',
-          className: 'dim-presetHelpButton',
+          className: 'spa-im-presetHelpButton',
           "aria-label": '查看语音交互说明',
           "aria-describedby": helpId,
         }, h('span', { "aria-hidden": 'true' }, '?')),
         h('span', {
           id: helpId,
-          className: 'dim-presetTooltip',
+          className: 'spa-im-presetTooltip',
           role: 'tooltip',
         }, '收到语音消息时转写为文字并按文字流水线处理,答案同时以语音回复;转写失败时降级为仅支持文字/图片/文件的提示。凭据值在插件凭据库里管理,这里只引用环境变量名。'))),
     saving
-      ? h('span', { className: 'dim-feishuGroupControlStatus', role: 'status' }, '保存中…')
+      ? h('span', { className: 'spa-im-feishuGroupControlStatus', role: 'status' }, '保存中…')
       : null),
   h('select', {
-    className: 'dim-feishuGroupSelect',
+    className: 'spa-im-feishuGroupSelect',
     value: enabled ? 'on' : 'off',
     disabled: disabled || saving,
     "aria-label": '语音交互开关',
@@ -93,23 +93,23 @@ export function VoiceEditor({ value = null, disabled = false, onSave }) {
   h('option', { value: 'off' }, '关闭'),
   h('option', { value: 'on' }, '开启(语音提问与语音回复)')),
   enabled
-    ? h('div', { className: 'dim-feishuVoiceForm' },
+    ? h('div', { className: 'spa-im-feishuVoiceForm' },
         input('凭据引用(环境变量名)', secretRef, setSecretRef, 'DASHSCOPE_API_KEY'),
         input('转写模型(ASR)', asrModel, setAsrModel, 'qwen3-asr-flash'),
         input('合成模型(TTS)', ttsModel, setTtsModel, 'qwen3-tts-flash'),
         input('回复音色', ttsVoice, setTtsVoice, 'Momo'),
-        h('p', { className: 'dim-feishuGroupHelp' },
+        h('p', { className: 'spa-im-feishuGroupHelp' },
           '需要 DashScope 密钥(凭据库中以"凭据引用"为名的环境变量)与可用 ffmpeg;音色支持 Cherry/Serena/Bella/Chelsie/Momo/Katerina 等 qwen3-tts-flash 官方音色。'),
-        h('div', { className: 'dim-feishuVoiceActions' },
+        h('div', { className: 'spa-im-feishuVoiceActions' },
           h('button', {
             type: 'button',
-            className: 'dim-feishuVoiceSave',
+            className: 'spa-im-feishuVoiceSave',
             onClick: () => void save(),
             disabled: disabled || saving || !secretRef.trim(),
           }, '保存语音设置')))
-    : h('p', { className: 'dim-feishuGroupHelp' }, '默认关闭;开启后机器人可听懂语音消息并以语音回复。'),
+    : h('p', { className: 'spa-im-feishuGroupHelp' }, '默认关闭;开启后机器人可听懂语音消息并以语音回复。'),
   error ? h('p', {
-    className: 'dim-feishuGroupError',
+    className: 'spa-im-feishuGroupError',
     role: 'alert',
   }, error) : null);
 }

@@ -11,6 +11,7 @@ import type { PluginConfigViewProps } from '@deepseek-ai/dsh-client-ui-plugin-ma
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { openKnownSession, SessionNavigationError } from '../navigation.ts'
+import { WorkspaceDirectoryPickerContext } from './native-ui.mjs'
 import { App } from './app.tsx'
 import { PluginConfig, usePageForm } from './deployment.tsx'
 import { en, zh } from './locales.ts'
@@ -42,7 +43,9 @@ function Mounted({ ctx, t }: { ctx: ClientContext; t: T }) {
     }
   }, [ctx, t])
   const form = usePageForm(ctx.get('configForms')?.get<Record<string, unknown>>(ENTRY))
-  return <App t={t} openSession={openSession} deploymentForm={form} />
+  return <WorkspaceDirectoryPickerContext.Provider value={{ listDirectory: (path, signal) => ctx.uiWorkspace.listDirectory(path, signal), pickDirectory: () => ctx.uiWorkspace.pickDirectory() }}>
+    <App t={t} openSession={openSession} deploymentForm={form} />
+  </WorkspaceDirectoryPickerContext.Provider>
 }
 
 export const inject = ['slots', 'locale', 'sessions', 'uiWorkspace']

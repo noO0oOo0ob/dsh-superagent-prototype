@@ -19,7 +19,7 @@ function SettingsButton({ children, kind = 'secondary', className = '', ...props
   return h('button', {
     ...props,
     type: 'button',
-    className: `dim-deliveryButton ${className}`.trim(),
+    className: `spa-im-deliveryButton ${className}`.trim(),
     'data-kind': kind,
   }, children);
 }
@@ -120,17 +120,17 @@ export function GroupResponseModeEditor({
   };
 
   return h('section', {
-    className: 'dim-feishuGroupControl',
-    'aria-labelledby': 'dim-feishu-group-response-title',
+    className: 'spa-im-feishuGroupControl',
+    'aria-labelledby': 'spa-im-feishu-group-response-title',
   },
-  h('div', { className: 'dim-feishuGroupControlHeader' },
-    h('h3', { id: 'dim-feishu-group-response-title' }, '群聊响应方式'),
+  h('div', { className: 'spa-im-feishuGroupControlHeader' },
+    h('h3', { id: 'spa-im-feishu-group-response-title' }, '群聊响应方式'),
     saving || authorizing
-      ? h('span', { className: 'dim-feishuGroupControlStatus', role: 'status' },
+      ? h('span', { className: 'spa-im-feishuGroupControlStatus', role: 'status' },
           saving ? '保存中…' : '正在准备授权…')
       : null),
   h('select', {
-    className: 'dim-feishuGroupSelect',
+    className: 'spa-im-feishuGroupSelect',
     value: current,
     disabled: disabled || saving,
     'aria-label': '群聊响应方式',
@@ -138,7 +138,7 @@ export function GroupResponseModeEditor({
   },
   h('option', { value: 'mention' }, '仅在 @机器人时响应（推荐）'),
   h('option', { value: 'all' }, '响应所有群消息')),
-  h('p', { className: 'dim-feishuGroupHelp' },
+  h('p', { className: 'spa-im-feishuGroupHelp' },
     current === 'mention'
       ? permissionGranted
         ? '私聊始终响应；群聊仅处理明确 @当前机器人的消息。群消息权限已开通，再次切换无需授权。'
@@ -147,7 +147,7 @@ export function GroupResponseModeEditor({
         ? '已开通“获取群组中所有消息”权限（im:message.group_msg）；机器人会处理群聊中的所有可见消息。'
         : '尚未确认“获取群组中所有消息”权限，请完成飞书授权。'),
   (current === 'all' || !permissionGranted)
-    ? h('div', { className: 'dim-feishuGroupPermissionAction' },
+    ? h('div', { className: 'spa-im-feishuGroupPermissionAction' },
         h(SettingsButton, {
           disabled: disabled || authorizationDisabled || saving || authorizing,
           'aria-busy': authorizing ? 'true' : undefined,
@@ -156,7 +156,7 @@ export function GroupResponseModeEditor({
         }, authorizing ? '正在准备…' : permissionGranted ? '重新授权' : '去授权'))
     : null,
   error ? h('p', {
-    className: 'dim-feishuGroupError',
+    className: 'spa-im-feishuGroupError',
     role: 'alert',
   }, error) : null);
 }
@@ -181,16 +181,16 @@ export function MentionTopicReplyEditor({ value = true, disabled = false, onSave
   };
 
   return h('section', {
-    className: 'dim-feishuGroupControl',
-    'aria-labelledby': 'dim-feishu-mention-topic-title',
+    className: 'spa-im-feishuGroupControl',
+    'aria-labelledby': 'spa-im-feishu-mention-topic-title',
   },
-  h('div', { className: 'dim-feishuGroupControlHeader' },
-    h('h3', { id: 'dim-feishu-mention-topic-title' }, '被 @ 时以话题方式回复'),
+  h('div', { className: 'spa-im-feishuGroupControlHeader' },
+    h('h3', { id: 'spa-im-feishu-mention-topic-title' }, '被 @ 时以话题方式回复'),
     saving
-      ? h('span', { className: 'dim-feishuGroupControlStatus', role: 'status' }, '保存中…')
+      ? h('span', { className: 'spa-im-feishuGroupControlStatus', role: 'status' }, '保存中…')
       : null),
   h('select', {
-    className: 'dim-feishuGroupSelect',
+    className: 'spa-im-feishuGroupSelect',
     value: current,
     disabled: disabled || saving,
     'aria-label': '被 @ 时以话题方式回复',
@@ -198,10 +198,10 @@ export function MentionTopicReplyEditor({ value = true, disabled = false, onSave
   },
   h('option', { value: 'off' }, '关闭（在会话主窗口回复）'),
   h('option', { value: 'on' }, '开启（自动开启独立飞书话题）')),
-  h('p', { className: 'dim-feishuGroupHelp' },
+  h('p', { className: 'spa-im-feishuGroupHelp' },
     '开启后，在群聊或私聊里 @机器人 提问，机器人会在那条消息下新建一个飞书话题并在话题内回答；该话题是一条独立会话，话题里的后续消息都属于同一个会话。只发一个 @机器人（打开菜单）不会新建话题，没有 @机器人 的消息也留在原来的会话里。'),
   error ? h('p', {
-    className: 'dim-feishuGroupError',
+    className: 'spa-im-feishuGroupError',
     role: 'alert',
   }, error) : null);
 }
@@ -213,11 +213,11 @@ function PermissionFlow({ provision, now, busy, botName, onRetry, onCancel, onCl
 
   if (phase === 'creating' || phase === 'connecting') {
     return h('section', {
-      className: 'dim-feishuGroupAuthorization dim-feishuGroupAuthorizationState',
+      className: 'spa-im-feishuGroupAuthorization spa-im-feishuGroupAuthorizationState',
       'aria-live': 'polite',
       'aria-busy': 'true',
     },
-    h('span', { className: 'dim-feishuGroupSpinner', 'aria-hidden': 'true' }),
+    h('span', { className: 'spa-im-feishuGroupSpinner', 'aria-hidden': 'true' }),
     h('div', null,
       h('h3', null, phase === 'creating'
         ? '正在准备权限授权二维码'
@@ -229,14 +229,14 @@ function PermissionFlow({ provision, now, busy, botName, onRetry, onCancel, onCl
 
   if (phase === 'error') {
     return h('section', {
-      className: 'dim-feishuGroupAuthorization dim-feishuGroupAuthorizationError',
+      className: 'spa-im-feishuGroupAuthorization spa-im-feishuGroupAuthorizationError',
       role: 'alert',
     },
     h('div', null,
       h('h3', null, '群消息权限没有开通完成'),
       h('p', null, error?.message ?? '群消息权限授权失败，请重试。'),
       error?.code ? h('code', null, error.code) : null),
-    h('div', { className: 'dim-feishuGroupAuthorizationActions' },
+    h('div', { className: 'spa-im-feishuGroupAuthorizationActions' },
       h(SettingsButton, { kind: 'primary', onClick: onRetry, disabled: busy },
         busy ? '正在准备…' : '重新生成二维码'),
       h(SettingsButton, { onClick: onClose, disabled: busy }, '关闭')));
@@ -249,32 +249,32 @@ function PermissionFlow({ provision, now, busy, botName, onRetry, onCancel, onCl
   const progress = Math.min(1, remaining / Math.max(1, provision.durationMs ?? remaining));
 
   return h('section', {
-    className: 'dim-feishuGroupAuthorization',
+    className: 'spa-im-feishuGroupAuthorization',
     'aria-label': localizeTemplate('{bot}的飞书授权流程', { bot: botName }),
   },
-  h('div', { className: 'dim-feishuGroupQrColumn' },
-    h('div', { className: 'dim-feishuGroupQrFrame' },
+  h('div', { className: 'spa-im-feishuGroupQrColumn' },
+    h('div', { className: 'spa-im-feishuGroupQrFrame' },
       qrSource
         ? h('img', {
             src: qrSource,
             alt: localizeTemplate('用于为{bot}开通群消息权限的一次性授权二维码', { bot: botName }),
           })
-        : h('div', { className: 'dim-feishuGroupQrFallback' },
+        : h('div', { className: 'spa-im-feishuGroupQrFallback' },
             h(QrPlaceholder), h('span', null, '二维码未就绪，请打开授权链接')),
       expired
-        ? h('div', { className: 'dim-feishuGroupQrExpired', role: 'status' },
+        ? h('div', { className: 'spa-im-feishuGroupQrExpired', role: 'status' },
             h('span', null, '二维码已失效'), h('small', null, '请刷新后重新扫码'))
         : null),
     h('div', {
-      className: 'dim-feishuGroupCountdown',
+      className: 'spa-im-feishuGroupCountdown',
       'aria-label': expired ? '二维码已失效' : localizeTemplate('二维码剩余 {remaining}', { remaining: formatRemaining(remaining) }),
     },
     h('span', null, expired ? '等待刷新' : '二维码有效时间'),
     h('strong', null, formatRemaining(remaining)),
-    h('span', { className: 'dim-feishuGroupProgress', 'aria-hidden': 'true' },
+    h('span', { className: 'spa-im-feishuGroupProgress', 'aria-hidden': 'true' },
       h('span', { style: { width: `${Math.round(progress * 100)}%` } })))),
-  h('div', { className: 'dim-feishuGroupAuthorizationCopy' },
-    h('span', { className: 'dim-feishuGroupAuthorizationEyebrow' },
+  h('div', { className: 'spa-im-feishuGroupAuthorizationCopy' },
+    h('span', { className: 'spa-im-feishuGroupAuthorizationEyebrow' },
       localizeTemplate('正在为「{bot}」开通群消息权限', { bot: botName })),
     h('h3', null, expired ? '刷新二维码后继续' : '使用飞书确认群消息权限'),
     h('p', null,
@@ -283,13 +283,13 @@ function PermissionFlow({ provision, now, busy, botName, onRetry, onCancel, onCl
       h('li', null, '打开飞书移动端，使用扫一扫读取二维码'),
       h('li', null, '核对现有应用，并确认“获取群组中所有消息”权限'),
       h('li', null, '保持本页打开，等待权限生效')),
-    h('div', { className: 'dim-feishuGroupAuthorizationActions' },
+    h('div', { className: 'spa-im-feishuGroupAuthorizationActions' },
       expired
         ? h(SettingsButton, { kind: 'primary', onClick: onRetry, disabled: busy },
             busy ? '刷新中…' : '刷新二维码')
         : href
           ? h('a', {
-              className: 'dim-deliveryButton dim-feishuGroupAuthorizationLink',
+              className: 'spa-im-deliveryButton spa-im-feishuGroupAuthorizationLink',
               href,
               target: '_blank',
               rel: 'noopener noreferrer',
@@ -537,14 +537,14 @@ export function FeishuGroupSettingsPage({ account, rpcCall }) {
 
   const disabled = refreshing || Boolean(provision);
   return h('section', {
-    className: 'dim-feishuGroupSettings',
+    className: 'spa-im-feishuGroupSettings',
     'aria-label': '群聊设置',
   },
   refreshError ? h('p', {
-    className: 'dim-feishuGroupRefreshError',
+    className: 'spa-im-feishuGroupRefreshError',
     role: 'alert',
   }, refreshError.message) : null,
-  h('div', { className: 'dim-feishuGroupControls' },
+  h('div', { className: 'spa-im-feishuGroupControls' },
     h(GroupResponseModeEditor, {
       value: settings.groupResponseMode,
       permissionGranted: settings.groupMessagePermissionGranted,

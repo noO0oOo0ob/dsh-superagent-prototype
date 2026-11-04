@@ -30,12 +30,13 @@ export interface ApiMessages {
 const isUserError = (code: unknown): code is UserErrorCode => typeof code === 'string' && Object.hasOwn(USER_ERRORS, code)
 
 /** Calls one management endpoint; the `x-super-personal-agent-request` header marks the request as originating from this page. */
-async function api<T>(messages: ApiMessages, path: string, method: string, body?: unknown): Promise<T> {
+async function api<T>(messages: ApiMessages, path: string, method: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   let response: Response
   const json = body === undefined ? {} : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
   try {
-    response = await fetch(`/super-personal-agent/api/${path}`, { method, ...json, headers: { 'x-super-personal-agent-request': '1', ...json.headers } })
-  } catch {
+    response = await fetch(`/super-personal-agent/api/${path}`, { method, signal, ...json, headers: { 'x-super-personal-agent-request': '1', ...json.headers } })
+  } catch (error) {
+    if (signal?.aborted) throw signal.reason ?? error
     throw new ApiError(messages.offline, 0, { unreachable: true })
   }
   const text = await response.text()
@@ -102,17 +103,17 @@ export type DecisionFilter = typeof DECISION_FILTERS[number]
 export const DECISION_KINDS: Readonly<Record<DecisionFilter, string>> = { work: 'accept,reopen', stop: 'stop', ignore: 'ignore',
   unavailable: 'unavailable', all: '' }
 
-export type Call = <K extends keyof Api>(route: K, ...request: {} extends ApiRequest<K> ? [request?: ApiRequest<K>] : [request: ApiRequest<K>])
+export type Call = <K extends keyof Api>(route: K, ...request: {} extends ApiRequest<K> ? [request?: ApiRequest<K> & { signal?: AbortSignal }] : [request: ApiRequest<K> & { signal?: AbortSignal }])
   => Promise<ApiResponse<K>>
 /** Build a typed route caller that resolves localized error messages on each request. */
 export function caller(messages: () => ApiMessages): Call {
   return (route, ...[request]) => {
     const [method, pattern] = route.split(' ') as [string, string]
-    const values = (request ?? {}) as Record<string, unknown> & { query?: Record<string, unknown>; body?: unknown }
+    const values = (request ?? {}) as Record<string, unknown> & { query?: Record<string, unknown>; body?: unknown; signal?: AbortSignal }
     const path = pattern.replace(/:(\w+)/g, (_match, name: string) => encodeURIComponent(String(values[name])))
     const query = Object.entries(values.query ?? {}).filter(([, value]) => value !== undefined && value !== '')
       .map(([name, value]) => `${name}=${encodeURIComponent(String(value))}`).join('&')
-    return api(messages(), query ? `${path}?${query}` : path, method, values.body)
+    return api(messages(), query ? `${path}?${query}` : path, method, values.body, values.signal)
   }
 }
 

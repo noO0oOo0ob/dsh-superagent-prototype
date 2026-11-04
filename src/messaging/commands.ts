@@ -5,10 +5,12 @@ import type { Outbox } from '../app/outbox.ts'
 import type { Effects } from '../app/effects.ts'
 import type { Results } from '../app/results.ts'
 import type { Conversations } from './conversations.ts'
+import type { MessageActions } from './actions.ts'
 import { dialogueMessage } from './dialogue.ts'
 
+/** A command refusal is returned to its sender without retrying the command. */
 class CommandRefusal extends Error {}
-interface Host { store: Store; engine: Engine; outbox: Outbox; effects: Effects; conversations: Conversations; results: Results }
+interface Host { actions?: MessageActions; store: Store; engine: Engine; outbox: Outbox; effects: Effects; conversations: Conversations; results: Results }
 export const COMMAND_HELP = '/new 或 /clear：开启当前 IM 的新对话，保留 Main 历史和后台任务\n/tasks：列出本会话任务\n/status：查看当前对话和任务状态\n/stop <任务 ID>：停止自己的任务\n/steer <任务 ID> <补充说明>：继续自己的任务\n/result <任务 ID>：重新投递已发布的结果和附件\n/retry <任务 ID>：重试自己的失败任务\n/history：查看本轮对话\n/model、/preset、/workspace：查看当前设置（在插件界面修改）'
 /** A command is always intercepted, including unknown slash commands. */
 export function commandOf(text: string): { name: string; argument: string } | undefined {
@@ -82,7 +84,11 @@ export function executeCommand(host: Host, trigger: Trigger): void {
       case 'model': case 'models': case 'preset': case 'presetlist': case 'workspace': case 'ws': case 'conv':
         text = `当前账号设置：${JSON.stringify(trigger.meta.settings ? Object.fromEntries(Object.entries(trigger.meta.settings).filter(([name]) => ['model', 'agentPreset', 'workspace'].includes(name))) : {})}\n请在 super-personal-Agent → Personal → 飞书账号中修改；新对话使用新设置。`
         break
-      case 'help': case 'menu': text = COMMAND_HELP; break
+      case 'menu':
+        text = COMMAND_HELP
+        if (host.actions) blocks = [{ type: 'card' as const, title: 'Personal Agent', text: COMMAND_HELP, actions: host.actions.menu(trigger) }]
+        break
+      case 'help': text = COMMAND_HELP; break
       case 'version': text = 'super-personal-Agent · native Feishu messaging v1'; break
       case 'repair': text = '请在 super-personal-Agent → Personal → 飞书账号中点击「补全权限」。'; break
       default: text = `此命令不适用于 Personal Agent。\n${COMMAND_HELP}`

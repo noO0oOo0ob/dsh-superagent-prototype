@@ -353,7 +353,7 @@ function failures(): Map<string, string> {
 }
 
 it('collects both roles\' tools, prompts, skills and inputs', () => {
-  expect([...toolsOf('worker').keys()].sort()).toEqual(['personal_agent_ack', 'personal_agent_artifact', 'personal_agent_read', 'personal_agent_report',
+  expect([...toolsOf('worker').keys()].sort()).toEqual(['personal_agent_ack', 'personal_agent_artifact', 'personal_agent_inbound', 'personal_agent_read', 'personal_agent_report',
     'personal_agent_thread_follow',
     'personal_agent_thread_unrelated', 'personal_agent_trigger_handback'])
   expect([...toolsOf('orchestrator').keys()]).toEqual(expect.arrayContaining(['personal_agent_route', 'personal_agent_eval_decide', 'personal_agent_reply']))

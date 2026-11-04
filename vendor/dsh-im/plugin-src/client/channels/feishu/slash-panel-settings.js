@@ -8,7 +8,7 @@ import {
   unwrapRpcResult,
 } from './api.js';
 import {
-  SLASH_COMMAND_MANIFEST,
+  NATIVE_SLASH_COMMAND_MANIFEST as SLASH_COMMAND_MANIFEST,
   SLASH_PANEL_MODES,
   normalizeSlashPanelConfig,
 } from '../../../../src/channels/feishu/slash-command-panel.mjs';
@@ -20,7 +20,7 @@ function PanelButton({ children, disabled = false, onClick, ...props }) {
   return h('button', {
     ...props,
     type: 'button',
-    className: 'dim-deliveryButton',
+    className: 'spa-im-deliveryButton',
     disabled,
     onClick,
   }, children);
@@ -197,24 +197,24 @@ export function FeishuSlashPanelSettingsPage({ account, rpcCall, onSaved }) {
   const available = ALL_COMMANDS.filter((name) => !order.includes(name));
 
   return h('section', {
-    className: 'dim-feishuGroupSettings',
+    className: 'spa-im-feishuGroupSettings',
     'aria-label': '指令面板设置',
   },
   h('section', {
-    className: 'dim-feishuGroupControl',
-    'aria-labelledby': 'dim-feishu-slash-panel-title',
+    className: 'spa-im-feishuGroupControl',
+    'aria-labelledby': 'spa-im-feishu-slash-panel-title',
   },
-  h('div', { className: 'dim-feishuGroupControlHeader' },
-    h('h3', { id: 'dim-feishu-slash-panel-title' }, '指令面板'),
+  h('div', { className: 'spa-im-feishuGroupControlHeader' },
+    h('h3', { id: 'spa-im-feishu-slash-panel-title' }, '指令面板'),
     saving
-      ? h('span', { className: 'dim-feishuGroupControlStatus', role: 'status' }, '保存中…')
+      ? h('span', { className: 'spa-im-feishuGroupControlStatus', role: 'status' }, '保存中…')
       : saved
-        ? h('span', { className: 'dim-feishuGroupControlStatus', role: 'status' }, '已保存，面板稍后同步')
+        ? h('span', { className: 'spa-im-feishuGroupControlStatus', role: 'status' }, '已保存，面板稍后同步')
         : null),
-  h('p', { className: 'dim-feishuGroupHelp' },
+  h('p', { className: 'spa-im-feishuGroupHelp' },
     '面板只决定聊天输入框里打「/」时列出的指令和顺序；被移除的指令仍可手动输入，功能不受影响。同步由机器人后台完成，指令较多时需要一点时间。'),
   h('select', {
-    className: 'dim-feishuGroupSelect',
+    className: 'spa-im-feishuGroupSelect',
     value: mode,
     'aria-label': '指令面板模式',
     disabled: saving || syncing,
@@ -231,15 +231,15 @@ export function FeishuSlashPanelSettingsPage({ account, rpcCall, onSaved }) {
   mode === SLASH_PANEL_MODES.CUSTOM
     ? h(React.Fragment, null,
       order.length === 0
-        ? h('p', { className: 'dim-feishuGroupHelp' }, '当前没有选择任何指令，保存后「/」面板会变成空的。')
-        : h('ul', { className: 'dim-feishuPanelList' },
+        ? h('p', { className: 'spa-im-feishuGroupHelp' }, '当前没有选择任何指令，保存后「/」面板会变成空的。')
+        : h('ul', { className: 'spa-im-feishuPanelList' },
           order.map((name, index) => h('li', {
             key: name,
-            className: 'dim-feishuPanelRow',
+            className: 'spa-im-feishuPanelRow',
           },
-          h('span', { className: 'dim-feishuPanelIndex' }, String(index + 1)),
-          h('span', { className: 'dim-feishuPanelCommand' }, commandText(name)),
-          h('span', { className: 'dim-feishuPanelRowActions' },
+          h('span', { className: 'spa-im-feishuPanelIndex' }, String(index + 1)),
+          h('span', { className: 'spa-im-feishuPanelCommand' }, commandText(name)),
+          h('span', { className: 'spa-im-feishuPanelRowActions' },
             h(PanelButton, {
               'aria-label': [localizeText('上移'), `/${name}`].join(' '),
               disabled: saving || syncing || index === 0,
@@ -255,9 +255,9 @@ export function FeishuSlashPanelSettingsPage({ account, rpcCall, onSaved }) {
               disabled: saving || syncing,
               onClick: () => remove(index),
             }, '移除'))))),
-      h('div', { className: 'dim-feishuPanelAdd' },
+      h('div', { className: 'spa-im-feishuPanelAdd' },
         h('select', {
-          className: 'dim-feishuGroupSelect',
+          className: 'spa-im-feishuGroupSelect',
           value: pending,
           'aria-label': '添加指令',
           disabled: saving || syncing || available.length === 0,
@@ -278,7 +278,7 @@ export function FeishuSlashPanelSettingsPage({ account, rpcCall, onSaved }) {
           onClick: () => edit(() => setOrder([])),
         }, '全部移除')))
     : null,
-  h('div', { className: 'dim-feishuPanelFooter' },
+  h('div', { className: 'spa-im-feishuPanelFooter' },
     h(PanelButton, {
       'data-kind': 'primary',
       disabled: saving || syncing || !dirty,
@@ -289,8 +289,8 @@ export function FeishuSlashPanelSettingsPage({ account, rpcCall, onSaved }) {
       onClick: () => { void startSyncAll(); },
     }, '保存并同步到其他机器人')),
   syncTargets
-    ? h('div', { className: 'dim-feishuPanelFooter' },
-      h('span', { className: 'dim-feishuGroupHelp' },
+    ? h('div', { className: 'spa-im-feishuPanelFooter' },
+      h('span', { className: 'spa-im-feishuGroupHelp' },
         [localizeText('将把这套面板设置写入另外'),
           ` ${syncTargets.length} `,
           localizeText('个飞书机器人，它们各自的面板设置会被覆盖。')].join('')),
@@ -304,19 +304,19 @@ export function FeishuSlashPanelSettingsPage({ account, rpcCall, onSaved }) {
       }, '取消'))
     : null,
   syncing
-    ? h('p', { className: 'dim-feishuGroupHelp', role: 'status' }, '正在同步…')
+    ? h('p', { className: 'spa-im-feishuGroupHelp', role: 'status' }, '正在同步…')
     : null,
   syncNotice?.scope === 'none'
-    ? h('p', { className: 'dim-feishuGroupHelp', role: 'status' }, '这个渠道没有其他飞书机器人，不用同步。')
+    ? h('p', { className: 'spa-im-feishuGroupHelp', role: 'status' }, '这个渠道没有其他飞书机器人，不用同步。')
     : null,
   syncNotice?.scope === 'done'
-    ? h('p', { className: 'dim-feishuGroupHelp', role: 'status' },
+    ? h('p', { className: 'spa-im-feishuGroupHelp', role: 'status' },
       syncNotice.failed > 0
         ? [localizeText('已同步到'), ` ${syncNotice.done} `, localizeText('个机器人，'),
           ` ${syncNotice.failed} `, localizeText('个失败。')].join('')
         : [localizeText('已同步到'), ` ${syncNotice.done} `, localizeText('个机器人。')].join(''))
     : null,
   error
-    ? h('p', { className: 'dim-feishuGroupError', role: 'alert' }, error)
+    ? h('p', { className: 'spa-im-feishuGroupError', role: 'alert' }, error)
     : null));
 }

@@ -55,15 +55,15 @@ export function FeishuVoiceSettingsPage({ account, rpcCall }) {
   };
 
   if (phase === 'loading') {
-    return h('div', { className: 'dim-deliveryState', role: 'status', 'aria-busy': 'true' },
+    return h('div', { className: 'spa-im-deliveryState', role: 'status', 'aria-busy': 'true' },
       '正在读取语音设置…');
   }
   if (phase === 'error') {
-    return h('div', { className: 'dim-deliveryState', role: 'alert' },
+    return h('div', { className: 'spa-im-deliveryState', role: 'alert' },
       h('p', null, error),
       h('button', {
         type: 'button',
-        className: 'dim-deliveryButton',
+        className: 'spa-im-deliveryButton',
         onClick: () => void loadSettings(),
       }, '重新读取'));
   }

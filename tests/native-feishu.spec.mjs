@@ -218,3 +218,62 @@ it('aborts an active download when the plugin lifetime ends before closing its a
   await h.native.close();
   expect(stream.destroyed).toBe(true);
 });
+
+
+it('prepares configured conversation directories and registers only native task commands', async () => {
+  const h = await fixture(), account = await h.bind();
+  const changed = await h.native.rpc('bot.conversation-directory.set', { botId: account.id,
+    config: { enabled: true, strategy: 'per-conversation', prefix: 'chat-' } });
+  expect(changed).toMatchObject({ ok: true });
+  const one = await h.native.prepareDialogue(account.id, 'conversation-one', account.fingerprint);
+  expect(one).toContain('chat-');
+  expect(await h.native.prepareDialogue(account.id, 'conversation-one', account.fingerprint)).toBe(one);
+  expect(await h.native.prepareDialogue(account.id, 'conversation-two', account.fingerprint)).not.toBe(one);
+  await expect(h.native.prepareDialogue(account.id, 'conversation-one', 'wrong')).rejects.toThrow('account-changed');
+  const { NATIVE_SLASH_COMMAND_MANIFEST, normalizeSlashPanelConfig } = await import('../vendor/dsh-im/src/channels/feishu/slash-command-panel.mjs');
+  const commands = NATIVE_SLASH_COMMAND_MANIFEST.map(item => item.command);
+  expect(commands).toEqual(expect.arrayContaining(['new', 'tasks', 'result', 'retry', 'steer', 'stop']));
+  expect(commands).not.toContain('session');
+  expect(normalizeSlashPanelConfig({ mode: 'custom', order: ['tasks', 'result'] }).order).toEqual(['tasks', 'result']);
+});
+
+it('applies group mention topic settings to native text, image and file replies', async () => {
+  const h = await fixture(), account = await h.bind();
+  h.get.mockResolvedValue({ code: 0, data: { items: [{ message_id: 'om_1', chat_id: 'oc_chat', msg_type: 'text',
+    body: { content: '{"text":"@bot hello"}' }, mentions: [{ id: 'ou_bot' }],
+    sender: { sender_type: 'user', id_type: 'open_id', id: 'ou_user' } }] } });
+  const options = { expectedFingerprint: account.fingerprint, signal: h.lifetime.signal, id: 'topic-test', conversationKind: 'group', uploaded() {},
+    file: { bytes: Buffer.from('test'), file: { fileName: 'test.txt', mediaType: 'text/plain', size: 4 } } };
+  for (const enabled of [true, false]) {
+    expect(await h.native.rpc('bot.mention-topic-reply.set', { botId: account.id, mentionTopicReply: enabled })).toMatchObject({ ok: true });
+    for (const block of [{ type: 'text', text: 'Hello', format: 'plain' }, { type: 'image', artifactId: 'image' }, { type: 'file', artifactId: 'file' }]) {
+      await h.native.sendPart(account.id, route, block, options);
+      expect(!!h.reply.mock.calls.at(-1)[0].data.reply_in_thread).toBe(enabled);
+    }
+  }
+});
+
+it('uses the new account workspace after conversation directory isolation is turned off', async () => {
+  const h = await fixture(), account = await h.bind();
+  await h.native.rpc('bot.conversation-directory.set', { botId: account.id, config: { enabled: true, strategy: 'per-conversation', prefix: 'chat-' } });
+  const old = await h.native.prepareDialogue(account.id, 'conversation-one', account.fingerprint);
+  await h.native.rpc('bot.conversation-directory.set', { botId: account.id, config: { enabled: false, strategy: 'per-conversation', prefix: 'chat-' } });
+  const { realpath, mkdir } = await import('node:fs/promises');
+  const next = join(await realpath(h.root), 'new-root'); await mkdir(next);
+  expect(await h.native.rpc('bot.workspace.set', { botId: account.id, workspace: next })).toMatchObject({ ok: true });
+  expect(await h.native.prepareDialogue(account.id, 'conversation-one', account.fingerprint)).toBe(next);
+  expect(next).not.toBe(old);
+  await h.native.rpc('bot.conversation-directory.set', { botId: account.id, config: { enabled: true, strategy: 'per-conversation', prefix: 'chat-' } });
+  const resumed = await h.native.prepareDialogue(account.id, 'conversation-one', account.fingerprint);
+  expect(resumed.startsWith(`${next}/`)).toBe(true);
+  expect(resumed).not.toBe(old);
+});
+
+it('rechecks command permission and account identity for card callbacks', async () => {
+  const h = await fixture(), account = await h.bind();
+  expect(h.native.allowsCommand(account.id, account.fingerprint, 'ou_user', 'dm')).toBe(true);
+  const denied = { mode: 'allowlist', allowlist: { users: [] }, open: { defaultCanExecuteCommands: false, commandPermissionOverrides: [] } };
+  expect(await h.native.rpc('bot.access-policy.set', { botId: account.id, policy: { direct: denied, group: denied } })).toMatchObject({ ok: true });
+  expect(h.native.allowsCommand(account.id, account.fingerprint, 'ou_user', 'dm')).toBe(false);
+  expect(h.native.allowsCommand(account.id, 'old-account', 'ou_user', 'group')).toBe(false);
+});

@@ -220,7 +220,130 @@
     "test/channels/feishu/slash-command-registry.test.mjs": "8f75392b8ee9f91da24c3756b8e7e1ef1ffad3d8b0a4c9d7c40d1d87c21b4eab",
     "test/channels/feishu/state-store.test.mjs": "0afb7eb4589a66a4fa9b8051205a257c6f7eacb0919888438280b79e9d295d4d",
     "test/channels/feishu/voice.test.mjs": "6baea7c7f78e24c1c25996fa0d657108cdd52ad7fd142cf03703cfd3a9cea3e2",
-    "test/support/filesystem.mjs": "00da83f222779dd51f98d0a3956718e57fbb6f664187447d0bb64b8c195460dc"
+    "test/support/filesystem.mjs": "00da83f222779dd51f98d0a3956718e57fbb6f664187447d0bb64b8c195460dc",
+    "plugin-src/client/access-policy-settings.js": "93186eec8ec75793bf6dfac3678c496cc17a287464264725ba4e062e605c6c9a",
+    "plugin-src/client/styles.js": "8a14b16d109a2ad03ce149c8b1f1abc8ce855a3325852ff91e49e623ac974961"
   },
-  "localChanges": []
+  "localChanges": [
+    {
+      "path": "plugin-src/client/agent-preset.js",
+      "sha256": "762ef96f1491a2e0884a100c2c2038dfd632ec4b9eb0e3cd44247907873c3b97",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    },
+    {
+      "path": "plugin-src/client/bot-alias.js",
+      "sha256": "7808eaa4c22333293dc39a6b16ec372a5c386e0de06d1897ba2c0e94dd8a70bf",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    },
+    {
+      "path": "plugin-src/client/channel-card-meta.js",
+      "sha256": "3bf7e0b70003942d136e5b1f8bad9e51b07fd2118be99150004a8de0d77e564a",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    },
+    {
+      "path": "plugin-src/client/channels/feishu/conversation-directory-settings.js",
+      "sha256": "41c0d6a96114f931ce16ff9a2a0a9e47b801bba8580297fa030b67e24066cfc5",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    },
+    {
+      "path": "plugin-src/client/channels/feishu/group-settings.js",
+      "sha256": "9f47332ced8f0cd672c5d7621be0889460015facd7433f70af6682be605ecc4a",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    },
+    {
+      "path": "plugin-src/client/channels/feishu/index.js",
+      "sha256": "4418f45f3a9975b35f9b1335dbae15c60d1cc16c9b224d3b838439883d4453dd",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    },
+    {
+      "path": "plugin-src/client/channels/feishu/slash-panel-settings.js",
+      "sha256": "fd5b372d4aa1ba0a6b17a46ad542f54599a58592c70faa5030f9c642fccddd85",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    },
+    {
+      "path": "plugin-src/client/channels/feishu/styles.js",
+      "sha256": "fe4fcf85b72ffa6e75f65319e0ea6b056c5bf5118bee51723ed95648152cf834",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    },
+    {
+      "path": "plugin-src/client/channels/feishu/voice-editor.js",
+      "sha256": "ac7731eae5e3d947ee9b9506e1078a59b0967f638edf7c83d53c17d681228864",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    },
+    {
+      "path": "plugin-src/client/channels/feishu/voice-settings.js",
+      "sha256": "780b0334e96c8a508fa038f817e8461e55f0c56d5c0e832684e06c2c0665a884",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    },
+    {
+      "path": "plugin-src/client/channels/shared/collapsible-account.js",
+      "sha256": "20b1b7f5327cc0738e2c66aaa91a08b5a86e18cbebdbf35c66bf645034c1dccf",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    },
+    {
+      "path": "plugin-src/client/connection-error.js",
+      "sha256": "c96af17847c2dd02a672913a8781ce35853917fbd92a4f8bef69c88f6a69ffa4",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    },
+    {
+      "path": "plugin-src/client/context-enhancement.js",
+      "sha256": "569cb40ece770836e6f5ba269655d916d1238128e9aa90ff8251cf941a8b0294",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    },
+    {
+      "path": "plugin-src/client/credential-binding.js",
+      "sha256": "25c7eb235da5547954c9226042ac49020171e612883b515512f815834239d8c8",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    },
+    {
+      "path": "plugin-src/client/i18n.js",
+      "sha256": "e7e591afe999b82fae0db9a79900b3468b633ad71156f8af585c4e70dcfb969f",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    },
+    {
+      "path": "plugin-src/client/model-setting.js",
+      "sha256": "af46daff7cea803b509af8f6a76f4d3924eff3452428194708d4ad009d806c30",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    },
+    {
+      "path": "plugin-src/client/workspace-directory-picker.js",
+      "sha256": "d1cd10aa88ad1d8cf709fb80e5b2ef09c7325d04555af2a678fedae381765dad",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    },
+    {
+      "path": "plugin-src/client/workspace-editor.js",
+      "sha256": "c5c09e708006b14f7b8506cfb7f7b43ee222418efe97692eead06d8d754435e9",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    },
+    {
+      "path": "src/channels/feishu/feishu-channel.mjs",
+      "sha256": "b03bc8572a5d1fa9e34e0c6583b517e7baf1aaa5fb56f058f42ea6424ff80b7a",
+      "reason": "Adapt native callbacks, checked media transport and supported command manifest without activating the old Session bridge."
+    },
+    {
+      "path": "src/channels/feishu/feishu-runtime.mjs",
+      "sha256": "d5d260acf4b10ad0d9a0545ec089f2350a3ca0068f33e5af319164b06c4bbb38",
+      "reason": "Adapt native callbacks, checked media transport and supported command manifest without activating the old Session bridge."
+    },
+    {
+      "path": "src/channels/feishu/multi-bot-controller.mjs",
+      "sha256": "eadbb80956bec1ff69f0175d579b865142fd4dafa83478e2b7c35b0d7ba917f4",
+      "reason": "Adapt native callbacks, checked media transport and supported command manifest without activating the old Session bridge."
+    },
+    {
+      "path": "src/channels/feishu/slash-command-panel.mjs",
+      "sha256": "32ae5ecc3b2e8d44827910ad718663de45f9595b6c9eee60113d23d93a74cf31",
+      "reason": "Adapt native callbacks, checked media transport and supported command manifest without activating the old Session bridge."
+    },
+    {
+      "path": "plugin-src/client/access-policy-settings.js",
+      "sha256": "84201511bfddec80cc09552273b59181d18332ff17e2cf5cc3efee5b16c3f89e",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    },
+    {
+      "path": "plugin-src/client/styles.js",
+      "sha256": "ef856518748d2605897d6b6528ec1aa25d91aad35cd03cc0d5a867ad415b5023",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+    }
+  ]
 }

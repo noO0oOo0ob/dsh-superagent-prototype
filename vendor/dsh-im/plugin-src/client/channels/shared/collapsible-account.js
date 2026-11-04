@@ -26,7 +26,7 @@ export function AccountSettingsToggle() {
   const { open, toggle, contentId } = React.useContext(AccountSectionContext);
   return h('button', {
     type: 'button',
-    className: 'dim-accountSettingsToggle',
+    className: 'spa-im-accountSettingsToggle',
     'aria-label': open ? '收起该账号的设置' : '展开该账号的设置',
     'aria-expanded': open ? 'true' : 'false',
     'aria-controls': contentId,
@@ -36,7 +36,7 @@ export function AccountSettingsToggle() {
     },
   }, h(SettingsGlyph),
   h('svg', {
-    className: 'dim-collapsibleChevron',
+    className: 'spa-im-collapsibleChevron',
     viewBox: '0 0 12 16',
     width: 12,
     height: 16,
@@ -80,22 +80,22 @@ export function CollapsibleAccountSection({
 
   return h(AccountSectionContext.Provider, { value: { open, toggle, contentId } },
   h('div', {
-    className: `dim-collapsibleAccount ${open ? 'is-open' : ''} ${className}`.trim(),
+    className: `spa-im-collapsibleAccount ${open ? 'is-open' : ''} ${className}`.trim(),
     'data-open': open ? 'true' : 'false',
   },
     h('div', {
-      className: 'dim-collapsibleHead',
+      className: 'spa-im-collapsibleHead',
       onClick: toggle,
     },
-      h('div', { className: 'dim-collapsibleHeaderContent' }, header),
+      h('div', { className: 'spa-im-collapsibleHeaderContent' }, header),
     ),
     h('div', {
       id: contentId,
-      className: 'dim-collapsibleBody',
+      className: 'spa-im-collapsibleBody',
       role: 'region',
     },
-      h('div', { className: 'dim-collapsibleBodyInner' },
-        settings ? h('div', { className: 'dim-accountSettingsHeader' },
+      h('div', { className: 'spa-im-collapsibleBodyInner' },
+        settings ? h('div', { className: 'spa-im-accountSettingsHeader' },
           h('span', null, '常用配置'), settings) : null,
         children),
     ),

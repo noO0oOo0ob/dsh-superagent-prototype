@@ -147,25 +147,25 @@ const Button = React.forwardRef(function Button(
     ...props,
     ref,
     type: "button",
-    className: `bxf-button ${className}`.trim(),
+    className: `spa-feishu-button ${className}`.trim(),
     "data-kind": kind,
     "data-size": size,
   }, icon, h("span", null, children));
 });
 
 function BrandMark() {
-  return h("div", { className: "bxf-brandMark" }, h(RobotIcon, { size: 34 }));
+  return h("div", { className: "spa-feishu-brandMark" }, h(RobotIcon, { size: 34 }));
 }
 
 function Heading({ totals, onAdd, onCredential, credentialOpen, adding, busy, addButtonRef }) {
   const hasBots = totals.configured > 0;
-  return h("div", { className: "bxf-heading" },
-    h("div", { className: "bxf-headingTools" },
-      h("div", { className: "dim-bindActions" },
+  return h("div", { className: "spa-feishu-heading" },
+    h("div", { className: "spa-feishu-headingTools" },
+      h("div", { className: "spa-im-bindActions" },
         h(Button, {
           kind: "primary",
           size: "small",
-          className: "bxf-bindButton dim-scanButton",
+          className: "spa-feishu-bindButton spa-im-scanButton",
           onClick: onAdd,
           disabled: adding || busy,
           ref: addButtonRef,
@@ -176,7 +176,7 @@ function Heading({ totals, onAdd, onCredential, credentialOpen, adding, busy, ad
         h(Button, {
           kind: "credential",
           size: "small",
-          className: "dim-credentialButton",
+          className: "spa-im-credentialButton",
           onClick: onCredential,
           disabled: adding || busy,
           "aria-pressed": credentialOpen,
@@ -185,7 +185,7 @@ function Heading({ totals, onAdd, onCredential, credentialOpen, adding, busy, ad
         }, credentialOpen ? "收起凭据" : "手动接入")),
       hasBots
         ? h("div", {
-            className: "bxf-totalBadge dim-onlineBadge",
+            className: "spa-feishu-totalBadge spa-im-onlineBadge",
             "aria-label": localizeTemplate('已接入 {configured} 个机器人，其中 {connected} 个在线', {
               configured: totals.configured,
               connected: totals.connected,
@@ -201,30 +201,30 @@ function Heading({ totals, onAdd, onCredential, credentialOpen, adding, busy, ad
 
 function LoadingView() {
   return h("div", {
-    className: "bxf-card dim-surfaceCard dim-loadingView",
+    className: "spa-feishu-card spa-im-surfaceCard spa-im-loadingView",
     "aria-busy": "true",
     "aria-label": "正在读取飞书机器人列表",
   },
-    h("div", { className: "dim-spinner", "aria-hidden": "true" }),
+    h("div", { className: "spa-im-spinner", "aria-hidden": "true" }),
     h("span", null, "正在读取飞书连接状态…"),
   );
 }
 
 function EmptyView({ onStart, busy }) {
-  return h("div", { className: "bxf-card dim-surfaceCard" },
-    h("div", { className: "bxf-cardBody bxf-intro dim-surfaceBody dim-emptyView" },
-      h("div", { className: "bxf-introCopy dim-emptyCopy" },
-        h("div", { className: "bxf-stateLabel dim-stateLabel" },
-          h("span", { className: "bxf-dot dim-stateDot" }), h("span", null, "尚未接入机器人")),
+  return h("div", { className: "spa-feishu-card spa-im-surfaceCard" },
+    h("div", { className: "spa-feishu-cardBody spa-feishu-intro spa-im-surfaceBody spa-im-emptyView" },
+      h("div", { className: "spa-feishu-introCopy spa-im-emptyCopy" },
+        h("div", { className: "spa-feishu-stateLabel spa-im-stateLabel" },
+          h("span", { className: "spa-feishu-dot spa-im-stateDot" }), h("span", null, "尚未接入机器人")),
         h("h3", null, "扫码，创建第一个飞书入口"),
         h("p", null, "无需手动填写 App ID。以后还可以继续添加机器人，分别服务不同团队或飞书租户。"),
-        h("div", { className: "bxf-actions dim-viewActions" },
+        h("div", { className: "spa-feishu-actions spa-im-viewActions" },
           h(Button, {
             kind: "primary", onClick: onStart,
             disabled: busy, "aria-busy": busy ? "true" : undefined,
           }, busy ? "正在生成二维码…" : "生成飞书二维码")),
       ),
-      h("div", { className: "bxf-markStage dim-emptyBrand", "aria-hidden": "true" }, h(BrandMark)),
+      h("div", { className: "spa-feishu-markStage spa-im-emptyBrand", "aria-hidden": "true" }, h(BrandMark)),
     ),
   );
 }
@@ -270,10 +270,10 @@ function QrPane({ provision, now, onRefresh, onCancel, busy }) {
 
   React.useEffect(() => setImageFailed(false), [qrSource]);
 
-  return h("div", { className: "bxf-card bxf-provisionCard dim-surfaceCard" },
-    h("div", { className: "bxf-cardBody bxf-qrLayout dim-surfaceBody dim-qrLayout" },
-      h("div", { className: "bxf-qrColumn dim-qrColumn" },
-        h("div", { className: "bxf-qrFrame dim-qrFrame" },
+  return h("div", { className: "spa-feishu-card spa-feishu-provisionCard spa-im-surfaceCard" },
+    h("div", { className: "spa-feishu-cardBody spa-feishu-qrLayout spa-im-surfaceBody spa-im-qrLayout" },
+      h("div", { className: "spa-feishu-qrColumn spa-im-qrColumn" },
+        h("div", { className: "spa-feishu-qrFrame spa-im-qrFrame" },
           qrSource && !imageFailed
               ? h("img", {
                 src: qrSource,
@@ -284,29 +284,29 @@ function QrPane({ provision, now, onRefresh, onCancel, busy }) {
                     : "用于新增 DeepSeek Harness 飞书机器人的一次性授权二维码",
                 onError: () => setImageFailed(true),
               })
-            : h("div", { className: "bxf-qrFallback dim-qrFallback" },
+            : h("div", { className: "spa-feishu-qrFallback spa-im-qrFallback" },
                 h("div", null, h(QrIcon), h("span", null, "二维码未就绪，请打开授权链接"))),
           expired
-            ? h("div", { className: "bxf-expiredOverlay dim-qrExpired", role: "status" },
+            ? h("div", { className: "spa-feishu-expiredOverlay spa-im-qrExpired", role: "status" },
                 h("div", null, "二维码已失效", h("br"), "请刷新后重新扫码"))
             : null,
         ),
         h("div", {
-          className: "bxf-countdown dim-countdown",
+          className: "spa-feishu-countdown spa-im-countdown",
           "aria-label": expired
             ? "二维码已失效"
             : localizeTemplate('二维码剩余 {remaining}', { remaining: formatRemaining(remaining) }),
         },
-          h("div", { className: "bxf-countdownTop dim-countdownTop", "aria-hidden": "true" },
+          h("div", { className: "spa-feishu-countdownTop spa-im-countdownTop", "aria-hidden": "true" },
             h("span", null, expired ? "等待刷新" : "二维码有效时间"),
             h("strong", null, formatRemaining(remaining))),
-          h("div", { className: "bxf-progress dim-progress", "aria-hidden": "true" },
-            h("span", { style: { "--bxf-progress": `${Math.round(progress * 100)}%` } })),
+          h("div", { className: "spa-feishu-progress spa-im-progress", "aria-hidden": "true" },
+            h("span", { style: { "--spa-feishu-progress": `${Math.round(progress * 100)}%` } })),
         ),
       ),
-      h("div", { className: "bxf-qrCopy dim-qrCopy" },
-        h("div", { className: "bxf-stateLabel dim-stateLabel" },
-          h("span", { className: "bxf-dot dim-stateDot", "data-tone": "warning" }),
+      h("div", { className: "spa-feishu-qrCopy spa-im-qrCopy" },
+        h("div", { className: "spa-feishu-stateLabel spa-im-stateLabel" },
+          h("span", { className: "spa-feishu-dot spa-im-stateDot", "data-tone": "warning" }),
           h("span", null, repairing
             ? localizeTemplate('正在为「{bot}」补全权限与回调', { bot: botName })
             : grantingGroupMessages
@@ -324,7 +324,7 @@ function QrPane({ provision, now, onRefresh, onCancel, busy }) {
           : grantingGroupMessages
             ? "扫码会更新现有飞书应用，只增量开通“获取群组中所有消息”权限；不会创建新应用。确认后会自动启用“响应所有群消息”，其他机器人不受影响。"
             : "扫码会新增一个机器人，并申请 im:message.group_msg（接收未 @ 的群消息）、im:message:readonly（读取消息中的图片或文件）等所需权限。新机器人默认仅 @ 时回复，实际收到的群消息和文件会自动保存；已接入的机器人继续正常收发消息。"),
-        h("ol", { className: "bxf-steps dim-steps" },
+        h("ol", { className: "spa-feishu-steps spa-im-steps" },
           h("li", null, "打开飞书移动端，使用扫一扫读取二维码"),
           h("li", null, repairing
             ? "核对现有应用名称，并确认只新增当前缺少的上述配置"
@@ -336,14 +336,14 @@ function QrPane({ provision, now, onRefresh, onCancel, busy }) {
             : grantingGroupMessages
               ? "保持本页打开，等待权限生效并自动切换响应方式"
               : "保持本页打开，等待新机器人的长连接就绪")),
-        h("div", { className: "bxf-actions dim-viewActions" },
+        h("div", { className: "spa-feishu-actions spa-im-viewActions" },
           expired
             ? h(Button, {
                 kind: "primary", onClick: onRefresh, disabled: busy,
               }, busy ? "刷新中…" : "刷新二维码")
             : href
               ? h("a", {
-                  className: "bxf-button bxf-link", "data-kind": "secondary",
+                  className: "spa-feishu-button spa-feishu-link", "data-kind": "secondary",
                   href, target: "_blank", rel: "noopener noreferrer",
                 }, h("span", null, "在飞书中打开"))
               : null,
@@ -363,10 +363,10 @@ function ProvisionProgress({ phase, provision, onCancel, busy }) {
   const repairing = isCallbackRepair(provision);
   const grantingGroupMessages = isGroupMessagePermission(provision);
   return h("div", {
-    className: "bxf-card bxf-provisionCard dim-surfaceCard dim-loadingView",
+    className: "spa-feishu-card spa-feishu-provisionCard spa-im-surfaceCard spa-im-loadingView",
     "aria-busy": "true",
   },
-    h("div", { className: "dim-spinner", "aria-hidden": "true" }),
+    h("div", { className: "spa-im-spinner", "aria-hidden": "true" }),
     h("h3", null, connecting
       ? repairing
         ? "已确认，正在完成权限与回调配置"
@@ -388,7 +388,7 @@ function ProvisionProgress({ phase, provision, onCancel, busy }) {
           ? "正在为现有飞书应用申请群消息权限二维码，请稍候。"
           : "正在向飞书申请一次性授权二维码，请稍候。"),
     connecting && onCancel
-      ? h("div", { className: "bxf-actions dim-viewActions", style: { justifyContent: "center" } },
+      ? h("div", { className: "spa-feishu-actions spa-im-viewActions", style: { justifyContent: "center" } },
           h(Button, { onClick: onCancel, disabled: busy }, repairing
             ? "取消补全"
             : grantingGroupMessages ? "取消授权" : "取消添加"))
@@ -399,15 +399,15 @@ function ProvisionProgress({ phase, provision, onCancel, busy }) {
 function ProvisionError({ error, provision, onRetry, onCancel, busy }) {
   const repairing = isCallbackRepair(provision);
   const grantingGroupMessages = isGroupMessagePermission(provision);
-  return h("div", { className: "bxf-card bxf-provisionCard dim-surfaceCard" },
-    h("div", { className: "bxf-inlineError dim-inlineError", role: "alert" },
+  return h("div", { className: "spa-feishu-card spa-feishu-provisionCard spa-im-surfaceCard" },
+    h("div", { className: "spa-feishu-inlineError spa-im-inlineError", role: "alert" },
       h("div", null,
         h("h3", null, repairing
           ? "权限与回调没有补全完成"
           : grantingGroupMessages ? "群消息权限没有开通完成" : "新机器人没有添加完成"),
         h(ConnectionError, { error: error }),
-        error.code ? h("span", { className: "bxf-errorCode" }, error.code) : null,
-        h("div", { className: "bxf-actions dim-viewActions" },
+        error.code ? h("span", { className: "spa-feishu-errorCode" }, error.code) : null,
+        h("div", { className: "spa-feishu-actions spa-im-viewActions" },
           h(Button, { kind: "primary", onClick: onRetry, disabled: busy },
             busy ? "重试中…" : "重新生成二维码"),
           h(Button, { onClick: onCancel, disabled: busy }, "关闭")),
@@ -447,13 +447,13 @@ function connectionTestNotice(value) {
 function RemoveConfirmation({ bot, busy, onConfirm, onCancel }) {
   const cancelRef = React.useRef(null);
   const idPart = bot.botId.replace(/[^a-zA-Z0-9_-]/g, "-");
-  const titleId = `bxf-remove-title-${idPart}`;
-  const descriptionId = `bxf-remove-description-${idPart}`;
+  const titleId = `spa-feishu-remove-title-${idPart}`;
+  const descriptionId = `spa-feishu-remove-description-${idPart}`;
 
   React.useEffect(() => cancelRef.current?.focus(), []);
 
   return h("div", {
-    className: "bxf-confirm dim-confirm",
+    className: "spa-feishu-confirm spa-im-confirm",
     role: "alertdialog",
     "aria-labelledby": titleId,
     "aria-describedby": descriptionId,
@@ -467,7 +467,7 @@ function RemoveConfirmation({ bot, busy, onConfirm, onCancel }) {
     h("h4", { id: titleId }, localizeTemplate('从 DeepSeek Harness 移除“{name}”？', { name: bot.bot.name })),
     h("p", { id: descriptionId },
       "此操作会停止这个机器人的连接，并删除保存在本机的接入配置和凭据。飞书开放平台中的应用不会被自动删除，其他机器人也不受影响。"),
-    h("div", { className: "bxf-actions dim-viewActions" },
+    h("div", { className: "spa-feishu-actions spa-im-viewActions" },
       h(Button, { ref: cancelRef, onClick: onCancel, disabled: busy }, "保留机器人"),
       h(Button, { kind: "danger", onClick: onConfirm, disabled: busy },
         busy ? "正在移除…" : "确认移除接入")),
@@ -522,29 +522,29 @@ function StepPushEditor({ value = false, mode = "post", disabled = false, onSave
       : "每一步都单独发一条消息（含工具调用和过程说明）；注意长任务会连续发送较多消息";
 
   return h("section", {
-    className: "dim-feishuGroupControl",
+    className: "spa-im-feishuGroupControl",
     "aria-labelledby": titleId,
   },
-  h("div", { className: "dim-feishuGroupControlHeader" },
-    h("div", { className: "dim-presetTitle" },
+  h("div", { className: "spa-im-feishuGroupControlHeader" },
+    h("div", { className: "spa-im-presetTitle" },
       h("h3", { id: titleId }, "任务过程展示"),
-      h("span", { className: "dim-presetHelp" },
+      h("span", { className: "spa-im-presetHelp" },
         h("button", {
           type: "button",
-          className: "dim-presetHelpButton",
+          className: "spa-im-presetHelpButton",
           "aria-label": "查看分步直推说明",
           "aria-describedby": helpId,
         }, h("span", { "aria-hidden": "true" }, "?")),
         h("span", {
           id: helpId,
-          className: "dim-presetTooltip",
+          className: "spa-im-presetTooltip",
           role: "tooltip",
         }, "设置任务执行过程的呈现方式：不显示、原生直播、实时卡片或逐步消息"))),
     saving
-      ? h("span", { className: "dim-feishuGroupControlStatus", role: "status" }, "保存中…")
+      ? h("span", { className: "spa-im-feishuGroupControlStatus", role: "status" }, "保存中…")
       : null),
   h("select", {
-    className: "dim-feishuGroupSelect",
+    className: "spa-im-feishuGroupSelect",
     value: current,
     disabled: disabled || saving,
     "aria-label": "任务过程展示",
@@ -554,9 +554,9 @@ function StepPushEditor({ value = false, mode = "post", disabled = false, onSave
   h("option", { value: "live_cot" }, "实时直播（飞书原生思考过程）"),
   h("option", { value: "streaming_card" }, "实时过程卡（全程一张卡片动态更新）"),
   h("option", { value: "post" }, "逐步直播（每一步单独发一条消息）")),
-  h("p", { className: "dim-feishuGroupHelp" }, helpText),
+  h("p", { className: "spa-im-feishuGroupHelp" }, helpText),
   error ? h("p", {
-    className: "dim-feishuGroupError",
+    className: "spa-im-feishuGroupError",
     role: "alert",
   }, error) : null);
 }
@@ -598,15 +598,15 @@ export function BotCard({
   const summary = actionError?.message
     ?? connection.error?.message
     ?? (connected ? null : health.summary);
-  const titleId = `bxf-bot-${connection.botId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+  const titleId = `spa-feishu-bot-${connection.botId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   return h("article", {
-    className: "bxf-card bxf-botCard dim-botCard",
+    className: "spa-feishu-card spa-feishu-botCard spa-im-botCard",
     "aria-labelledby": titleId,
     "data-bot-id": connection.botId,
     tabIndex: -1,
     ref: cardRef,
   },
-    h("div", { className: "bxf-cardBody dim-botCardBody" },
+    h("div", { className: "spa-feishu-cardBody spa-im-botCardBody" },
       h(CollapsibleAccountSection, {
         settings: h(BotSettingsButton, {
           channel: "feishu",
@@ -621,24 +621,24 @@ export function BotCard({
             groupMessagePermissionGranted: connection.groupMessagePermissionGranted,
           },
         }),
-        id: `bxf-settings-${connection.botId.replace(/[^a-zA-Z0-9_-]/g, "-")}`,
-        header: h("div", { className: "bxf-connectedTop dim-botCardTop" },
-          h("div", { className: "bxf-botIdentity dim-botIdentity" },
-            h("div", { className: "bxf-avatar dim-botAvatar", "aria-hidden": "true" },
+        id: `spa-feishu-settings-${connection.botId.replace(/[^a-zA-Z0-9_-]/g, "-")}`,
+        header: h("div", { className: "spa-feishu-connectedTop spa-im-botCardTop" },
+          h("div", { className: "spa-feishu-botIdentity spa-im-botIdentity" },
+            h("div", { className: "spa-feishu-avatar spa-im-botAvatar", "aria-hidden": "true" },
               h(FeishuLogoGlyph, { size: 34 })),
-            h("div", { className: "bxf-botName dim-botName" },
+            h("div", { className: "spa-feishu-botName spa-im-botName" },
               h(BotName, { bot, id: titleId, disabled: Boolean(busy), onSave: onAliasSave }),
               h("p", { title: bot.appIdMasked }, bot.appIdMasked ?? "应用标识已安全保存")),
           ),
           h("div", {
-            className: "dim-botCardTools",
+            className: "spa-im-botCardTools",
             // The header is the collapse toggle; keep inner controls clickable.
             onClick: (event) => { event.stopPropagation(); },
             onKeyDown: (event) => { if (event.key === "Enter" || event.key === " ") event.stopPropagation(); },
           },
             h(BotStatusMeta, {
-              className: "bxf-healthPill",
-              dotClassName: "bxf-dot",
+              className: "spa-feishu-healthPill",
+              dotClassName: "spa-feishu-dot",
               tone,
               stateLabel: HEALTH_LABELS[stateForDisplay] ?? "状态未知",
               lastCheckedAt: health.lastCheckedAt,
@@ -668,33 +668,26 @@ export function BotCard({
         disabled: Boolean(busy),
         onSave: onContextEnhancementSave,
       }),
-      h(StepPushEditor, {
-        value: connection.stepPush,
-        mode: connection.stepPushMode,
-        disabled: Boolean(busy),
-        onSave: onStepPushSave,
-        onModeSave: onStepPushModeSave,
-      }),
       provisionContent
         ? h("section", {
-            className: "bxf-botProvision dim-botProvision",
+            className: "spa-feishu-botProvision spa-im-botProvision",
             "aria-label": localizeTemplate('{bot}的飞书授权流程', { bot: bot.name }),
             "data-provision-for": connection.botId,
             ref: provisionRef,
             tabIndex: -1,
           }, provisionContent)
         : null,
-      h("div", { className: "bxf-connectedFooter dim-cardFooter" },
-        h("div", { className: "dim-cardFooterLayout" },
-          h("div", { className: "bxf-actions bxf-botActions dim-cardActions" },
+      h("div", { className: "spa-feishu-connectedFooter spa-im-cardFooter" },
+        h("div", { className: "spa-im-cardFooterLayout" },
+          h("div", { className: "spa-feishu-actions spa-feishu-botActions spa-im-cardActions" },
             h(Button, {
-              className: "dim-cardAction", onClick: onReconnect,
+              className: "spa-im-cardAction", onClick: onReconnect,
               disabled: Boolean(busy), "aria-busy": busy === "reconnect" ? "true" : undefined,
               "aria-label": localizeTemplate(connected ? '检查连接{name}' : '重试连接{name}', { name: bot.name }),
             }, busy === "reconnect" ? (connected ? "检查中…" : "正在连接…") : connected ? "检查连接" : "重试连接"),
-            h("span", { className: "bxf-repairAction" },
+            h("span", { className: "spa-feishu-repairAction" },
               h(Button, {
-                className: "bxf-repairButton dim-cardAction",
+                className: "spa-feishu-repairButton spa-im-cardAction",
                 onClick: onRepairCallback,
                 disabled: Boolean(busy) || repairDisabled,
                 "aria-busy": busy === "callback-repair" ? "true" : undefined,
@@ -703,25 +696,25 @@ export function BotCard({
               }, busy === "callback-repair" ? "等待扫码…" : "补全权限"),
               h("span", {
                 id: repairTooltipId,
-                className: "bxf-repairTooltip",
+                className: "spa-feishu-repairTooltip",
                 role: "tooltip",
               },
                 h("strong", null, "补全范围"),
                 h("span", null, "增量添加当前缺少的卡片回调 card.action.trigger、接收未 @ 群消息所需的 im:message.group_msg、读取消息内图片或文件所需的 im:message:readonly（飞书显示为“获取单聊、群组消息”）、上传机器人图片或文件所需的 im:resource，以及原生命令面板所需的 application:app_slash_command:read / write；确认页只显示当前缺少项，不会创建新应用，群回复方式保持不变，实际收到的群消息和文件会自动保存。"))),
             h(Button, {
-              className: "dim-cardAction", kind: "danger", onClick: onRequestRemove,
+              className: "spa-im-cardAction", kind: "danger", onClick: onRequestRemove,
               disabled: Boolean(busy), ref: removeButtonRef,
               "aria-label": localizeTemplate('从 DeepSeek Harness 移除{name}', { name: bot.name }),
             }, "移除接入")),
-          summary ? h("div", { className: "bxf-healthSummary dim-cardSummary", "data-error": actionError || connection.error ? "true" : undefined },
+          summary ? h("div", { className: "spa-feishu-healthSummary spa-im-cardSummary", "data-error": actionError || connection.error ? "true" : undefined },
             summary) : null,
           (actionError || connection.error) ? h(ConnectionError, { error: actionError || connection.error, showMessage: false }) : null,
           connection.lastMessageError ? h(LastMessageErrorSummary, {
-            className: "bxf-healthSummary",
+            className: "spa-feishu-healthSummary",
             error: connection.lastMessageError,
           }) : null,
           testNotice ? h("div", {
-            className: "bxf-healthSummary dim-cardFeedback",
+            className: "spa-feishu-healthSummary spa-im-cardFeedback",
             role: "status",
           }, testNotice) : null),
         ),
@@ -739,14 +732,14 @@ export function BotCard({
 }
 
 function BotList(props) {
-  return h("section", { className: "bxf-listSection dim-listSection", "aria-labelledby": "bxf-bot-list-title" },
+  return h("section", { className: "spa-feishu-listSection spa-im-listSection", "aria-labelledby": "spa-feishu-bot-list-title" },
     h(ChannelListHeading, {
-      className: "bxf-listHeading",
-      id: "bxf-bot-list-title",
+      className: "spa-feishu-listHeading",
+      id: "spa-feishu-bot-list-title",
       title: "已接入的机器人",
       connectionLabel: "长连接",
     }),
-    h("ul", { className: "bxf-botList dim-botList", role: "list" },
+    h("ul", { className: "spa-feishu-botList spa-im-botList", role: "list" },
       props.bots.map((bot) => h("li", { key: bot.botId },
         h(BotCard, {
           connection: bot,
@@ -782,13 +775,13 @@ function BotList(props) {
 }
 
 function PageError({ error, onRetry, busy }) {
-  return h("div", { className: "bxf-card dim-surfaceCard" },
-    h("div", { className: "bxf-error dim-inlineError", role: "alert" },
+  return h("div", { className: "spa-feishu-card spa-im-surfaceCard" },
+    h("div", { className: "spa-feishu-error spa-im-inlineError", role: "alert" },
       h("div", null,
         h("h3", null, "无法读取飞书机器人"),
         h(ConnectionError, { error: error }),
-        error.code ? h("span", { className: "bxf-errorCode" }, error.code) : null,
-        h("div", { className: "bxf-actions dim-viewActions" },
+        error.code ? h("span", { className: "spa-feishu-errorCode" }, error.code) : null,
+        h("div", { className: "spa-feishu-actions spa-im-viewActions" },
           h(Button, { kind: "primary", onClick: onRetry, disabled: busy },
             busy ? "重试中…" : "重新读取"))),
     ),
@@ -1486,10 +1479,10 @@ export function FeishuSettingsTab({ rpcCall }) {
         error: credentialError,
         onSubmit: bindCredentials,
         onCancel: () => { setCredentialOpen(false); setCredentialError(null); },
-      }, h("label", { className: "dim-credentialField" },
+      }, h("label", { className: "spa-im-credentialField" },
         h("span", null, "应用平台"),
         h("select", {
-          className: "dim-feishuGroupSelect",
+          className: "spa-im-feishuGroupSelect",
           "aria-label": "应用平台",
           value: credentialDomain,
           disabled: credentialBusy,
@@ -1515,7 +1508,7 @@ export function FeishuSettingsTab({ rpcCall }) {
     value: model.modelCatalog ?? EMPTY_MODEL_CATALOG,
   }, h(AgentPresetCatalogContext.Provider, {
     value: model.agentPresetCatalog ?? EMPTY_AGENT_PRESET_CATALOG,
-  }, h("section", { className: "bxf-page dim-channelPage", "aria-label": "飞书机器人设置" },
+  }, h("section", { className: "spa-feishu-page spa-im-channelPage", "aria-label": "飞书机器人设置" },
     operationError ? h(ConnectionError, { error: operationError }) : null,
     h(Heading, {
       totals: model.totals,
@@ -1527,10 +1520,10 @@ export function FeishuSettingsTab({ rpcCall }) {
       addButtonRef,
     }),
     h("div", {
-      className: "bxf-visuallyHidden", role: "status", "aria-live": "polite", "aria-atomic": "true",
+      className: "spa-feishu-visuallyHidden", role: "status", "aria-live": "polite", "aria-atomic": "true",
     }, announcement),
     model.statusError
-      ? h("div", { className: "bxf-statusNotice dim-statusNotice", role: "status" },
+      ? h("div", { className: "spa-feishu-statusNotice spa-im-statusNotice", role: "status" },
           h(AlertIcon, { size: 16 }),
           h("span", null, localizeTemplate('状态自动刷新失败：{error}', { error: localizeText(model.statusError.message) })),
           h(Button, { size: "small", onClick: () => void loadStatus({ silent: true }), disabled: pageBusy }, "立即重试"))

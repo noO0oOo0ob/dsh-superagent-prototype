@@ -113,68 +113,68 @@ function ContextEnhancementScopeEditor({
   const disabled = busy || !supported;
 
   return h('fieldset', {
-    className: 'dim-contextSection dim-contextScope',
+    className: 'spa-im-contextSection spa-im-contextScope',
     'data-context-kind': kind,
     'aria-label': copy.title,
     disabled,
   },
-  h('label', { className: 'dim-contextSwitchRow' },
-    h('span', { className: 'dim-contextSwitchLabel' },
+  h('label', { className: 'spa-im-contextSwitchRow' },
+    h('span', { className: 'spa-im-contextSwitchLabel' },
       h('span', null, copy.enable),
       !supported ? h('span', {
-        id: unavailableId, className: 'dim-contextUnavailable',
+        id: unavailableId, className: 'spa-im-contextUnavailable',
       }, '（当前渠道不支持群聊）') : null),
     h('input', {
-      type: 'checkbox', role: 'switch', className: 'dim-contextSwitch',
+      type: 'checkbox', role: 'switch', className: 'spa-im-contextSwitch',
       checked: supported && scope.enabled,
       disabled,
       'aria-describedby': !supported ? unavailableId : undefined,
       onChange: (event) => { if (supported) onChange('enabled', event.target.checked); },
     })),
-  h('div', { className: 'dim-contextScopeBlock' },
-    h('div', { className: 'dim-contextLegend' },
+  h('div', { className: 'spa-im-contextScopeBlock' },
+    h('div', { className: 'spa-im-contextLegend' },
       h('span', null, '来源字段'),
-      h('span', { className: 'dim-contextHelp dim-contextLegendHelp' },
+      h('span', { className: 'spa-im-contextHelp spa-im-contextLegendHelp' },
         h('button', {
-          type: 'button', className: 'dim-contextHelpButton', disabled,
+          type: 'button', className: 'spa-im-contextHelpButton', disabled,
           'aria-label': copy.fieldsHelpLabel, 'aria-describedby': fieldsHelpId,
         }, h('span', { 'aria-hidden': 'true' }, '?')),
-        h('span', { id: fieldsHelpId, className: 'dim-contextTooltip dim-contextLegendTooltip', role: 'tooltip' },
+        h('span', { id: fieldsHelpId, className: 'spa-im-contextTooltip spa-im-contextLegendTooltip', role: 'tooltip' },
           '增强提示词中请使用字段名（如 senderId、conversationType）引用这些信息。只发送当前会话中勾选且可用的字段，不会额外查询或补全。'))),
-    h('div', { className: 'dim-contextFields' }, CONTEXT_ENHANCEMENT_FIELDS.map((field) => {
+    h('div', { className: 'spa-im-contextFields' }, CONTEXT_ENHANCEMENT_FIELDS.map((field) => {
       const fieldId = `${idPrefix}-${kind}-field-${field}`;
-      return h('div', { key: field, className: 'dim-contextField' },
+      return h('div', { key: field, className: 'spa-im-contextField' },
         h('input', {
           id: fieldId, type: 'checkbox', name: `${kind}-${field}`,
           checked: scope.fields.includes(field), disabled,
           onChange: (event) => onChange('fields', event.target.checked
             ? [...scope.fields, field] : scope.fields.filter((value) => value !== field)),
         }),
-        h('span', { className: 'dim-contextFieldText' },
-          h('label', { className: 'dim-contextFieldName', htmlFor: fieldId }, FIELD_LABELS[field]),
-          FIELD_HELP[field] ? h('span', { className: 'dim-contextHelp dim-contextFieldHelp' },
+        h('span', { className: 'spa-im-contextFieldText' },
+          h('label', { className: 'spa-im-contextFieldName', htmlFor: fieldId }, FIELD_LABELS[field]),
+          FIELD_HELP[field] ? h('span', { className: 'spa-im-contextHelp spa-im-contextFieldHelp' },
             h('button', {
-              type: 'button', className: 'dim-contextHelpButton dim-contextFieldHelpButton', disabled,
+              type: 'button', className: 'spa-im-contextHelpButton spa-im-contextFieldHelpButton', disabled,
               'aria-label': copy[FIELD_HELP[field].labelKey],
               'aria-describedby': `${idPrefix}-${kind}-${field}-help`,
             }, h('span', { 'aria-hidden': 'true' }, '?')),
             h('span', {
               id: `${idPrefix}-${kind}-${field}-help`,
-              className: 'dim-contextTooltip dim-contextFieldTooltip',
+              className: 'spa-im-contextTooltip spa-im-contextFieldTooltip',
               role: 'tooltip',
             }, FIELD_HELP[field].text)) : null,
-          h('label', { className: 'dim-contextFieldKey', htmlFor: fieldId }, field)));
+          h('label', { className: 'spa-im-contextFieldKey', htmlFor: fieldId }, field)));
     }))),
-  h('div', { className: 'dim-contextGuidance dim-contextScopeBlock' },
-    h('div', { className: 'dim-contextEditorHeader' },
-      h('span', { className: 'dim-contextEditorTitle' },
+  h('div', { className: 'spa-im-contextGuidance spa-im-contextScopeBlock' },
+    h('div', { className: 'spa-im-contextEditorHeader' },
+      h('span', { className: 'spa-im-contextEditorTitle' },
         h('label', { htmlFor: guidanceId }, copy.guidanceLabel),
-        h('span', { className: 'dim-contextHelp' },
+        h('span', { className: 'spa-im-contextHelp' },
           h('button', {
-            type: 'button', className: 'dim-contextHelpButton', disabled,
+            type: 'button', className: 'spa-im-contextHelpButton', disabled,
             'aria-label': copy.guidanceHelpLabel, 'aria-describedby': guidanceHelpId,
           }, h('span', { 'aria-hidden': 'true' }, '?')),
-          h('span', { id: guidanceHelpId, className: 'dim-contextTooltip dim-contextGuidanceTooltip', role: 'tooltip' },
+          h('span', { id: guidanceHelpId, className: 'spa-im-contextTooltip spa-im-contextGuidanceTooltip', role: 'tooltip' },
             h('strong', null, '使用说明'),
             h('span', null, copy.guidanceUsage),
             h('strong', null, '生效规则'),
@@ -182,8 +182,8 @@ function ContextEnhancementScopeEditor({
             h('strong', null, '隐私提示'),
             h('span', null, '发送者标识可能包含平台用户 ID 或电话号码形式的标识。关闭开关不会删除已经写入会话历史的信息。'),
             h('strong', null, '使用示例'),
-            h('span', { className: 'dim-contextTooltipExample' }, example)))),
-      h('div', { className: 'dim-contextTextActions' },
+            h('span', { className: 'spa-im-contextTooltipExample' }, example)))),
+      h('div', { className: 'spa-im-contextTextActions' },
         h('button', { type: 'button', disabled, onClick: () => onChange('guidance', example) }, '填入示例'),
         h('button', { type: 'button', disabled, onClick: () => onChange('guidance', '') }, '清空'))),
     h('textarea', {
@@ -288,12 +288,12 @@ function ContextEnhancementDialog({ config, groupSupported, disabled, onSave, on
   };
 
   const content = h('div', {
-    className: 'dim-contextBackdrop',
+    className: 'spa-im-contextBackdrop',
     onMouseDown: (event) => { if (event.target === event.currentTarget) cancel(); },
   }, h('section', {
     id,
     ref: dialogRef,
-    className: 'dim-contextDialog',
+    className: 'spa-im-contextDialog',
     role: 'dialog',
     'aria-modal': 'true',
     'aria-labelledby': titleId,
@@ -327,21 +327,21 @@ function ContextEnhancementDialog({ config, groupSupported, disabled, onSave, on
       }
     },
   },
-  h('header', { className: 'dim-contextHeader' },
-    h('div', { className: 'dim-contextHeaderTitle' },
+  h('header', { className: 'spa-im-contextHeader' },
+    h('div', { className: 'spa-im-contextHeaderTitle' },
       h('h3', { id: titleId }, '上下文增强'),
-      h('span', { className: 'dim-contextHelp dim-contextHeaderHelp' },
+      h('span', { className: 'spa-im-contextHelp spa-im-contextHeaderHelp' },
         h('button', {
-          type: 'button', className: 'dim-contextHelpButton', disabled: busy,
+          type: 'button', className: 'spa-im-contextHelpButton', disabled: busy,
           'aria-label': '查看上下文增强说明', 'aria-describedby': descriptionId,
         }, h('span', { 'aria-hidden': 'true' }, '?')),
-        h('span', { id: descriptionId, className: 'dim-contextTooltip dim-contextHeaderTooltip', role: 'tooltip' },
+        h('span', { id: descriptionId, className: 'spa-im-contextTooltip spa-im-contextHeaderTooltip', role: 'tooltip' },
           '选择在哪些会话中启用、提供哪些来源字段，以及如何使用这些信息。仅使用已有消息元数据，不查询平台 API。'))),
     h('button', {
-      type: 'button', className: 'dim-contextClose', 'aria-label': '关闭弹窗',
+      type: 'button', className: 'spa-im-contextClose', 'aria-label': '关闭弹窗',
       disabled: saving, onClick: cancel,
     }, h(ContextIcon, { kind: 'close' }))),
-  h('div', { className: 'dim-contextTabs', role: 'tablist', 'aria-label': '上下文增强范围' },
+  h('div', { className: 'spa-im-contextTabs', role: 'tablist', 'aria-label': '上下文增强范围' },
     scopeKinds.map((kind) => {
       const selected = activeScope === kind;
       return h('button', {
@@ -350,7 +350,7 @@ function ContextEnhancementDialog({ config, groupSupported, disabled, onSave, on
         ref: tabRefs[kind],
         type: 'button',
         role: 'tab',
-        className: 'dim-contextTab',
+        className: 'spa-im-contextTab',
         'data-context-kind': kind,
         'aria-selected': selected,
         'aria-controls': `${scopeIdPrefix}-${kind}-panel`,
@@ -363,7 +363,7 @@ function ContextEnhancementDialog({ config, groupSupported, disabled, onSave, on
   scopeKinds.map((kind) => h('div', {
     key: kind,
     id: `${scopeIdPrefix}-${kind}-panel`,
-    className: 'dim-contextTabPanel',
+    className: 'spa-im-contextTabPanel',
     role: 'tabpanel',
     'data-context-kind': kind,
     'aria-labelledby': `${scopeIdPrefix}-${kind}-tab`,
@@ -377,11 +377,11 @@ function ContextEnhancementDialog({ config, groupSupported, disabled, onSave, on
     idPrefix: scopeIdPrefix,
     onChange: (key, value) => changeScope(kind, key, value),
   }))),
-  error ? h('p', { className: 'dim-contextError', role: 'alert' }, error) : null,
-  h('footer', { className: 'dim-contextFooter' },
+  error ? h('p', { className: 'spa-im-contextError', role: 'alert' }, error) : null,
+  h('footer', { className: 'spa-im-contextFooter' },
     h('button', { type: 'button', disabled: saving, onClick: cancel }, '取消'),
     h('button', {
-      type: 'button', className: 'dim-contextSave', disabled: busy,
+      type: 'button', className: 'spa-im-contextSave', disabled: busy,
       onClick: () => { void save(); },
     }, saving ? '保存中…' : '保存'))));
 
@@ -400,13 +400,13 @@ export function ContextEnhancementEditor({ config, groupSupported = true, disabl
 
   return h(React.Fragment, null,
     h('button', {
-      type: 'button', ref: entryRef, className: 'dim-contextEntry', disabled,
+      type: 'button', ref: entryRef, className: 'spa-im-contextEntry', disabled,
       'aria-label': '上下文增强', 'aria-describedby': statusId,
       'aria-haspopup': 'dialog', 'aria-expanded': open, 'aria-controls': open ? dialogId : undefined,
       onClick: () => setOpen(true),
     }, h(ContextIcon),
-    h('span', { className: 'dim-contextLabel' }, '上下文增强'),
-    h('span', { id: statusId, className: 'dim-contextStatus', 'data-active': label !== '未开启', 'aria-live': 'polite' }, label),
+    h('span', { className: 'spa-im-contextLabel' }, '上下文增强'),
+    h('span', { id: statusId, className: 'spa-im-contextStatus', 'data-active': label !== '未开启', 'aria-live': 'polite' }, label),
     h(ContextIcon, { kind: 'chevron' })),
     open ? h(ContextEnhancementDialog, {
       id: dialogId, config, groupSupported, disabled, onSave,

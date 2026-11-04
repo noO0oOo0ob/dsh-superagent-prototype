@@ -10,9 +10,9 @@ The package ID is `dsh-super-personal-agent`. It uses its own service, presets, 
 
 Start with [SETUP.md](SETUP.md), or follow the [phase-one local inbox walkthrough](docs/009-personal-agent.md). The walkthrough needs no external account. [Deployment](docs/006-deployment.md) covers installation alongside the original plugin and optional GitHub configuration.
 
-Personal settings provide account discovery and selection for dsh-im, Obsidian exports, repository resources, schedules, hooks and explicit cross-conversation routing. The retained GitHub adapter still watches one repository; this does not limit local tasks or workspace preparation.
+Personal settings include native Feishu/Lark QR or manual account setup, Obsidian exports, repository resources, schedules, hooks and explicit cross-conversation routing. The installed dsh-im plugin is not required. The retained GitHub adapter still watches one repository; this does not limit local tasks or workspace preparation.
 
-Automatic results and Main's reply tool share a persistent delivery receipt per result and destination. Rewording a reply or restarting the plugin does not resend a published result. Switching a bot from ordinary dsh-im chats requires a separate handover: those chats do not share this plugin's intake ledger. See [Connector ownership and handover](docs/014-connectors.md#consumer-mode-handover).
+Automatic results and Main's reply tool share a persistent delivery receipt per result and destination. Rewording a reply or restarting the plugin does not resend a published result. Transferring an existing bot from dsh-im requires stopping its old listener first; independently installed plugins do not share an intake ledger. See [Connector ownership and handover](docs/014-connectors.md#consumer-mode-handover).
 
 ## Documentation
 

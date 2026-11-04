@@ -40,23 +40,23 @@ export function WorkspaceEditor({ workspace, directoryPicker, disabled = false, 
     }
   }, [close, disabled, locked, onSave, workspace]);
 
-  return h('div', { className: 'dim-workspace' },
-    h('div', { className: 'dim-workspaceHeader' },
+  return h('div', { className: 'spa-im-workspace' },
+    h('div', { className: 'spa-im-workspaceHeader' },
       h('span', null, '当前工作区'),
       h('button', {
         type: 'button',
         ref: editButtonRef,
-        className: 'dim-workspaceEdit',
+        className: 'spa-im-workspaceEdit',
         onClick: () => { setOpen(true); setError(null); },
         disabled: disabled || locked || !activeDirectoryPicker,
         title: locked ? '会话目录隔离已开启，工作区由对话自动分配。' : undefined,
       }, '选择目录')),
     workspace
       ? React.createElement('code', {
-          className: 'dim-workspacePath',
+          className: 'spa-im-workspacePath',
           title: workspace,
         }, workspace)
-      : h('code', { className: 'dim-workspacePath' }, '未设置'),
+      : h('code', { className: 'spa-im-workspacePath' }, '未设置'),
     open ? h(WorkspaceDirectoryPicker, {
       open,
       startPath: workspace,

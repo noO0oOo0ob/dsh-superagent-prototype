@@ -1,7 +1,7 @@
 /** Native Feishu account lifecycle and platform transport; no installed dsh-im service is used. */
 import * as Lark from '@larksuiteoapi/node-sdk';
 import { createHash } from 'node:crypto';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { MultiBotDshFeishuController } from '../../vendor/dsh-im/src/channels/feishu/multi-bot-controller.mjs';
 import { PluginConfigStore } from '../../vendor/dsh-im/src/channels/feishu/plugin-config-store.mjs';
@@ -17,6 +17,7 @@ import { createAccessPolicy, createAccessPolicyScope, evaluateAccessPolicy } fro
 import { listAgentPresetCatalog } from '../../vendor/dsh-im/src/channels/shared/agent-preset.mjs';
 import { normalizeModelCatalog } from '../../vendor/dsh-im/src/channels/shared/model-setting.mjs';
 import { readExternalHistory } from '../../vendor/dsh-im/src/channels/feishu/history-reader.mjs';
+import { NATIVE_SLASH_COMMAND_MANIFEST } from '../../vendor/dsh-im/src/channels/feishu/slash-command-panel.mjs';
 import { createFeishuWebSocketAgent } from './feishu-proxy.mjs';
 import { providerMessageIdsFor } from '../../vendor/dsh-im/src/channels/shared/semantic/delivery.mjs';
 
@@ -67,7 +68,9 @@ export async function createNativeFeishu({ context, stateDir, lifetime, logger =
   const configStore = await new PluginConfigStore(join(root, 'accounts.json')).load();
   const saveBot = configStore.saveBot.bind(configStore);
   configStore.saveBot = value => saveBot({ ...value, consumerMode: 'external-consumer' });
-  const workspaces = await new BotWorkspaceStore(join(root, 'settings.json'), { defaultWorkspace: join(stateDir, 'conversations'), ungroupedWorkspace: join(stateDir, 'conversations') }).load();
+  await mkdir(join(stateDir, 'conversations'), { recursive: true, mode: 0o700 });
+  const conversationRoot = await realpath(join(stateDir, 'conversations'));
+  const workspaces = await new BotWorkspaceStore(join(root, 'settings.json'), { defaultWorkspace: conversationRoot, ungroupedWorkspace: conversationRoot }).load();
   const states = new Map(), runtimes = new Map(), consumers = new ExclusiveInboundConsumers();
   let closed = false, closing;
   const stateFor = async bot => {
@@ -99,7 +102,7 @@ export async function createNativeFeishu({ context, stateDir, lifetime, logger =
       await workspaces.ensure(botId, { initialAccessPolicy: policyFor(config) });
       const runtime = new Runtime({ lark: sdk, consumerMode: 'external-consumer', botId, appId: config.appId, appSecret,
         domain: config.domain, botOpenId: config.botOpenId, ownerOpenIds: config.ownerOpenIds, harness, state: await stateFor(botId), repair,
-        groupResponseMode: config.groupResponseMode, mentionTopicReply: config.mentionTopicReply, slashPanel: config.slashPanel, logger,
+        slashManifest: NATIVE_SLASH_COMMAND_MANIFEST, groupResponseMode: config.groupResponseMode, mentionTopicReply: config.mentionTopicReply, slashPanel: config.slashPanel, logger,
         wsAgent: proxyAgent,
         nativeCallbacks: { onCard: async raw => onCard?.(botId, raw) },
         acceptExternal: async (raw, { signal } = {}) => {
@@ -147,8 +150,23 @@ export async function createNativeFeishu({ context, stateDir, lifetime, logger =
   };
   const handle = {
     service, accounts, botSettings,
+    allowsCommand(botId, expectedFingerprint, actorId, kind) {
+      const current = configStore.getBot(botId);
+      if (closed || lifetime.aborted || !current || fingerprint(current) !== expectedFingerprint) return false;
+      return current.ownerOpenIds.includes(actorId) || evaluateAccessPolicy(workspaces.accessPolicyFor(botId),
+        { conversationType: kind === 'group' ? 'group' : 'direct', senderIds: [actorId], isCommand: true }).allowed;
+    },
     async start() { supervisor.start(); await supervisor.ready; await syncAccounts(); },
     async rpc(endpoint, payload, signal) { const result = await rpc(endpoint, payload, signal); await syncAccounts(); return result; },
+    async prepareDialogue(botId, conversationKey, expectedFingerprint) {
+      const current = configStore.getBot(botId);
+      if (!current || fingerprint(current) !== expectedFingerprint) throw failure('account-changed');
+      if (!workspaces.conversationDirectoryFor(botId).enabled) return workspaces.workspaceFor(botId);
+      const directoryKey = `${conversationKey}:${createHash('sha256').update(workspaces.workspaceFor(botId)).digest('hex').slice(0, 16)}`;
+      const prepared = await workspaces.prepareConversationDirectory(botId, directoryKey, { explicitNew: true });
+      if (prepared?.warning) throw failure('workspace-prepare-failed');
+      return prepared?.workspace ?? workspaces.conversationWorkspaceFor(botId, directoryKey);
+    },
     async readResource(botId, route, key, options) {
       options = { ...options, signal: AbortSignal.any([lifetime, options.signal]) };
       return core.withNativeRoute(botId, route, async ({ client, message }) => {
@@ -181,7 +199,10 @@ export async function createNativeFeishu({ context, stateDir, lifetime, logger =
       }, options);
     },
     async sendPart(botId, route, block, options) {
-      const send = async ({ client, channel }) => {
+      const send = async ({ client, channel, message }) => {
+        const current = configStore.getBot(botId);
+        const mentioned = message.mentions?.some(item => (item.id?.open_id ?? item.id) === current.botOpenId);
+        const replyInThread = !!route.threadId || (options.conversationKind === 'group' && mentioned && current.mentionTopicReply !== false);
         if (block.type === 'image' || block.type === 'file') {
           const artifact = options.file;
           if (!artifact) throw failure('artifact-unavailable');
@@ -189,7 +210,7 @@ export async function createNativeFeishu({ context, stateDir, lifetime, logger =
             const sent = await channel[block.type === 'image' ? 'sendImage' : 'sendFile'](route.conversationId,
               { artifactId: block.artifactId, deliveryKey: options.id, fileName: artifact.file.fileName, mediaType: artifact.file.mediaType, size: artifact.file.size,
                 bytes: artifact.bytes, resourceKey: options.resourceKey, onUploaded: options.uploaded },
-              { replyTo: route.messageId, signal: options.signal, replyInThread: !!route.threadId });
+              { replyTo: route.messageId, signal: options.signal, replyInThread: !!replyInThread });
             return { providerMessageIds: providerMessageIdsFor(sent) };
           } catch (error) {
             const safe = ['artifact-permission-required', 'artifact-too-large', 'artifact-empty', 'artifact-provider-rejected', 'artifact-rate-limited', 'artifact-provider-failed'];
@@ -209,14 +230,16 @@ export async function createNativeFeishu({ context, stateDir, lifetime, logger =
             ...(block.actions.length ? [{ tag: 'action', actions: block.actions.map(action => ({ tag: 'button', text: { tag: 'plain_text', content: action.label }, value: { spaAction: action.actionId } })) }] : [])] };
         } else throw failure(`unsupported-${block.type}`, 'unsupported');
         let response;
-        try { response = await client.im.v1.message.reply({ path: { message_id: route.messageId }, data: { msg_type, content: JSON.stringify(content), uuid: uuid(options.id), reply_in_thread: !!route.threadId } }); }
+        try { response = await client.im.v1.message.reply({ path: { message_id: route.messageId }, data: { msg_type, content: JSON.stringify(content), uuid: uuid(options.id), reply_in_thread: !!replyInThread } }); }
         catch (error) { throw failure('message-outcome-unknown', 'unknown', error); }
         if (response?.code) throw failure(`feishu-${response.code}`, Number(response.code) === 230049 ? 'unknown' : 'failed');
         const ids = providerMessageIdsFor(response);
         if (!ids.length) throw failure('message-outcome-unknown', 'unknown');
         return { providerMessageIds: ids };
       };
-      return core.withNativeRoute(botId, route, send, options);
+      const result = await core.withNativeRoute(botId, route, send, options);
+      runtimes.get(botId)?.recordNativeReply?.();
+      return result;
     },
     close() {
       if (closing) return closing;

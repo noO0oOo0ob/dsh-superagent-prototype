@@ -380,3 +380,9 @@ a.spa-btn, a.spa-btn:hover { text-decoration: none; }
 .spa-admission-slot { display: inline-flex; flex: none; width: 16px; }
 .spa-info-warn { color: var(--dsw-alias-state-warn-primary); }
 .spa-field-segmented { max-width: 240px; }
+
+.spa-messaging-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.spa-messaging-settings { min-width: 0; }
+.spa-message-record { padding: 12px 0; border-bottom: 1px solid var(--dsw-alias-border-l2); }
+.spa-message-part { padding: 10px 0; overflow-wrap: anywhere; }
+.spa-message-preview { white-space: pre-wrap; max-height: 180px; overflow: auto; }

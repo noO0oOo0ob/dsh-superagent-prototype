@@ -1,4 +1,5 @@
 /** Personal settings, source-account diagnostics, and independent delivery recovery controls. */
+import { NativeMessaging, MessageDeliveries } from './messaging.tsx'
 import { useState } from 'react'
 import type { ApiResponse } from '../app/api.ts'
 import { usePoll } from './api.ts'
@@ -36,6 +37,8 @@ export function PersonalPage() {
   if (!data) return <LoadState loading error={error} />
   return <>
     {error && <LoadState loading={false} error={error} />}
+    <NativeMessaging />
+    <MessageDeliveries />
     <PersonalConfig data={data} reload={reload} />
     <Connections data={data} reload={reload} />
     <Schedules data={data} reload={reload} />

@@ -58,6 +58,14 @@ export const SLASH_COMMAND_MANIFEST = Object.freeze([
   { command: 'repair', icon: 'ai-functions_outlined', default: '补全飞书权限与卡片回调（仅私聊）', en_us: 'Complete Feishu permissions and card callbacks (private chats only)' },
 ]);
 
+/** Personal Agent commands preserve task ownership and never bind arbitrary DSH Sessions. */
+export const NATIVE_SLASH_COMMAND_MANIFEST = Object.freeze([
+  ...SLASH_COMMAND_MANIFEST.filter(entry => ['menu', 'new', 'clear', 'help', 'status', 'history', 'stop', 'steer', 'model', 'preset', 'workspace', 'repair', 'version'].includes(entry.command)),
+  { command: 'tasks', icon: 'ai-functions_outlined', default: '查看本会话任务', en_us: 'List conversation tasks' },
+  { command: 'result', icon: 'folder_outlined', default: '重新投递任务结果与附件', en_us: 'Deliver a task result and its files' },
+  { command: 'retry', icon: 'ai-deepthink_outlined', default: '重试自己的失败任务', en_us: 'Retry your failed task' },
+]);
+
 /**
  * How the "/" panel of one bot is built.
  *
@@ -94,7 +102,7 @@ function normalizeCommandName(value) {
 }
 
 function manifestHas(name) {
-  return SLASH_COMMAND_MANIFEST.some((entry) => entry.command === name);
+  return [...SLASH_COMMAND_MANIFEST, ...NATIVE_SLASH_COMMAND_MANIFEST].some((entry) => entry.command === name);
 }
 
 /**

@@ -149,6 +149,7 @@ export class FeishuRuntime {
   #slashCommands = true;
   /** Which commands the "/" panel should offer, and in which order. */
   #slashPanel = null;
+  #slashManifest;
   /** HTTP instance kept for panel re-syncs after startup. */
   #slashHttpInstance = null;
   /**
@@ -191,6 +192,7 @@ export class FeishuRuntime {
     requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
     slashCommands = true,
     slashPanel = null,
+    slashManifest = SLASH_COMMAND_MANIFEST,
     wsAgent,
     logger = console,
   }) {
@@ -242,6 +244,7 @@ export class FeishuRuntime {
     this.#requestTimeoutMs = requestTimeoutMs;
     this.#slashCommands = (consumerMode !== 'external-consumer' || nativeCallbacks !== null) && Boolean(slashCommands);
     this.#slashPanel = normalizeSlashPanelConfig(slashPanel);
+    this.#slashManifest = slashManifest;
     this.#wsAgent = wsAgent;
     this.#logger = logger; this.#diagnostics = createConnectionDiagnostics({ channel: 'feishu', logger });
     this.#status = createBridgeStatus({ allowedSenderCount: normalizedOwners.length });
@@ -409,7 +412,12 @@ export class FeishuRuntime {
             assertCurrentStart();
             if (typeof this.#acceptExternal !== 'function')
               throw Object.assign(new Error('consumer-unavailable'), { code: 'consumer-unavailable' });
-            return this.#acceptExternal(event, { signal });
+            this.#status.messagesReceived += 1;
+            this.#status.lastMessageAt = new Date().toISOString();
+            return this.#acceptExternal(event, { signal }).catch(error => {
+              this.#status.lastError = error?.message ?? String(error);
+              throw error;
+            });
           }
           if (isCurrentStart()) void bridge.accept(event);
         },
@@ -800,6 +808,8 @@ export class FeishuRuntime {
     return result;
   }
 
+  recordNativeReply() { this.#status.messagesReplied += 1; this.#status.lastReplyAt = new Date().toISOString(); }
+
   async withNativeRoute(route, operation, { signal } = {}) {
     if (!route || typeof route.messageId !== 'string' || typeof route.conversationId !== 'string'
       || typeof route.actorId !== 'string')
@@ -901,7 +911,7 @@ export class FeishuRuntime {
         domain: this.#domain,
         httpInstance,
         signal,
-        manifest: SLASH_COMMAND_MANIFEST,
+        manifest: this.#slashManifest,
         config: this.#slashPanel,
       });
       // A newer panel config took over while this sync was running: its own run

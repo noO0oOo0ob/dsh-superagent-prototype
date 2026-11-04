@@ -13,6 +13,8 @@ let current: View
 let requests: { path: string; method: string; body: Record<string, unknown> }[]
 let bots: unknown[]
 let events: ApiResponse<'GET personal/hooks'>
+let nativeBots: Record<string, unknown>[]
+let parts: ApiResponse<'GET personal/messages'>
 let error: string | undefined
 const atTime = '2026-11-04T06:00:00Z'
 const response = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } })
@@ -21,7 +23,7 @@ const schedule = (): View['schedules'][number] => ({ version: 1, revision: 1, st
 
 beforeEach(() => {
   current = { revision: 0, config: PersonalConfigSchema.parse({}), connectors: {}, deliveries: [], vault: [], routeDecisions: [], schedules: [], runs: [], hooks: [] }
-  requests = []; bots = []; events = []; error = undefined
+  requests = []; bots = []; events = []; nativeBots = []; parts = []; error = undefined
   const fallback = globalThis.fetch
   vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input).replace('/super-personal-agent/api/', ''), method = init?.method ?? 'GET'
@@ -36,6 +38,17 @@ beforeEach(() => {
       current = { ...current, revision: current.revision + 1, config: parsed.data }
       return response({ revision: current.revision, config: current.config })
     }
+    if (path === 'personal/feishu') {
+      if (body.endpoint === 'bot.bind-credentials') nativeBots = [{ botId: 'native_test', bot: { name: 'Native test' }, connected: true, state: 'connected', workspace: '/tmp/native', accessPolicy: { direct: { mode: 'open', open: { defaultCanExecuteCommands: true, commandPermissionOverrides: [] }, allowlist: { users: [] } }, group: { mode: 'open', open: { defaultCanExecuteCommands: true, commandPermissionOverrides: [] }, allowlist: { users: [] } } } }]
+      const payload = body.payload as Record<string, unknown>
+      if (body.endpoint === 'bot.access-policy.set' || body.endpoint === 'bot.slash-panel.set') {
+        const name = body.endpoint === 'bot.access-policy.set' ? 'accessPolicy' : 'slashPanel'
+        nativeBots = nativeBots.map(bot => bot.botId === payload.botId ? { ...bot, [name]: payload.policy ?? payload.slashPanel } : bot)
+      }
+      return response({ ok: true, value: { bots: nativeBots, totals: { configured: nativeBots.length, connected: nativeBots.length } } })
+    }
+    if (path === 'personal/messages') return response(parts)
+    if (path.startsWith('personal/messages/')) return response({ recorded: true })
     if (path === 'personal/bots') return response({ bots })
     if (path.startsWith('personal/deliveries/')) { current.deliveries = []; return response({ recorded: true }) }
     if (path === 'personal/hooks') return response(events)
@@ -202,3 +215,57 @@ it('retains the form when a refresh fails after an action', async () => {
   expect(text()).toContain(error)
   expect(field<HTMLTextAreaElement>(zh['personal.config.connectors']).value).toBe('[]')
 })
+
+it('binds native Feishu in its own page and opens account settings without the original plugin', async () => {
+  await mount()
+  expect(text()).toContain('扫码接入机器人')
+  await click('手动接入')
+  await type(document.querySelector<HTMLInputElement>('input[placeholder="填写飞书开放平台 App ID"]')!, 'cli_native')
+  await type(document.querySelector<HTMLInputElement>('input[placeholder="填写飞书开放平台 App Secret"]')!, 'private-local-fixture')
+  await click('绑定并连接')
+  expect(requests.find(item => item.body.endpoint === 'bot.bind-credentials')?.body.payload).toEqual({ appId: 'cli_native', appSecret: 'private-local-fixture', domain: 'feishu' })
+  expect(text()).toContain('Native test')
+  expect(text()).not.toContain('private-local-fixture')
+  await click('更多机器人设置')
+  expect(text()).toContain(zh['messaging.tab.access'])
+  await click(zh['messaging.tab.access'])
+  expect(text()).toContain('访问权限')
+  await click('保存访问设置')
+  expect(text()).toContain('访问设置已保存')
+  await click('保存访问设置')
+  expect(requests.filter(item => item.body.endpoint === 'bot.access-policy.set').map(item => (item.body.payload as Record<string, unknown>).botId)).toEqual(['native_test', 'native_test'])
+  await click(zh['messaging.tab.commands'])
+  await type(field<HTMLSelectElement>('指令面板模式'), 'custom')
+  await click('保存')
+  expect(requests.find(item => item.body.endpoint === 'bot.slash-panel.set')?.body.payload).toMatchObject({ botId: 'native_test' })
+  await click(zh['messaging.tab.access'])
+  await click('保存访问设置')
+  expect(requests.filter(item => item.body.endpoint === 'bot.access-policy.set').at(-1)?.body.payload).toMatchObject({ botId: 'native_test' })
+  await click(zh['messaging.back'])
+  expect(text()).toContain('Native test')
+  expect(document.querySelector('style[data-plugin-css="xmanrui-dsh-im-settings"]')).toBeNull()
+  expect(document.querySelector('style[data-plugin-css="spa-native-im-settings"]')).not.toBeNull()
+})
+
+it('shows mixed result parts and reconciles only the selected failed file', async () => {
+  parts = [{ version: 1, id: 'delivery-rich', signature: 'sig', source: 'native', thread: 'chat', at: atTime, updatedAt: atTime, resolutions: [],
+    parts: [{ id: 'text', block: { type: 'text', text: 'Report ready', format: 'plain' }, state: 'sent', attempts: 1, providerMessageIds: ['om_1'] },
+      { id: 'file', block: { type: 'file', artifactId: 'report' }, state: 'failed', attempts: 1, providerMessageIds: [], error: 'permission-required' }] }]
+  await mount()
+  expect(text()).toContain(zh['messaging.state.partial'])
+  const retry = all('button').find(item => item.textContent === zh['messaging.retry']) as HTMLButtonElement
+  expect(retry.disabled).toBe(true)
+  await type(field<HTMLInputElement>(zh['messaging.note']), 'Permissions repaired')
+  await click(retry)
+  expect(requests.find(item => item.path === 'personal/messages/delivery-rich')?.body).toEqual({ partId: 'file', action: 'retry', note: 'Permissions repaired' })
+  expect(all('a').some(item => item.getAttribute('href') === '/super-personal-agent/artifact/report')).toBe(true)
+})
+
+it('keeps every unresolved delivery visible after more than thirty records', async () => {
+  parts = Array.from({ length: 35 }, (_, i) => ({ version: 1, id: `receipt-${i}`, signature: 'sig', source: 'native', thread: 'chat', at: atTime, updatedAt: atTime, resolutions: [],
+    parts: [{ id: `part-${i}`, block: { type: 'text', text: `Unresolved ${i}`, format: 'plain' }, state: 'unknown', attempts: 1, providerMessageIds: [] }] }));
+  await mount();
+  expect(document.querySelectorAll('.spa-message-record')).toHaveLength(35);
+  expect(text()).toContain('Unresolved 0');
+  expect(text()).toContain('Unresolved 34');
+});

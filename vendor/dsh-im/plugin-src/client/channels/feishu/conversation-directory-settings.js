@@ -17,25 +17,25 @@ function ConfigForm({ title, value, inherited, busy, onSave, onClear }) {
     try { setError(null); await onSave(validateConversationDirectory(draft)); }
     catch (cause) { setError(cause.message); }
   };
-  return h('form', { className: 'dim-conversationDirectoryForm', onSubmit: save, 'aria-label': title },
+  return h('form', { className: 'spa-im-conversationDirectoryForm', onSubmit: save, 'aria-label': title },
     h('h3', null, title),
-    inherited ? h('p', { className: 'dim-botGeneralHelp' }, '继承渠道默认；保存后仅覆盖当前机器人。') : null,
-    h('label', { className: 'dim-botGeneralRow', htmlFor: `${id}-enabled` },
-      h('span', { className: 'dim-botGeneralTitle' }, '启用会话目录隔离'),
-      h('input', { id: `${id}-enabled`, type: 'checkbox', role: 'switch', className: 'dim-contextSwitch', checked: draft.enabled, disabled: busy, onChange: (event) => update('enabled', event.target.checked) })),
-    h('label', { className: 'dim-conversationDirectoryField', htmlFor: `${id}-strategy` },
+    inherited ? h('p', { className: 'spa-im-botGeneralHelp' }, '继承渠道默认；保存后仅覆盖当前机器人。') : null,
+    h('label', { className: 'spa-im-botGeneralRow', htmlFor: `${id}-enabled` },
+      h('span', { className: 'spa-im-botGeneralTitle' }, '启用会话目录隔离'),
+      h('input', { id: `${id}-enabled`, type: 'checkbox', role: 'switch', className: 'spa-im-contextSwitch', checked: draft.enabled, disabled: busy, onChange: (event) => update('enabled', event.target.checked) })),
+    h('label', { className: 'spa-im-conversationDirectoryField', htmlFor: `${id}-strategy` },
       h('span', null, '目录策略'),
       h('select', { id: `${id}-strategy`, value: draft.strategy, disabled: busy, onChange: (event) => update('strategy', event.target.value) },
         h('option', { value: 'per-conversation' }, '每个对话固定一个目录'),
         h('option', { value: 'per-session' }, '每次新建会话使用新目录'))),
-    h('label', { className: 'dim-conversationDirectoryField', htmlFor: `${id}-prefix` },
+    h('label', { className: 'spa-im-conversationDirectoryField', htmlFor: `${id}-prefix` },
       h('span', null, '目录前缀'),
       h('input', { id: `${id}-prefix`, value: draft.prefix, maxLength: 32, pattern: '[A-Za-z0-9_-]{1,32}', disabled: busy, onChange: (event) => update('prefix', event.target.value) })),
-    h('p', { className: 'dim-botGeneralHelp' }, '1–32 位字母、数字、下划线或连字符，默认为 conv-。'),
-    error ? h('p', { role: 'alert', className: 'dim-accessFeedback', 'data-tone': 'error' }, error) : null,
-    h('div', { className: 'dim-targetFormActions' },
-      h('button', { type: 'submit', className: 'dim-deliveryButton', disabled: busy }, '保存设置'),
-      onClear ? h('button', { type: 'button', className: 'dim-deliveryButton', disabled: busy, onClick: () => void onClear() }, title === '当前机器人' ? '恢复继承渠道默认' : '清除渠道默认') : null));
+    h('p', { className: 'spa-im-botGeneralHelp' }, '1–32 位字母、数字、下划线或连字符，默认为 conv-。'),
+    error ? h('p', { role: 'alert', className: 'spa-im-accessFeedback', 'data-tone': 'error' }, error) : null,
+    h('div', { className: 'spa-im-targetFormActions' },
+      h('button', { type: 'submit', className: 'spa-im-deliveryButton', disabled: busy }, '保存设置'),
+      onClear ? h('button', { type: 'button', className: 'spa-im-deliveryButton', disabled: busy, onClick: () => void onClear() }, title === '当前机器人' ? '恢复继承渠道默认' : '清除渠道默认') : null));
 }
 
 export function FeishuConversationDirectorySettingsPage({ account, rpcCall }) {
@@ -63,9 +63,9 @@ export function FeishuConversationDirectorySettingsPage({ account, rpcCall }) {
     finally { setBusy(false); }
   };
   const bot = snapshot?.bots?.find((item) => item.botId === account.botId);
-  return h('section', { className: 'dim-conversationDirectorySettings', 'aria-label': '会话目录隔离', 'aria-busy': busy },
-    h('p', { className: 'dim-botGeneralHelp' }, '让每个对话在自己的目录里工作，避免多人使用同一机器人时互相覆盖文件。默认关闭。'),
-    h('p', { className: 'dim-botGeneralHelp' }, '设置保存后对新会话生效。发送 /new 使用新设置；已有会话和旧目录中的文件保留。开启后无法手动修改工作区。'),
+  return h('section', { className: 'spa-im-conversationDirectorySettings', 'aria-label': '会话目录隔离', 'aria-busy': busy },
+    h('p', { className: 'spa-im-botGeneralHelp' }, '让每个对话在自己的目录里工作，避免多人使用同一机器人时互相覆盖文件。默认关闭。'),
+    h('p', { className: 'spa-im-botGeneralHelp' }, '设置保存后对新会话生效。发送 /new 使用新设置；已有会话和旧目录中的文件保留。开启后无法手动修改工作区。'),
     error ? h('p', { role: 'alert' }, error) : null,
     bot ? h(React.Fragment, null,
       h(ConfigForm, { key: `bot-${account.botId}`, title: '当前机器人', value: bot.conversationDirectoryOverride ?? bot.conversationDirectory, inherited: bot.conversationDirectoryOverride == null, busy, onSave: (config) => save(FEISHU_ENDPOINTS.setConversationDirectory, config), onClear: () => save(FEISHU_ENDPOINTS.setConversationDirectory, null) }),

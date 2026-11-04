@@ -37,17 +37,17 @@ function AliasDialog({ bot, onSave, onClose }) {
     }
   };
   const content = h('dialog', {
-    ref: dialogRef, className: 'dim-aliasDialog', 'aria-labelledby': `${id}-title`,
+    ref: dialogRef, className: 'spa-im-aliasDialog', 'aria-labelledby': `${id}-title`,
     'aria-busy': saving,
     onCancel: (event) => { event.preventDefault(); close(); },
     onClick: (event) => event.stopPropagation(),
     onKeyDown: (event) => event.stopPropagation(),
   },
-  h('div', { className: 'dim-aliasHeader' },
+  h('div', { className: 'spa-im-aliasHeader' },
     h('h3', { id: `${id}-title` }, '修改别名'),
-    h('button', { type: 'button', className: 'dim-aliasClose', disabled: saving,
+    h('button', { type: 'button', className: 'spa-im-aliasClose', disabled: saving,
       'aria-label': '关闭修改别名', onClick: close }, '×')),
-  h('div', { className: 'dim-aliasOriginal' }, h('span', null, '原名称'),
+  h('div', { className: 'spa-im-aliasOriginal' }, h('span', null, '原名称'),
     h('span', null, bot.originalName ?? bot.name)),
   h('label', { htmlFor: `${id}-input` }, '别名'),
   h('input', { id: `${id}-input`, ref: inputRef, value: draft, disabled: saving,
@@ -60,14 +60,14 @@ function AliasDialog({ bot, onSave, onClose }) {
       }
     },
   }),
-  h('p', { id: `${id}-help`, className: 'dim-aliasHelp' }, '仅更改显示名称，留空则显示原名称。'),
-  error ? h('p', { className: 'dim-aliasError', role: 'alert' }, error) : null,
-  h('div', { className: 'dim-aliasFooter' },
-    h('button', { type: 'button', className: 'dim-aliasRestore',
+  h('p', { id: `${id}-help`, className: 'spa-im-aliasHelp' }, '仅更改显示名称，留空则显示原名称。'),
+  error ? h('p', { className: 'spa-im-aliasError', role: 'alert' }, error) : null,
+  h('div', { className: 'spa-im-aliasFooter' },
+    h('button', { type: 'button', className: 'spa-im-aliasRestore',
       disabled: saving || !bot.alias, onClick: () => void save('') }, '恢复原名称'),
-    h('div', { className: 'dim-aliasActions' },
+    h('div', { className: 'spa-im-aliasActions' },
       h('button', { type: 'button', disabled: saving, onClick: close }, '取消'),
-      h('button', { type: 'button', className: 'dim-aliasSave', disabled: saving,
+      h('button', { type: 'button', className: 'spa-im-aliasSave', disabled: saving,
         onClick: () => void save(draft) }, saving ? '保存中…' : '保存'))));
   return globalThis.document?.body ? createPortal(content, document.body) : content;
 }
@@ -111,7 +111,7 @@ function BotNameTooltip({ anchorRef, id, name, onDismiss }) {
   }, [anchorRef, name, onDismiss]);
   const body = anchorRef.current?.ownerDocument.body;
   return body ? createPortal(h('span', {
-    ref: tooltipRef, id, role: 'tooltip', className: 'dim-botNameTooltip',
+    ref: tooltipRef, id, role: 'tooltip', className: 'spa-im-botNameTooltip',
     style: position ?? { visibility: 'hidden' },
   }, name), body) : null;
 }
@@ -140,7 +140,7 @@ export function BotName({ bot, id, disabled = false, onSave }) {
     return () => { observer?.disconnect(); view.removeEventListener('resize', measure); };
   }, [bot.name, measure]);
   const showTooltip = truncated && !dismissed && !open && (hovered || focused);
-  return h('div', { className: 'dim-aliasName' },
+  return h('div', { className: 'spa-im-aliasName' },
     h('h3', {
       id, ref: nameRef, tabIndex: truncated ? 0 : undefined,
       'aria-describedby': showTooltip ? tooltipId : undefined,
@@ -154,11 +154,11 @@ export function BotName({ bot, id, disabled = false, onSave }) {
       anchorRef: nameRef, id: tooltipId, name: bot.name, onDismiss: dismissTooltip,
     }) : null,
     h('span', {
-      className: 'dim-aliasEntry',
+      className: 'spa-im-aliasEntry',
       onClick: (event) => event.stopPropagation(),
       onKeyDown: (event) => event.stopPropagation(),
     },
-    h('button', { type: 'button', className: 'dim-aliasEdit',
+    h('button', { type: 'button', className: 'spa-im-aliasEdit',
       'aria-label': '修改别名', title: '修改别名', 'aria-haspopup': 'dialog',
       disabled: disabled || typeof onSave !== 'function', onClick: () => setOpen(true) },
     h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none',

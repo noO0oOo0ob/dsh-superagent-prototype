@@ -4,7 +4,7 @@ import weixinDiagnostics from '../../src/channels/weixin/connection-error.en.mjs
 import { RU } from './i18n-ru.js';
 import * as React from 'react';
 
-export const IM_LOCALE_NAMESPACE = 'dsh-im';
+export const IM_LOCALE_NAMESPACE = 'super-personal-agent-im';
 
 // Sentences the settings UI composes itself: the dictionaries carry them as
 // templates with `{name}` placeholders, looked up like any other key and filled in

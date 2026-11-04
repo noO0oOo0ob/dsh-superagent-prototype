@@ -164,26 +164,26 @@ export function WorkspaceDirectoryPicker({
   const pathReady = listing !== null && pathDraft === listing.path;
 
   const content = h('div', {
-    className: 'dim-directoryPickerBackdrop',
+    className: 'spa-im-directoryPickerBackdrop',
     onMouseDown: (event) => {
       if (event.target === event.currentTarget && !busy) onCancel();
     },
   },
   h('section', {
     ref: dialogRef,
-    className: 'dim-directoryPicker',
+    className: 'spa-im-directoryPicker',
     role: 'dialog',
     'aria-modal': 'true',
     'aria-labelledby': titleId,
     'aria-describedby': noticeId,
     tabIndex: -1,
   },
-  h('header', { className: 'dim-directoryPickerHeader' },
+  h('header', { className: 'spa-im-directoryPickerHeader' },
     h('h3', { id: titleId }, '选择机器人工作区目录'),
     listing
-      ? h('nav', { className: 'dim-directoryCrumbs', 'aria-label': '当前目录' },
+      ? h('nav', { className: 'spa-im-directoryCrumbs', 'aria-label': '当前目录' },
           crumbs.map((crumb, index) => h(React.Fragment, { key: crumb.path },
-            index > 0 ? h('span', { className: 'dim-directoryCrumbSeparator', 'aria-hidden': 'true' }, '›') : null,
+            index > 0 ? h('span', { className: 'spa-im-directoryCrumbSeparator', 'aria-hidden': 'true' }, '›') : null,
             React.createElement('button', {
               type: 'button',
               title: crumb.path,
@@ -196,19 +196,19 @@ export function WorkspaceDirectoryPicker({
         )
       : h('p', null, '正在准备目录选择器…'),
     h('form', {
-      className: 'dim-directoryPathForm',
+      className: 'spa-im-directoryPathForm',
       onSubmit: (event) => {
         event.preventDefault();
         if (!busy && !loading && pathDraft.trim()) void loadDirectory(pathDraft);
       },
     },
-      h('div', { className: 'dim-directoryPathMeta' },
+      h('div', { className: 'spa-im-directoryPathMeta' },
         h('label', { htmlFor: pathInputId }, '直接输入路径'),
         h('span', null, '支持 Windows 盘符、UNC 与 POSIX 绝对路径。')),
-      h('div', { className: 'dim-directoryPathControl' },
+      h('div', { className: 'spa-im-directoryPathControl' },
         h('input', {
           id: pathInputId,
-          className: 'dim-directoryPathInput',
+          className: 'spa-im-directoryPathInput',
           value: pathDraft,
           placeholder: '输入 Host 上的完整绝对路径',
           'aria-label': '工作区绝对路径',
@@ -228,50 +228,50 @@ export function WorkspaceDirectoryPicker({
           type: 'submit',
           disabled: busy || loading || !pathDraft.trim(),
         }, loading ? '读取中…' : '前往')))),
-  h('div', { ref: bodyRef, className: 'dim-directoryPickerBody', 'aria-busy': loading },
+  h('div', { ref: bodyRef, className: 'spa-im-directoryPickerBody', 'aria-busy': loading },
     loading && !listing
-      ? h('div', { className: 'dim-directoryPickerState' },
-          h('span', { className: 'dim-directoryPickerSpinner', 'aria-hidden': 'true' }),
+      ? h('div', { className: 'spa-im-directoryPickerState' },
+          h('span', { className: 'spa-im-directoryPickerSpinner', 'aria-hidden': 'true' }),
           h('p', null, '正在读取目录…'))
       : listing
         ? entries.length > 0
-          ? h('ul', { className: 'dim-directoryList' }, entries.map((entry) => h('li', { key: entry.path },
+          ? h('ul', { className: 'spa-im-directoryList' }, entries.map((entry) => h('li', { key: entry.path },
               React.createElement('button', {
                 type: 'button',
                 title: entry.path,
                 disabled: loading || busy,
                 onClick: () => void loadDirectory(entry.path),
               },
-              h('span', { className: 'dim-directoryFolder' }, h(FolderIcon)),
-              React.createElement('span', { className: 'dim-directoryName' }, entry.name),
-              h('span', { className: 'dim-directoryChevron' }, h(ChevronIcon))))))
-          : h('div', { className: 'dim-directoryPickerState' },
+              h('span', { className: 'spa-im-directoryFolder' }, h(FolderIcon)),
+              React.createElement('span', { className: 'spa-im-directoryName' }, entry.name),
+              h('span', { className: 'spa-im-directoryChevron' }, h(ChevronIcon))))))
+          : h('div', { className: 'spa-im-directoryPickerState' },
               h('p', null, '这个目录中没有子文件夹。'))
         : null,
     listing?.truncated
-      ? h('p', { className: 'dim-directoryPickerTruncated' }, '此目录的子文件夹过多，仅显示前一部分。')
+      ? h('p', { className: 'spa-im-directoryPickerTruncated' }, '此目录的子文件夹过多，仅显示前一部分。')
       : null,
-    presentedError ? h('div', { id: errorId, className: 'dim-directoryPickerError', role: 'alert' },
+    presentedError ? h('div', { id: errorId, className: 'spa-im-directoryPickerError', role: 'alert' },
       h('span', null, presentedError),
       !listing && !busy ? h('button', {
         type: 'button', onClick: () => setRetryKey((value) => value + 1),
       }, '重试') : null) : null),
-  h('footer', { className: 'dim-directoryPickerFooter' },
+  h('footer', { className: 'spa-im-directoryPickerFooter' },
     h('button', {
       type: 'button',
-      className: 'dim-directoryHidden',
+      className: 'spa-im-directoryHidden',
       'aria-pressed': showHidden,
       onClick: () => setShowHidden((value) => !value),
       disabled: busy || !listing,
     },
-      h('span', { className: 'dim-directoryHiddenBox', 'aria-hidden': 'true' }),
+      h('span', { className: 'spa-im-directoryHiddenBox', 'aria-hidden': 'true' }),
       h('span', null, '显示隐藏文件夹')),
-    h('p', { id: noticeId, className: 'dim-directoryPickerNotice' }, '切换后会清除这个机器人的旧会话映射。'),
-    h('div', { className: 'dim-directoryPickerActions' },
+    h('p', { id: noticeId, className: 'spa-im-directoryPickerNotice' }, '切换后会清除这个机器人的旧会话映射。'),
+    h('div', { className: 'spa-im-directoryPickerActions' },
       h('button', { type: 'button', onClick: onCancel, disabled: busy }, '取消'),
       h('button', {
         type: 'button',
-        className: 'dim-directoryPickerPrimary',
+        className: 'spa-im-directoryPickerPrimary',
         disabled: busy || loading || !pathReady,
         onClick: () => listing && void onPicked(listing.path),
       }, busy ? '切换中…' : '选择此目录')))));

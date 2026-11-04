@@ -27,7 +27,11 @@
     "locale/*.json",
     "README.md",
     "prompts",
-    "skills"
+    "skills",
+    "LICENSE",
+    "vendor/dsh-im/LICENSE",
+    "vendor/dsh-im/THIRD_PARTY_NOTICES.md",
+    "vendor/dsh-im/UPSTREAM.json"
   ],
   "dsh": {
     "bundle": {

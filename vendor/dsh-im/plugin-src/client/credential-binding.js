@@ -3,7 +3,7 @@ import { channelName, h, localizeTemplate } from './i18n.js';
 
 function ActionIcon({ children }) {
   return h('svg', {
-    className: 'dim-actionIcon',
+    className: 'spa-im-actionIcon',
     width: 15,
     height: 15,
     viewBox: '0 0 20 20',
@@ -63,17 +63,17 @@ export function CredentialBindingPanel({
   };
 
   return h('section', {
-    className: 'ddt-card dim-surfaceCard dim-credentialPanel',
+    className: 'ddt-card spa-im-surfaceCard spa-im-credentialPanel',
     'aria-labelledby': headingId,
   },
-  h('h3', { id: headingId, className: 'dim-credentialTitle' },
+  h('h3', { id: headingId, className: 'spa-im-credentialTitle' },
       localizeTemplate('手动接入{channel}机器人', { channel: channelName(channel) })),
   children,
   h('form', {
-    className: `dim-credentialForm${hasIdentity ? '' : ' dim-credentialFormSingle'}`,
+    className: `spa-im-credentialForm${hasIdentity ? '' : ' spa-im-credentialFormSingle'}`,
     onSubmit: submit,
   },
-    hasIdentity ? h('label', { className: 'dim-credentialField' },
+    hasIdentity ? h('label', { className: 'spa-im-credentialField' },
       h('span', null, identityLabel),
       h('input', {
         value: identity,
@@ -87,7 +87,7 @@ export function CredentialBindingPanel({
         disabled: busy,
         required: true,
       })) : null,
-    h('label', { className: 'dim-credentialField' },
+    h('label', { className: 'spa-im-credentialField' },
       h('span', null, secretLabel),
       h('input', {
         type: 'password',
@@ -102,8 +102,8 @@ export function CredentialBindingPanel({
         disabled: busy,
         required: true,
       })),
-    error ? h('p', { className: 'dim-credentialError', role: 'alert' }, error.message ?? String(error)) : null,
-    h('div', { className: 'ddt-actions dim-viewActions dim-credentialActions' },
+    error ? h('p', { className: 'spa-im-credentialError', role: 'alert' }, error.message ?? String(error)) : null,
+    h('div', { className: 'ddt-actions spa-im-viewActions spa-im-credentialActions' },
       h('button', {
         type: 'submit',
         className: 'ddt-button',

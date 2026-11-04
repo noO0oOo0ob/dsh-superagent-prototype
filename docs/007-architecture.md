@@ -290,11 +290,28 @@ Some generic modules still refer directly to GitHub or Feishu:
 
 | Path | Responsibility |
 | --- | --- |
-| `src/app/connectors.ts` | Checked dsh-im intake, account lifecycle and durable send reconciliation |
+| `src/client/messaging.tsx` | Native Feishu account settings and per-part delivery recovery UI |
+| `src/client/native-ui.mjs` | Namespaced copied Feishu UI exports |
+| `src/client/native-ui.d.mts` | Typed declarations for copied UI components |
+| `src/connectors/feishu-proxy.mjs` | Platform WebSocket proxy configuration |
+| `src/connectors/native-accounts.ts` | Native account reconciliation preserving saved restrictions |
+| `src/connectors/native-delivery.ts` | Feishu content preparation and durable delivery adapter |
+| `src/connectors/native-feishu.mjs` | Native account controller, SDK lifecycle and checked platform transport |
+| `src/connectors/native-feishu.d.mts` | Typed native platform adapter interface |
+| `src/messaging/actions.ts` | Single-use host card action correlation |
+| `src/messaging/commands.ts` | Conversation-scoped slash command dispatch |
+| `src/messaging/content.ts` | Versioned ordered publication block schema |
+| `src/messaging/conversations.ts` | Stable IM conversation generations and task ownership |
+| `src/messaging/delivery-state.ts` | Pure aggregate delivery status |
+| `src/messaging/delivery.ts` | Immutable per-part receipts and explicit recovery |
+| `src/messaging/dialogue.ts` | Restricted conversation router and logged metadata projection |
+| `src/messaging/files.ts` | Immutable binary artifact snapshots |
+| `src/messaging/inbound.ts` | Source-scoped inbound resource downloads |
+| `src/app/connectors.ts` | Checked native account intake, account lifecycle and durable send reconciliation |
 | `src/app/personal-policy.ts` | Revalidation of scheduled execution against its original human authority |
 | `src/app/personal-tools.ts` | Main Session schedule inspection and explicit schedule changes |
 | `src/client/personal.tsx` | Personal configuration and delivery, export, schedule, hook and route status |
-| `src/connectors/dsh-im.ts` | Validated dsh-im v1 wire fields and checked transport service |
+| `src/connectors/protocol.ts` | Validated native IM event and checked transport fields |
 | `src/personal/artifacts.ts` | Bounded UTF-8 deliverable reads confined to a task workspace |
 | `src/personal/config.ts` | Versioned Personal settings and concurrent-edit detection |
 | `src/personal/hooks.ts` | Immutable task/result/delivery facts and independently retried JSON files |
@@ -421,6 +438,12 @@ Some generic modules still refer directly to GitHub or Feishu:
 
 | Test | Covers |
 | --- | --- |
+| `tests/binary-artifacts.spec.ts` | Immutable binary snapshots and required publication |
+| `tests/conversations.spec.ts` | Stable private/group conversation identity and reset generations |
+| `tests/inbound.spec.ts` | Authorized inbound attachment reads |
+| `tests/message-actions.spec.ts` | Single-use scoped menu callbacks |
+| `tests/message-delivery.spec.ts` | Part receipts, partial delivery, retries and restart recovery |
+| `tests/native-feishu.spec.mjs` | Native QR/manual account lifecycle and platform media delivery |
 | `tests/executor-resources.spec.ts` | Resource preparation cancellation, wake validation and last-moment routing revocation |
 | `tests/artifacts.spec.ts` | Personal feature lifecycle and isolation checks |
 | `tests/connectors.spec.ts` | Personal feature lifecycle and isolation checks |

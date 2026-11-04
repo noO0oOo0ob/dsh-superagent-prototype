@@ -329,7 +329,7 @@ describe('a worker whose work runs in the background', () => {
     const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
     before?.(one.ticket.id)
     const job = h.jobs.run(one.sessionId, 'pnpm dev'), child = h.subagents.spawn(one.sessionId)
-    await h.runTool(one.sessionId, 'personal_agent_report', report); await h.runtime.idle()
+    await h.runTool(one.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, ...report }); await h.runtime.idle()
     const relayed = h.relays(h.runtime.masterId).length
     idle(one.sessionId); await h.runtime.idle()
     // The subagent stops, and the turn its end woke is cancelled; the job's end is collected.

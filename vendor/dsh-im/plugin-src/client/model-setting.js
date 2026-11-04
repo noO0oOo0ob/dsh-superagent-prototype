@@ -18,7 +18,7 @@ export const ModelCatalogContext = React.createContext(EMPTY_MODEL_CATALOG);
 
 function chevron(open = false) {
   return h('svg', { width: 14, height: 14, viewBox: '0 0 16 16', 'aria-hidden': true,
-    className: 'dim-modelChevron', style: open ? { transform: 'rotate(90deg)' } : undefined },
+    className: 'spa-im-modelChevron', style: open ? { transform: 'rotate(90deg)' } : undefined },
   h('path', { d: 'm6 4 4 4-4 4', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5 }));
 }
 
@@ -98,16 +98,16 @@ export function ModelEditor({ model = null, disabled = false, onSave }) {
 
   const option = (key, label, description, selected, next) => h('button', {
     key, type: 'button', role: 'menuitemradio', 'aria-checked': selected,
-    className: 'dim-modelOption', disabled: disabled || saving,
+    className: 'spa-im-modelOption', disabled: disabled || saving,
     onClick: () => { void save(next); },
   },
-  h('span', { className: 'dim-modelOptionCopy' },
-    h('span', { className: 'dim-modelOptionName' }, label),
-    description ? h('span', { className: 'dim-modelDescription' }, description) : null),
-  h('span', { className: 'dim-modelCheck', 'aria-hidden': true }, selected ? '✓' : ''));
+  h('span', { className: 'spa-im-modelOptionCopy' },
+    h('span', { className: 'spa-im-modelOptionName' }, label),
+    description ? h('span', { className: 'spa-im-modelDescription' }, description) : null),
+  h('span', { className: 'spa-im-modelCheck', 'aria-hidden': true }, selected ? '✓' : ''));
 
   const row = (key, label, value, blocked = false) => h('button', {
-    type: 'button', className: 'dim-modelRow', disabled: disabled || saving || blocked,
+    type: 'button', className: 'spa-im-modelRow', disabled: disabled || saving || blocked,
     'aria-label': label, 'aria-haspopup': 'menu', 'aria-expanded': pane === key,
     'aria-controls': pane === key ? `${id}-menu` : undefined,
     'aria-describedby': key === 'effort' && effortHint ? `${id}-hint` : undefined,
@@ -115,11 +115,11 @@ export function ModelEditor({ model = null, disabled = false, onSave }) {
       triggerRef.current = event.currentTarget;
       setPane(pane === key ? null : key);
     },
-  }, h('span', { className: 'dim-modelRowLabel' }, label),
-  h('span', { className: 'dim-modelValue', title: value }, value), chevron(pane === key));
+  }, h('span', { className: 'spa-im-modelRowLabel' }, label),
+  h('span', { className: 'spa-im-modelValue', title: value }, value), chevron(pane === key));
 
   return h('div', {
-    ref: rootRef, className: 'dim-preset dim-modelSetting',
+    ref: rootRef, className: 'spa-im-preset spa-im-modelSetting',
     onBlur: (event) => {
       if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) close();
     },
@@ -136,27 +136,27 @@ export function ModelEditor({ model = null, disabled = false, onSave }) {
       items[next]?.focus();
     },
   },
-  h('div', { className: 'dim-presetHeader' },
-    h('span', { className: 'dim-presetTitle' }, '模型与思考强度',
-      h('span', { className: 'dim-presetHelp' },
-        h('button', { type: 'button', className: 'dim-presetHelpButton',
+  h('div', { className: 'spa-im-presetHeader' },
+    h('span', { className: 'spa-im-presetTitle' }, '模型与思考强度',
+      h('span', { className: 'spa-im-presetHelp' },
+        h('button', { type: 'button', className: 'spa-im-presetHelpButton',
           'aria-label': '查看模型设置说明', 'aria-describedby': `${id}-help` },
         h('span', { 'aria-hidden': true }, '?')),
-        h('span', { id: `${id}-help`, className: 'dim-presetTooltip', role: 'tooltip' },
+        h('span', { id: `${id}-help`, className: 'spa-im-presetTooltip', role: 'tooltip' },
           effortHint && !effortUnavailable
             ? h('span', { id: `${id}-hint` }, effortHint, ' ') : null,
           '只影响新建会话；若当前聊天已有会话，先发送 /new，再发送普通消息生效。'))),
-    saving ? h('span', { className: 'dim-presetStatus', role: 'status' }, '保存中…') : null),
+    saving ? h('span', { className: 'spa-im-presetStatus', role: 'status' }, '保存中…') : null),
   row('model', '模型', entry?.name ?? (current ? modelSelectionId(current) : localizeText('跟随默认模型'))),
   error ? h('div', { role: 'alert' }, h(ConnectionError, { error })) : null,
   row('effort', '思考强度', effortLabel, effortDisabled),
   pane ? h('div', { ref: menuRef, id: `${id}-menu`, role: 'menu',
     'aria-label': pane === 'model' ? '模型' : '思考强度', 'aria-busy': saving,
-    className: 'dim-modelMenu' },
+    className: 'spa-im-modelMenu' },
   pane === 'model' ? [
     option('default', '跟随默认模型', null, !current, null),
     ...catalog.groups.map((group) => h('section', { key: group.id, role: 'group', 'aria-label': group.name },
-      h('div', { className: 'dim-modelGroupTitle' }, group.name),
+      h('div', { className: 'spa-im-modelGroupTitle' }, group.name),
       ...group.models.map((choice) => {
         const selected = current?.provider === group.id && current?.model === choice.id;
         return option(choice.id, choice.name, choice.description ?? `${group.id}/${choice.id}`,
@@ -168,8 +168,8 @@ export function ModelEditor({ model = null, disabled = false, onSave }) {
     ...(reasoning?.efforts ?? []).map((level) => option(`effort:${level.id}`, level.name, level.description,
       effort === level.id, { ...current, reasoningEffort: level.id })),
   ]) : null,
-  effortHint && effortUnavailable ? h('p', { id: `${id}-hint`, className: 'dim-modelHint',
+  effortHint && effortUnavailable ? h('p', { id: `${id}-hint`, className: 'spa-im-modelHint',
     role: 'status' }, effortHint) : null,
-  !error && !currentAvailable ? h('p', { className: 'dim-presetError', role: 'status' },
+  !error && !currentAvailable ? h('p', { className: 'spa-im-presetError', role: 'status' },
     '当前模型已不可用，请选择其他模型或跟随默认模型。') : null);
 }

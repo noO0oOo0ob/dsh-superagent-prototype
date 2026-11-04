@@ -8,7 +8,7 @@ import type { MessageDelivery } from './delivery.ts'
 
 const ConversationSchema = z.object({ version: z.literal(1), id: z.string(), source: z.string(), thread: z.string(),
   fingerprint: z.string(), conversationId: z.string(), kind: z.enum(['dm', 'group']), generation: z.number().int().nonnegative(),
-  sessionId: z.string(), createdAt: z.string(), updatedAt: z.string(), focus: z.string().optional() }).strict()
+  sessionId: z.string(), workspace: z.string().optional(), createdAt: z.string(), updatedAt: z.string(), focus: z.string().optional() }).strict()
 export type Conversation = z.infer<typeof ConversationSchema>
 const conversations = family<Conversation>('personal-conversation:')
 const sessions = family<{ conversationId: string; generation: number }>('personal-dialogue-session:')
@@ -47,7 +47,7 @@ export class Conversations {
       const captured: Trigger = { ...trigger, meta: { ...trigger.meta, conversationKey: id, dialogueGeneration: record.generation, dialogueSessionId: record.sessionId } }
       const target = this.replyTarget(captured)
       if (target) captured.meta.targetTicketId = target
-      this.store.set(messages(nativeId(trigger, String(trigger.meta.messageId))), trigger.id)
+      if (!trigger.meta.virtual) this.store.set(messages(nativeId(trigger, String(trigger.meta.messageId))), trigger.id)
       return captured
     })
   }
@@ -76,6 +76,13 @@ export class Conversations {
   permitsInput(ticket: Ticket, trigger: Trigger): boolean {
     return trigger.meta.conversationVersion !== 1 || !trigger.meta.command && trigger.meta.targetTicketId === ticket.id && this.belongs(ticket, trigger) && ticket.mandate.actor.id === trigger.actor.id
   }
+  bindWorkspace(session: string, workspace: string): string {
+    const current = this.forSession(session)
+    if (!current) throw new Error('Conversation was reset while preparing its workspace')
+    if (current.workspace) return current.workspace
+    this.save({ ...current, workspace })
+    return workspace
+  }
   /** Mutations consume a current source request, never historical authorization from another member. */
   authorizeMutation(ticket: Ticket, trigger: Trigger): void {
     const current = this.forTrigger(trigger)
@@ -98,7 +105,7 @@ export class Conversations {
       const current = this.forTrigger(trigger)
       if (!current) throw new Error('Conversation is unavailable')
       const generation = current.generation + 1
-      const { focus: _focus, ...base } = current
+      const { focus: _focus, workspace: _workspace, ...base } = current
       const next = { ...base, generation, sessionId: sessionId(current.id, generation), updatedAt: new Date().toISOString() }
       this.save(next)
       const result = { before: current.sessionId, after: next.sessionId }

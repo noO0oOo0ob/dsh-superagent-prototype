@@ -55,6 +55,7 @@ import { createNativeFeishu, type NativeFeishu, type NativeAccount } from '../co
 import { nativeConnectorConfigs } from '../connectors/native-accounts.ts'
 import { nativeDelivery } from '../connectors/native-delivery.ts'
 import { ArtifactFiles } from '../messaging/files.ts'
+import { MessageActions } from '../messaging/actions.ts'
 import { InboundFiles } from '../messaging/inbound.ts'
 import { Conversations } from '../messaging/conversations.ts'
 import { dialogueTools, dialogueSettings, dialogueMessage, DIALOGUE_PROMPT } from '../messaging/dialogue.ts'
@@ -102,6 +103,7 @@ export class Runtime extends Service implements SourceHost {
   readonly messageDelivery: MessageDelivery
   readonly conversations: Conversations
   readonly inbound: InboundFiles
+  readonly messageActions: MessageActions
   readonly schedules: Schedules
   readonly hooks: Hooks
   readonly vault: Vault
@@ -138,6 +140,9 @@ export class Runtime extends Service implements SourceHost {
       this.personal = new PersonalSettings(store)
       this.messageDelivery = new MessageDelivery(store)
       this.conversations = new Conversations(store, this.messageDelivery)
+      this.messageActions = new MessageActions(store, this.conversations, this.messageDelivery, trigger =>
+        this.sources.scope(trigger).listened && !!this.nativeFeishu?.allowsCommand(String(trigger.meta.botId), String(trigger.meta.fingerprint),
+          trigger.actor.id, trigger.meta.conversationType === 'group' ? 'group' : 'dm'))
       this.inbound = new InboundFiles(store, new ArtifactFiles(join(machine.stateDir, 'inbound')), () => this.nativeFeishu, () => this.personal.view().config.artifacts.maxBytes)
       this.hooks = new Hooks({ store, config: () => this.personal.view().config.hooks, signal: this.lifetime })
       this.vault = new Vault(store, () => this.personal.view().config.vault)
@@ -328,7 +333,7 @@ export class Runtime extends Service implements SourceHost {
       if (result !== 'stored') return result
       this.conversations.link(trigger)
       if (trigger.meta.command) executeCommand({ store: this.store, engine: this.engine, outbox: this.outbox,
-        effects: this.effects, conversations: this.conversations, results: this.results }, trigger)
+        effects: this.effects, conversations: this.conversations, results: this.results, actions: this.messageActions }, trigger)
       return result
     })
     if (received === 'stored') this.passes.request()
@@ -339,7 +344,10 @@ export class Runtime extends Service implements SourceHost {
     const conversation = this.conversations.forTrigger(trigger)
     if (!conversation || conversation.generation !== trigger.meta.dialogueGeneration) return
     const defaults = dialogueSettings(trigger)
-    await this.sessions.ensure(conversation.sessionId, defaults.workspace ?? join(this.machine.stateDir, 'conversations'),
+    const workspace = conversation.workspace ?? this.conversations.bindWorkspace(conversation.sessionId, this.nativeFeishu
+      ? await this.nativeFeishu.prepareDialogue(String(trigger.meta.botId), conversation.id, String(trigger.meta.fingerprint))
+      : defaults.workspace ?? join(this.machine.stateDir, 'conversations'))
+    await this.sessions.ensure(conversation.sessionId, workspace,
       `IM · ${String(trigger.meta.conversationTitle ?? trigger.meta.conversationId)}`, 'orchestrator')
     const candidate = this.engine.candidate(trigger.id)
     if (!candidate) return
@@ -354,7 +362,10 @@ export class Runtime extends Service implements SourceHost {
   private async startNativeFeishu(): Promise<void> {
     if (!this.ctx.get('credentials')) return
     const native = await createNativeFeishu({ context: this.ctx, stateDir: this.machine.stateDir, lifetime: this.lifetime, logger: this.ctx.logger,
-      onAccounts: accounts => this.syncNativeAccounts(accounts) })
+      onAccounts: accounts => this.syncNativeAccounts(accounts), onCard: async (botId, event) => {
+        this.lifetime.throwIfAborted()
+        return this.messageActions.receive(botId, event, trigger => { this.receiveConversation(trigger) })
+      } })
     this.nativeFeishu = native
     nativeDelivery(native, this.messageDelivery, this.results)
     this.disposers.push(this.connectors.bind(native.service))

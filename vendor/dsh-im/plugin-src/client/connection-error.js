@@ -68,7 +68,7 @@ export function ConnectionError({ error: value, warning = false, showMessage = t
     ['校验原因', details.issue ? localizeText(CONFIG_ISSUE_LABELS[details.issue]) : undefined],
     ['参考号', details.referenceId], ['发生时间', details.occurredAt], ['插件版本', details.pluginVersion],
   ].filter(([, text]) => text !== undefined && text !== '');
-  return h('div', { className: 'dim-connectionDiagnostic', 'data-connection-diagnostic': true, 'data-weixin-diagnostic': details.channel === 'weixin' || /^WX-CONN/.test(details.referenceId ?? '') || undefined, role: isWarning ? 'status' : undefined, 'data-warning': isWarning || undefined },
+  return h('div', { className: 'spa-im-connectionDiagnostic', 'data-connection-diagnostic': true, 'data-weixin-diagnostic': details.channel === 'weixin' || /^WX-CONN/.test(details.referenceId ?? '') || undefined, role: isWarning ? 'status' : undefined, 'data-warning': isWarning || undefined },
     showMessage ? h('p', null, error.message) : null,
     details.hint ? h('p', null, details.hint) : null,
     h('details', { style: { marginTop: 8 } },
@@ -77,7 +77,7 @@ export function ConnectionError({ error: value, warning = false, showMessage = t
         ...fields.flatMap(([label, text]) => [h('dt', { key: `${label}-label` }, label),
           React.createElement('dd', { key: label, style: { margin: 0, overflowWrap: 'anywhere' } }, String(text))])),
       !details.referenceId ? h('p', null, '未取得 Host 诊断参考号。') : null,
-      h('div', { className: 'dim-viewActions' },
+      h('div', { className: 'spa-im-viewActions' },
         h('button', { type: 'button', className: 'dxw-button', onClick: copy }, copyState === 'copied' ? '诊断信息已复制' : '复制诊断信息')),
       copyState === 'manual' ? h('div', null,
         h('p', null, '无法访问剪贴板，请选择并复制以下诊断信息。'),

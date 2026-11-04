@@ -32,10 +32,10 @@ export function BotSettingsButton({
   channelSettings,
 }) {
   const { openBotSettings } = React.useContext(BotSettingsContext);
-  return h('span', { className: 'dim-botSettingsAction' },
+  return h('span', { className: 'spa-im-botSettingsAction' },
     h('button', {
       type: 'button',
-      className: 'dim-botSettingsButton',
+      className: 'spa-im-botSettingsButton',
       'data-delivery-channel': channel,
       'aria-label': '更多机器人设置',
       onClick: () => openBotSettings?.({
@@ -47,7 +47,7 @@ export function BotSettingsButton({
         accessPolicy,
       }),
     }, h(SettingsGlyph), h('span', null, '更多设置'),
-    h('span', { className: 'dim-moreSettingsChevron', 'aria-hidden': 'true' })));
+    h('span', { className: 'spa-im-moreSettingsChevron', 'aria-hidden': 'true' })));
 }
 
 // Date formatting follows the interface language, not English-vs-not: a
@@ -70,19 +70,19 @@ function messageErrorTime(value) {
 
 export function ChannelListHeading({ className = '', id, title, connectionLabel }) {
   const helpId = React.useId();
-  return h('div', { className: `${className} dim-listHeading`.trim() },
-    h('div', { className: 'dim-listTitle' },
+  return h('div', { className: `${className} spa-im-listHeading`.trim() },
+    h('div', { className: 'spa-im-listTitle' },
       h('h3', id ? { id } : null, title),
-      h('span', { className: 'dim-channelHelp' },
+      h('span', { className: 'spa-im-channelHelp' },
         h('button', {
           type: 'button',
-          className: 'dim-channelHelpButton',
+          className: 'spa-im-channelHelpButton',
           'aria-label': '查看消息通道说明',
           'aria-describedby': helpId,
         }, h('span', { 'aria-hidden': 'true' }, '?')),
         h('span', {
           id: helpId,
-          className: 'dim-channelTooltip',
+          className: 'spa-im-channelTooltip',
           role: 'tooltip',
         },
         h('span', null, '消息通道'),
@@ -98,17 +98,17 @@ export function BotStatusMeta({
   formatCheckedTime,
   healthState,
 }) {
-  return h('div', { className: 'dim-botHealthGroup' },
+  return h('div', { className: 'spa-im-botHealthGroup' },
     h('div', {
-      className: `${className} dim-botHealth`.trim(),
+      className: `${className} spa-im-botHealth`.trim(),
       ...(healthState ? { 'data-health': healthState } : {}),
     },
     h('span', {
-      className: `${dotClassName} dim-healthDot`.trim(),
+      className: `${dotClassName} spa-im-healthDot`.trim(),
       'data-tone': tone,
     }),
     h('span', null, stateLabel)),
-    h('div', { className: 'dim-lastChecked' },
+    h('div', { className: 'spa-im-lastChecked' },
       h('span', null, '最近检查'),
       h('span', null, formatCheckedTime(lastCheckedAt))));
 }
@@ -117,7 +117,7 @@ export function LastMessageErrorSummary({ className = '', error }) {
   if (!error) return null;
   const occurredAt = messageErrorTime(error.at);
   return h('div', {
-    className: `${className} dim-cardSummary`.trim(),
+    className: `${className} spa-im-cardSummary`.trim(),
     role: 'status',
   },
   h('strong', null, '最近一条消息处理失败'),
