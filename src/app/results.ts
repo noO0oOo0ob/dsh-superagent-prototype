@@ -3,6 +3,7 @@ import { key, latestAssignment, type Ticket, type ChannelRef } from '../core/ind
 import { ticketContexts, type ContextRef } from '../core/context.ts'
 import { family } from '../kv.ts'
 import { wordCount } from '../infra/text.ts'
+import type { Vault, VaultExport } from '../personal/vault.ts'
 import type { Effects } from './effects.ts'
 import type { Outbox } from './outbox.ts'
 import type { Sessions } from './sessions.ts'
@@ -12,10 +13,12 @@ export interface ResultRecord {
   version: 1; id: string; ticketId: string; assignmentId: string; at: string; state: string; title: string
   summary: string; contexts: ContextRef[]; url: string
   channel?: ChannelRef
+  artifactPath?: string
+  artifacts?: { id: string; title: string; url: string }[]
   attentionId?: string
 }
 export const resultRecords = family<ResultRecord>('personal-result:')
-interface ResultsHost { store: Store; effects: Effects; sessions: Sessions; outbox: Outbox; masterId: string; port: number }
+interface ResultsHost { onSaved?(result: ResultRecord): void; vault?: Vault; store: Store; effects: Effects; sessions: Sessions; outbox: Outbox; masterId: string; port: number }
 
 /** Records reports transactionally, then publishes their snapshots through retryable effects. */
 export class Results {
@@ -27,6 +30,23 @@ export class Results {
     return this.host.store.keys(resultRecords).flatMap(name => this.host.store.get(name) ?? [])
       .filter(result => !ticketId || result.ticketId === ticketId).sort((a, b) => b.at.localeCompare(a.at))
   }
+  /** Saves a worker-selected text artifact; completion delivers its link with the final report. */
+  artifact(ticket: Ticket, title: string, content: string, path: string): ResultRecord {
+    const assignment = latestAssignment(ticket)
+    if (!assignment) throw new Error('Task has no assignment')
+    const id = key('artifact-v1', ticket.id, assignment.id, title, path, content), previous = this.get(id)
+    if (previous) return previous
+    const result: ResultRecord = { version: 1, id, ticketId: ticket.id, assignmentId: assignment.id, at: new Date().toISOString(),
+      state: 'artifact', title, summary: content, contexts: this.host.store.contexts.references(ticketContexts(ticket)), artifactPath: path,
+      url: `http://127.0.0.1:${this.host.port}/super-personal-agent/result/${id}` }
+    this.host.store.atomic(() => {
+      this.host.store.set(resultRecords(id), result)
+      const exported = this.host.vault?.enqueue(result)
+      if (exported) this.host.effects.enqueue('vault', exported.id, { id: exported.id })
+      this.host.onSaved?.(result)
+    })
+    return result
+  }
   record(ticket: Ticket, replyTo?: string): void {
     const assignment = latestAssignment(ticket), report = assignment?.report
     if (!assignment || !report || ['progress', 'waiting'].includes(report.state) && !ticket.attention && !replyTo) return
@@ -35,10 +55,14 @@ export class Results {
     if (this.get(id)) return
     const result: ResultRecord = { version: 1, id, ticketId: ticket.id, assignmentId: assignment.id, at: report.at,
       state: report.state, title: ticket.title, summary: ticket.attention?.question ?? report.summary,
-      contexts: ticketContexts(ticket), url: `http://127.0.0.1:${this.host.port}/super-personal-agent/result/${id}`,
+      contexts: this.host.store.contexts.references(ticketContexts(ticket)), url: `http://127.0.0.1:${this.host.port}/super-personal-agent/result/${id}`,
+      artifacts: this.list(ticket.id).filter(item => item.artifactPath && item.assignmentId === assignment.id).map(({ id, title, url }) => ({ id, title, url })),
       channel: this.host.store.triggers.get(replyTo ?? ticket.attention?.triggerId ?? ticket.origin.triggerId)?.channel,
       ...(ticket.attention ? { attentionId: ticket.attention.id } : {}) }
     this.host.store.set(resultRecords(id), result)
+    const exported = this.host.vault?.enqueue(result)
+    if (exported) this.host.effects.enqueue('vault', exported.id, { id: exported.id })
+    this.host.onSaved?.(result)
     this.host.effects.enqueue('result', id, { id })
   }
   private async deliver(id: string): Promise<void> {
@@ -47,7 +71,10 @@ export class Results {
     const ticket = store.tickets.get(result.ticketId)
     if (!ticket) throw new Error('Result ticket is missing')
     if (result.attentionId && ticket.attention?.id !== result.attentionId) return
-    const text = `${result.title}\n\n${result.summary}\n\n[查看结果 / View result](${result.url})`
+    const exported = this.host.vault?.list(id).find(item => item.state === 'written' || item.state === 'unchanged' || item.state === 'preserved')
+    const vaultLink = exported?.uri ? `\n[Obsidian](${exported.uri})` : ''
+    const artifacts = (result.artifacts ?? []).map(item => `\n[${item.title}](${item.url})`).join('')
+    const text = `${result.title}\n\n${result.summary}\n\n[查看结果 / View result](${result.url})${vaultLink}${artifacts}`
     const superseded = new Error('The question was superseded before delivery')
     try {
       await sessions.prompt(masterId, `result:${id}`, text, { inject: `${result.title}: ${result.summary}`.slice(0, 120) }, () => {
@@ -60,6 +87,7 @@ export class Results {
     // Local links are useful on the Host only. IM gets readable content and a stable task reference.
     let summary = result.summary
     if (channel.source === 'feishu') while (wordCount(summary) > 85) summary = summary.slice(0, Math.max(1, Math.floor(summary.length * 0.8)))
+    if (channel.source.startsWith('im-') && summary.length > 3700) summary = `${summary.slice(0, 3700)}...\nFull content and deliverables are available in the Main Session.`
     const outgoing = channel.source === 'inbox' ? text : `${summary}\n\nTicket: ${ticket.id}`
     // The existing report lifecycle withdraws this exact receipt when the question changes or clears.
     if (result.attentionId && store.tickets.get(ticket.id)?.attention?.id !== result.attentionId) return
@@ -69,7 +97,9 @@ export class Results {
 }
 
 /** Escaped, self-contained result view; model-produced Markdown is displayed as text, never executable HTML. */
-export function resultHtml(result: ResultRecord): string {
+export function resultHtml(result: ResultRecord, exports: VaultExport[] = []): string {
   const escape = (text: string) => text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
-  return `<!doctype html><html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escape(result.title)}</title><body><main><h1>${escape(result.title)}</h1><p>${escape(result.state)} · ${escape(result.at)}</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${escape(result.summary)}</pre><p>Ticket: ${escape(result.ticketId)}</p></main></body></html>`
+  const artifacts = (result.artifacts ?? []).map(item => `<p><a href="${escape(item.url)}">${escape(item.title)}</a></p>`).join('')
+  const links = exports.filter(item => item.uri).map(item => `<p><a href="${escape(item.uri!)}">Obsidian · ${escape(item.state)}</a></p>`).join('')
+  return `<!doctype html><html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escape(result.title)}</title><body><main><h1>${escape(result.title)}</h1><p>${escape(result.state)} · ${escape(result.at)}</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${escape(result.summary)}</pre><p>Ticket: ${escape(result.ticketId)}</p>${links}${artifacts}</main></body></html>`
 }

@@ -13,8 +13,14 @@ export function ticketContexts(ticket: Ticket): ContextRef[] {
   return [...new Set([ticket.origin.triggerId, ...ticket.origin.triggerIds,
     ...ticket.inputs.flatMap(input => input.kind === 'trigger' ? [input.triggerId] : [])])].map(contextRef)
 }
-/** Small logged model projection; full source metadata is available only through the context resource. */
+const SOURCE_FIELDS = ['channel', 'botId', 'senderName', 'conversationTitle', 'conversationId', 'conversationType', 'threadId', 'messageId', 'sentAt'] as const
+/** Logged source references and explicitly provided scalar display fields; complete metadata stays in the context resource. */
 export function messageContext(trigger: Trigger) {
+  const fields: Partial<Record<typeof SOURCE_FIELDS[number], string>> = {}
+  for (const field of SOURCE_FIELDS) {
+    const value = trigger.meta[field]
+    if (typeof value === 'string' && value.length) fields[field] = value
+  }
   return { ...contextRef(trigger.id), source: trigger.source, actor: trigger.actor,
-    threads: trigger.threads, read: `context/${contextRef(trigger.id).id}` }
+    threads: trigger.threads, ...fields, read: `context/${contextRef(trigger.id).id}` }
 }

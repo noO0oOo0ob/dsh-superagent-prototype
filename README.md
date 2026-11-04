@@ -24,6 +24,12 @@ Read the numbered documents in order; each builds only on the ones before it.
 - [005 Panel](docs/005-panel.md)
 - [006 Deployment](docs/006-deployment.md): manual setup, configuration, upgrades and troubleshooting
 - [007 Architecture](docs/007-architecture.md)
+- [Personal runtime and Main Session](docs/010-personal-runtime.md)
+- [Obsidian storage](docs/011-vault.md)
+- [Repository resources](docs/012-repositories.md)
+- [Schedules and hooks](docs/013-schedules-hooks.md)
+- [Connectors](docs/014-connectors.md)
+- [Personal setup and acceptance](docs/015-personal-setup.md)
 - [008 Cookbook](docs/008-cookbook.md): adding a Source
 - [009 Personal Agent](docs/009-personal-agent.md): first local task, metadata and coexistence
 

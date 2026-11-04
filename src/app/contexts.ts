@@ -18,6 +18,7 @@ export interface SourceContextRecord {
 export type ContextEntity = 'ticket' | 'assignment' | 'session' | 'report' | 'delivery'
 const records = family<SourceContextRecord>('personal-context:')
 const relations = family<ContextRef[], [ContextEntity, string]>('personal-context-links:', (kind, id) => `${kind}:${id}`)
+const parents = family<{ version: 1; child: ContextRef; parent: ContextRef }>('personal-context-parent:')
 
 /** Owns immutable context records; links accumulate while every source event retains its own identity. */
 export class Contexts {
@@ -34,15 +35,42 @@ export class Contexts {
   }
   get(id: string): SourceContextRecord | undefined { return this.store.get(records(id)) }
   refs(kind: ContextEntity, id: string): ContextRef[] { return this.store.get(relations(kind, id)) ?? [] }
+  /** Register an application-verified derivation before intake; source metadata never creates this relation. */
+  parent(child: Trigger, original: Trigger): void {
+    this.store.atomic(() => {
+      const ref = contextRef(child.id), parent = contextRef(original.id), existing = this.store.get(parents(ref.id))
+      if (existing) {
+        if (existing.parent.id !== parent.id) throw new Error('A source context cannot replace its original parent')
+        return
+      }
+      if (!this.store.triggers.get(original.id)) throw new Error('The original source context is missing')
+      if (this.store.triggers.get(child.id)) throw new Error('Register the verified parent before the derived Trigger is stored')
+      if (this.references([parent]).some(item => item.id === ref.id)) throw new Error('A source context cannot derive from itself')
+      this.capture(original); this.capture(child)
+      this.store.set(parents(ref.id), { version: 1, child: ref, parent })
+    })
+  }
+  /** Expand only persisted, application-verified parents while keeping each event's original reference. */
+  references(refs: readonly ContextRef[]): ContextRef[] {
+    const expanded: ContextRef[] = [], seen = new Set<string>()
+    for (const initial of refs) {
+      let current: ContextRef | undefined = initial
+      while (current && !seen.has(current.id)) {
+        seen.add(current.id); expanded.push(current)
+        current = this.store.get(parents(current.id))?.parent
+      }
+    }
+    return expanded
+  }
   /** Add references without allowing a follow-up to replace an earlier origin. */
   link(kind: ContextEntity, id: string, refs: readonly ContextRef[]): void {
     const current = this.refs(kind, id), seen = new Set(current.map(ref => ref.id))
-    const added = refs.filter(ref => !seen.has(ref.id) && !!seen.add(ref.id))
+    const added = this.references(refs).filter(ref => !seen.has(ref.id) && !!seen.add(ref.id))
     if (added.length) this.store.set(relations(kind, id), [...current, ...added])
   }
   /** Record task and attempt relations when an aggregate is persisted. */
   ticket(ticket: Ticket, restoring = false): void {
-    const refs = ticketContexts(ticket)
+    const refs = this.references(ticketContexts(ticket))
     for (const ref of refs) { const trigger = this.store.triggers.get(ref.triggerId); if (trigger) this.capture(trigger) }
     this.link('ticket', ticket.id, refs)
     this.link('session', `spa-worker-${ticket.id}`, refs)

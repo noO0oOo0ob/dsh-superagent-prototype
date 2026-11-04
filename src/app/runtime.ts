@@ -13,8 +13,8 @@ import type {} from '@deepseek-ai/dsh-subprocess'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { lockSync } from 'proper-lockfile'
-import { Engine, key, reasonText, type EngineForSettings, type ReceiveResult, type Ticket, type Trigger } from '../core/index.ts'
-import { allowedSender, settingsPolicy } from '../policy.ts'
+import { Engine, key, threadKey, reasonText, type EngineForSettings, type ReceiveResult, type Ticket, type Trigger } from '../core/index.ts'
+import { allowedSender, settingsPolicy, policyEffects, policyVersion } from '../policy.ts'
 import { SourceRegistry } from '../sources/registry.ts'
 import { Commands } from '../infra/commands.ts'
 import type { Deployment, Machine } from '../deployment.ts'
@@ -23,7 +23,11 @@ import type { SetupProblem } from '../setup.ts'
 import { DshExecutor, sourceTrigger, triggerMessage, workerSessionId } from '../executor/dsh.ts'
 import { ticketCard } from './cards.ts'
 import { MasterAssessor } from './assessment.ts'
-import { KV } from '../kv.ts'
+import { z } from 'zod'
+import { runAsWorker } from '../infra/environment.ts'
+import { RepositoryRegistry, type RepositorySelection, type PreparedRepository } from '../personal/repositories.ts'
+import { Vault } from '../personal/vault.ts'
+import { KV, family } from '../kv.ts'
 import { Store } from './store.ts'
 import { evalsHealth } from './views/overview.ts'
 import { TextCache } from './cache.ts'
@@ -48,9 +52,19 @@ import { mainTools, type MainToolsHost } from './tools/main.ts'
 import { executorTools, type ExecutorToolsHost } from './tools/executor.ts'
 import { MainInput } from './main-input.ts'
 import { Results } from './results.ts'
+import { Connectors } from './connectors.ts'
+import { ticketContexts } from '../core/context.ts'
+import { Hooks } from '../personal/hooks.ts'
+import { Schedules } from '../personal/schedules.ts'
+import { personalTools } from './personal-tools.ts'
+import { scheduledPolicy } from './personal-policy.ts'
+import { Routing } from '../personal/routing.ts'
+import { PersonalSettings } from '../personal/config.ts'
 
 // Source plugins interact with dsh-super-personal-agent exclusively through the `SourceHost` service interface.
 declare module '@deepseek-ai/cordis' { interface Context { superPersonalAgent: SourceHost & { readonly execution: { backend: Context['subprocess']; environment(): NodeJS.ProcessEnv } } } }
+const selectedResources = family<RepositorySelection[]>('personal-selected-resources:')
+const preparedResources = family<PreparedRepository[]>('personal-prepared-resources:')
 const now = (): string => new Date().toISOString()
 
 /**
@@ -76,6 +90,13 @@ export class Runtime extends Service implements SourceHost {
   readonly ready: Promise<void>
   readonly main: MainInput
   readonly results: Results
+  readonly schedules: Schedules
+  readonly hooks: Hooks
+  readonly vault: Vault
+  readonly repositories: RepositoryRegistry
+  readonly routing: Routing
+  readonly personal: PersonalSettings
+  readonly connectors: Connectors
   private readonly board = new HealthBoard()
   private readonly runtimeHealth = this.board.claim('runtime', { state: 'starting', detail: '' })
   readonly masterId: string
@@ -101,6 +122,12 @@ export class Runtime extends Service implements SourceHost {
     try {
       const report = (error: unknown) => { ctx.logger.warn('dsh-super-personal-agent: %s', String(error)) }
       const store = opened = this.store = new Store(join(machine.stateDir, 'orchestrator.sqlite'), report)
+      this.personal = new PersonalSettings(store)
+      this.hooks = new Hooks({ store, config: () => this.personal.view().config.hooks, signal: this.lifetime })
+      this.vault = new Vault(store, () => this.personal.view().config.vault)
+      this.repositories = new RepositoryRegistry({ stateDir: machine.stateDir, git: (args, cwd, signal) =>
+        runAsWorker(ctx.subprocess, ['git', ...args], cwd, AbortSignal.any([signal, AbortSignal.timeout(90_000)]), this.setup.workerEnvironment) })
+      this.routing = new Routing(store, () => { const view = this.personal.view(); return { revision: view.revision, routing: view.config.routing } })
       const setup = this.setup = new Setup({ context: ctx, machine, lifetime: this.lifetime, restart })
       this.execution = { backend: ctx.subprocess, environment: () => setup.workerEnvironment }
       const deployed = () => setup.configured()
@@ -112,6 +139,7 @@ export class Runtime extends Service implements SourceHost {
       const commands = this.commands = new Commands(() => setup.deployment, setup.commandEnvironment, this.lifetime)
       const board = this.board
       const effects = this.effects = new Effects(store, board)
+      effects.handle('vault', async ({ id }) => { await this.vault.publish(id) })
       const sources = this.sources = new SourceRegistry(() => store.settings(), board, kind => {
         // Sync source member lists once startup completes when a source plugin loads dynamically.
         if (kind.policy?.sync) void this.ready?.then(() => this.settings.syncable().includes(kind.kind) ? this.settings.sync(kind.kind) : undefined)
@@ -123,27 +151,71 @@ export class Runtime extends Service implements SourceHost {
       const environment = (ticket: Ticket) => this.ticketEnvironment(ticket)
       const resources: ResourceHost = { store, pages: new TextCache(4_000_000), prompts, commands, masterId, context: ctx,
         get results() { return runtime.results },
+        permitsRead: (ticket, trigger) => {
+          if (this.routing.permits(ticket, trigger)) return true
+          const allowed = ticketContexts(ticket).filter(ref => { const child = store.triggers.get(ref.triggerId); return !!child && this.routing.permits(ticket, child) })
+          return store.contexts.references(allowed).some(ref => ref.triggerId === trigger.id && !allowed.some(own => own.id === ref.id))
+        },
+        repositories: () => this.personal.view().config.repositories,
+        selectedResources: id => ({ selected: store.get(selectedResources(id)) ?? [], prepared: store.get(preparedResources(id)) ?? [] }),
         promptVersion: id => this.sessions.promptVersion(id), mayRead: (id, revision) => this.sessions.mayRead(id, revision),
         feishuPageSize: () => feishuSettings(sources).readPageSize, sourceLink: link }
       const sessions = this.sessions = new Sessions({ context: ctx, store, prompts, effects, health: board.claim('models'), masterId,
         lifetime: this.lifetime,
         closing: () => this.closing(), environment,
-        tools: (agent, ticket) => ticket ? executorTools(this.toolHost, ticket) : [...mainTools(this.toolHost, agent), ...this.main.tools()] })
+        tools: (agent, ticket) => ticket ? executorTools(this.toolHost, ticket) : [...mainTools(this.toolHost, agent), ...this.main.tools(), ...personalTools({ store, schedules: this.schedules, currentRequest: () => this.main.currentRequest(), requestPass: () => this.passes.request() })] })
       const policyChanged: EngineForSettings['policyChanged'] = (from, to, effects) => { this.engine.policyChanged(from, to, effects) }
       this.settings = new Settings({ store, sources, engine: { policyChanged }, health: board, context: ctx, lifetime: this.lifetime, sessions,
         sourceHost: this, setup, requestPass: () => { this.passes.request() } })
       this.executor = new DshExecutor({ context: ctx, get engine() { return runtime.engine }, store, effects, health: board.claim('worker'), machine,
         lifetime: this.lifetime, sessions, closing: () => this.closing(), paused: () => this.paused(), environment, workerEnvironment: () => setup.workerEnvironment, sourceLink: link,
+        canDeliver: (ticket, trigger) => this.routing.permits(ticket, trigger),
+        prepareResources: async (ticket, signal) => {
+          const selected = store.get(selectedResources(ticket.id)) ?? []
+          if (!selected.length) return []
+          const prepared = await this.repositories.prepare(ticket.id, ticket.execution!.directory, selected, signal)
+          store.set(preparedResources(ticket.id), prepared)
+          return prepared
+        },
         repliedTo: trigger => repliedTo({ store, sources }, trigger) })
       this.assessor = new MasterAssessor({ get engine() { return runtime.engine }, commands, get deployment() { return setup.deployment }, effects,
         settings: () => store.settings(), paused: () => this.paused(), threadContext: trigger => sources.threadContext(trigger),
         deliver: (id, text) => sessions.prompt(masterId, id, text, 'steer'), candidateCard: candidate => candidateCard(links, candidate) })
-      const outbox = this.outbox = new Outbox({ store, effects, sources, commands, paused: () => this.paused() })
-      this.results = new Results({ store, effects, sessions, outbox, masterId, port: ctx.webServer.port })
+      const outbox = this.outbox = new Outbox({ store, effects, sources, commands, paused: () => this.paused(),
+        onStatus: (message, status) => {
+          const ticket = message.ticketId ? store.tickets.get(message.ticketId) : undefined
+          if (!ticket) return
+          const at = now()
+          this.hooks.record({ version: 1, kind: 'delivery.status', id: key('delivery', message.id, status, at), at,
+            taskId: ticket.id, contexts: store.contexts.references(ticketContexts(ticket)), deliveryId: message.id, status })
+        } })
+      this.results = new Results({ store, effects, sessions, outbox, masterId, vault: this.vault, port: ctx.webServer.port,
+        onSaved: result => this.hooks.record({ version: 1, kind: 'result.saved', id: key('hook-result', result.id), at: result.at,
+          taskId: result.ticketId, resultId: result.id, contexts: result.contexts, artifactIds: this.vault.list(result.id).map(item => item.id) }) })
       const { assessor, executor } = this
-      const policy = () => settingsPolicy(store.settings(), sources)
+      const policy = () => scheduledPolicy(settingsPolicy(store.settings(), sources), this.schedules)
       const engine = this.engine = new Engine({ repo: store, scope: sources, policy, assessor, executor,
-        outbox, prepareTicket: (ticket, outcome) => executor.prepare(ticket, outcome), emit: event => {
+        beforeReceive: trigger => {
+          if (trigger.source !== 'schedule') return
+          const origin = this.schedules.originFor(trigger)
+          if (!origin) throw new Error('Scheduled input is not authorized')
+          store.contexts.parent(trigger, origin)
+        },
+        permitsInput: (ticket, trigger) => this.routing.permits(ticket, trigger),
+        beforeFollow: (ticket, thread) => this.routing.follow(ticket, thread),
+        beforeAttach: (ticket, trigger) => this.routing.attach(ticket, trigger),
+        outbox, prepareTicket: (ticket, outcome) => {
+          const ids = z.array(z.string()).parse(outcome.audit?.resource_ids ?? [])
+          const selection = this.repositories.select(this.personal.view().config.repositories, ids)
+          store.set(selectedResources(ticket.id), selection)
+          return executor.prepare(ticket, outcome)
+        }, emit: event => {
+          const task = 'ticketId' in event.data ? store.tickets.get(event.data.ticketId) : undefined
+          const state = event.type === 'ticket.created' ? 'created' : event.type === 'ticket.resumed' ? 'resumed'
+            : event.type === 'ticket.ended' ? event.data.outcome : event.type === 'assignment.started' ? 'running'
+            : event.type === 'assignment.reported' ? task?.assignments.at(-1)?.report?.state === 'progress' ? 'running' : task?.assignments.at(-1)?.report?.state : undefined
+          if (task && state) this.hooks.record({ version: 1, kind: 'task.state', id: key('hook-state', task.id, state, event.at, JSON.stringify(event.data), task.assignments.at(-1)?.report?.summary ?? ''),
+            at: event.at, taskId: task.id, state, ...('assignmentId' in event.data ? { assignmentId: event.data.assignmentId } : {}), contexts: store.contexts.references(ticketContexts(task)) })
           if (event.type === 'assignment.reported') this.results.record(store.tickets.get(event.data.ticketId)!, event.data.replyTo)
           // Notify the main Session only about domain events it did not initiate itself.
           const notice = this.quiet ? undefined : eventNotice(event, id => store.tickets.get(id))
@@ -162,14 +234,31 @@ export class Runtime extends Service implements SourceHost {
         } })
       // Update the `evals` health entry on every pass if an evaluation failed as unavailable within the last hour.
       const evals = board.claim('evals', { state: 'ready', detail: 'No unavailable Eval in the last hour' })
-      const evaluateDue = () => { engine.evaluateDue(); evals.set(evalsHealth(store)) }
+      const evaluateDue = async () => {
+        if (!this.paused()) this.schedules.pass()
+        engine.evaluateDue(); evals.set(evalsHealth(store))
+        await this.connectors?.refresh()
+        if (!this.paused()) await this.hooks.pass()
+      }
       const passes = this.passes = new Passes({ engine: { receive: trigger => engine.receive(trigger), evaluateDue }, effects,
         health: this.runtimeHealth, lifetime: this.lifetime, configured: () => setup.configured(), closing: () => this.closing() })
+      this.schedules = new Schedules({ store, receive: trigger => passes.receive(trigger), options: () => this.personal.view().config.scheduler,
+        authorize: origin => origin.human && sources.scope(origin).listened
+          && settingsPolicy(store.settings(), sources).gate(origin, store.threads.get(threadKey(origin.threads[0]!)) ?? { key: threadKey(origin.threads[0]!), ref: origin.threads[0]!, createdAt: origin.at, subscriptions: [], correlated: [], pending: [], meta: {} }, []).admissible })
+      this.disposers.push(sources.register({ kind: 'schedule', defaultEnabled: true, title: { zh: '定时任务', en: 'Schedules' },
+        description: { zh: '来自已批准计划的独立任务。', en: 'Independent tasks from approved schedules.' }, schema: z.object({}).strict(), fields: [], health: [],
+        scope: ({ meta }) => typeof meta.executionId === 'string' && !!this.schedules.run(meta.executionId)
+          ? { listened: true, observed: false } : { listened: false, reason: 'unknown_schedule' } }))
       this.main = new MainInput({ context: ctx, store, sources, sessions, engine, masterId, requestPass: () => passes.request() })
+      this.connectors = new Connectors({ store, sources, personal: this.personal, lifetime: this.lifetime, receive: trigger => passes.receive(trigger),
+        policyChanged: (before, after) => engine.policyChanged(policyVersion(before), policyVersion(after),
+          policyEffects(store.tickets.open(), before, after, settings => ({ scope: input => sources.scope(input, settings) }))) })
+      const imBinding = ctx.inject(['dshIm'], child => { child.effect(() => this.connectors.bind(child.dshIm)) })
+      this.disposers.push(() => { imBinding.dispose().catch(report) })
       this.sourceDeps = { store, engine, outbox, commands, sources, get ready() { return runtime.ready },
         get deployment() { return setup.deployment }, configured: () => setup.configured(),
         get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, get githubProblem() { return setup.githubProblem }, receive: trigger => passes.receive(trigger) }
-      this.toolHost = { context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources,
+      this.toolHost = { artifactLimit: () => this.personal.view().config.artifacts.maxBytes, context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources,
         get github() { return runtime.context({ kind: 'github', health: ['github'] }) },
         requestPass: () => { passes.request() }, sendReplies: () => outbox.sent(),
         quietly: run => { this.quiet++; try { return run() } finally { this.quiet-- } } }
@@ -222,6 +311,7 @@ export class Runtime extends Service implements SourceHost {
     this.executor.install()
     await this.sessions.ensure(this.masterId, this.machine.stateDir, 'dsh-super-personal-agent orchestrator', 'orchestrator')
     await this.main.restore()
+    await this.connectors.refresh()
     for (const id of this.settings.syncable()) await this.settings.sync(id).catch(() => { /* sync() records its failure in health. */ })
     // If stop() was called while awaiting setup, session creation, or policy sync, do not start background loops.
     if (this.closing()) return
@@ -234,6 +324,7 @@ export class Runtime extends Service implements SourceHost {
     const runtime = this
     const { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, setup, passes } = this
     return { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, results: this.results,
+      personal: this.personal, connectors: this.connectors, vault: this.vault, routing: this.routing, schedules: this.schedules, hooks: this.hooks, effects: this.effects,
       get deployment() { return setup.deployment },
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, get githubProblem() { return setup.githubProblem },
       configured: () => setup.configured(), links: () => runtime.links(), ticketEnvironment: ticket => runtime.ticketEnvironment(ticket),
@@ -245,6 +336,7 @@ export class Runtime extends Service implements SourceHost {
     this.closingFlag = true; const passes = this.passes.stop(); this.stopped.abort()
     this.main.dispose()
     try {
+      await this.connectors.stop()
       this.assessor.stop()
       const ids = [this.masterId, ...this.store.tickets.list().map(ticket => workerSessionId(ticket.id))]
       const agents = ids.map(id => this.ctx.agents.get(id as SessionId)).filter((agent): agent is Agent => agent !== undefined)

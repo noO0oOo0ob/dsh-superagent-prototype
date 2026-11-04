@@ -124,11 +124,11 @@ it('gives the focus back to the field that had it once a block\'s save ends', as
   expect(document.activeElement).toBe(input)
 })
 
-it('lists the settings groups stages first, opens each stage\'s group from its status, and returns to the last group opened',
+it('lists Personal settings before the workflow groups, opens each stage\'s group from its status, and returns to the last group opened',
   async () => {
   await mount()
   await click(tab(zh['tab.settings']))
-  expect(all('.spa-settings-link').map(link => link.textContent)).toEqual(['来源', '评估', '执行', '提示词', '部署'])
+  expect(all('.spa-settings-link').map(link => link.textContent)).toEqual(['Personal Agent', '来源', '评估', '执行', '提示词', '部署'])
   expect(document.querySelector('.spa-settings-link[aria-current="page"]')?.textContent).toBe(zh['term.source'])
   for (const [tab, group] of [['来源', '来源'], ['评估', '评估'], ['执行', '执行']] as const) {
     await click(find(tab, '[role="tab"]'))

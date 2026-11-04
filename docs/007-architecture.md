@@ -43,7 +43,7 @@ Shutdown cancels turns, waits for passes, effects and agents, closes the Store a
 
 ### Engine
 
-`Engine` (`src/core/engine.ts`) is the only writer of Triggers, Threads, Decisions, Tickets and Assignments. It receives these ports from `src/core/ports.ts`: `Repositories`, a current-Policy getter, `SourceScope`, `Assessor`, `Executor` and `Outbox`. Optional dependencies are `prepareTicket`, `now` and `emit`.
+`Engine` (`src/core/engine.ts`) is the only writer of Triggers, Threads, Decisions, Tickets and Assignments. It receives these ports from `src/core/ports.ts`: `Repositories`, a current-Policy getter, `SourceScope`, `Assessor`, `Executor` and `Outbox`. Optional dependencies include task preparation, source validation, attachment/context authorization, per-input routing, the clock and event emission.
 
 All Engine methods are synchronous. Each command changes its aggregates in one transaction. `evaluateDue` uses a separate transaction for each Eval or Ticket it changes. Ports enqueue external work inside the transaction; adapters perform it after commit. Invalid requests throw `UserError`.
 
@@ -290,6 +290,18 @@ Some generic modules still refer directly to GitHub or Feishu:
 
 | Path | Responsibility |
 | --- | --- |
+| `src/app/connectors.ts` | Checked dsh-im intake, account lifecycle and durable send reconciliation |
+| `src/app/personal-policy.ts` | Revalidation of scheduled execution against its original human authority |
+| `src/app/personal-tools.ts` | Main Session schedule inspection and explicit schedule changes |
+| `src/client/personal.tsx` | Personal configuration and delivery, export, schedule, hook and route status |
+| `src/connectors/dsh-im.ts` | Validated dsh-im v1 wire fields and checked transport service |
+| `src/personal/artifacts.ts` | Bounded UTF-8 deliverable reads confined to a task workspace |
+| `src/personal/config.ts` | Versioned Personal settings and concurrent-edit detection |
+| `src/personal/hooks.ts` | Immutable task/result/delivery facts and independently retried JSON files |
+| `src/personal/repositories.ts` | Git and directory resources with task-owned workspace preparation |
+| `src/personal/routing.ts` | Explicit principal bindings, directional grants and routing audit |
+| `src/personal/schedules.ts` | Durable once/interval schedules and deduplicated intake executions |
+| `src/personal/vault.ts` | Immutable Markdown export intents, safe publication and Obsidian links |
 | `src/index.ts` | The main plugin entry: reads the machine settings, starts the Runtime, and gives it the restart that a save of a Source's account uses |
 | `src/deployment.ts` | The plugin `Config` and `Machine`; `resolveDeployment` and `resolveFeishuBot` read the repository and the accounts from the Source settings, each CLI run as Executor shells run it; `SETUP_FIELDS` lists the Source fields setup reads. The code names no person, account or organization |
 | `src/setup.ts` | Setup problems: `SetupError`, with a code, the place that fixes it and the English text the log, the main Session and the panel share |
@@ -409,6 +421,25 @@ Some generic modules still refer directly to GitHub or Feishu:
 
 | Test | Covers |
 | --- | --- |
+| `tests/executor-resources.spec.ts` | Resource preparation cancellation, wake validation and last-moment routing revocation |
+| `tests/artifacts.spec.ts` | Personal feature lifecycle and isolation checks |
+| `tests/connectors.spec.ts` | Personal feature lifecycle and isolation checks |
+| `tests/hooks.spec.ts` | Personal feature lifecycle and isolation checks |
+| `tests/panel-deployment.spec.tsx` | Personal feature lifecycle and isolation checks |
+| `tests/panel-eval.spec.tsx` | Personal feature lifecycle and isolation checks |
+| `tests/panel-execution.spec.tsx` | Personal feature lifecycle and isolation checks |
+| `tests/panel-panel.spec.tsx` | Personal feature lifecycle and isolation checks |
+| `tests/panel-personal.spec.tsx` | Personal feature lifecycle and isolation checks |
+| `tests/panel-prompts.spec.tsx` | Personal feature lifecycle and isolation checks |
+| `tests/panel-source.spec.tsx` | Personal feature lifecycle and isolation checks |
+| `tests/panel-trigger.spec.tsx` | Personal feature lifecycle and isolation checks |
+| `tests/personal-integration.spec.ts` | Personal feature lifecycle and isolation checks |
+| `tests/personal-tools.spec.ts` | Personal feature lifecycle and isolation checks |
+| `tests/repositories.spec.ts` | Personal feature lifecycle and isolation checks |
+| `tests/routing.spec.ts` | Personal feature lifecycle and isolation checks |
+| `tests/schedule-contexts.spec.ts` | Trusted scheduled-parent contexts, ancestry and read isolation |
+| `tests/schedules.spec.ts` | Personal feature lifecycle and isolation checks |
+| `tests/vault.spec.ts` | Personal feature lifecycle and isolation checks |
 | `tests/core-engine.spec.ts` | Domain rules on in-memory repositories: receiving, Eval, fan-out, resume and stop, interrupted Assignments, the pause, Policy changes, reports and outcomes, attaching, replies, failed deliveries and dismissed problems |
 | `tests/stage.spec.ts` | The Ticket stages, row by row |
 | `tests/contexts.spec.ts` | Context persistence, upgrade backfill, historical report references, acceptance batches and worker read isolation |
@@ -507,6 +538,7 @@ The main Session has 14 application tools:
 | Re-evaluate | `personal_agent_trigger_requeue` |
 | Assess proactive work | `personal_agent_eval`, `personal_agent_eval_read`, `personal_agent_eval_decide` |
 | Communicate and unsubscribe | `personal_agent_reply`, `personal_agent_thread_unsubscribe` |
+| Scheduled work | `personal_agent_schedules`, `personal_agent_schedule_create`, `personal_agent_schedule_update`, `personal_agent_schedule_control` |
 | Configure | `personal_agent_settings_save`, `personal_agent_policy_sync`, `personal_agent_prompts_save` |
 
 `personal_agent_route` accepts 1–20 decisions in order. Each accept, attach, stop or ignore runs as a separate Engine command. It also permits ignoring an inferred candidate directly from its card. `personal_agent_ticket_note` sends a fact as context, not authority.
@@ -531,6 +563,7 @@ Each Executor has six application tools:
 | --- | --- |
 | `personal_agent_read` | Read resources available to its own Ticket |
 | `personal_agent_ack` | Acknowledge a request |
+| `personal_agent_artifact` | Publish a bounded text deliverable from the task workspace |
 | `personal_agent_report` | Report progress or an outcome, binding a pull request under the pull-request rules |
 | `personal_agent_thread_unrelated` | Drop an unrelated attached Thread, hand back its owned follow-ups and tell the main Session why |
 | `personal_agent_thread_follow` | Subscribe to a related Thread for context and tell the main Session |

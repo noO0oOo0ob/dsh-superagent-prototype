@@ -1,6 +1,7 @@
 /** Main Session tools for routing triggers, assessing candidates, sending replies, and updating settings and prompts. */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { RoutingDenied } from '../../personal/routing.ts'
 import { z } from 'zod'
 import { UserError, followupOwners, key, reasonText, type Decision, type DecisionKind, type EngineForMainSession, type EngineForPeople }
   from '../../core/index.ts'
@@ -45,6 +46,7 @@ const fromDecision = (decision: Decision) => ({ decision: decision.kind, reason:
  * runs (`FIELDS`), so an item that lacks one, or whose value breaks a limit, is refused alone.
  */
 const RouteItemSchema = z.object({
+  resource_ids: z.array(z.string().min(1)).max(32).optional().describe('accept: explicit configured repository IDs; empty means no repository. Never guess resource IDs.'),
   kind: z.enum(['accept', 'attach', 'ignore', 'stop']),
   trigger_id: z.string().describe('The candidate card\'s trigger_id; deciding it decides its batch.'),
   ticket_id: z.string().nullish().describe('attach and stop: the ticket.'),
@@ -56,7 +58,7 @@ const RouteItemSchema = z.object({
 }).strict()
 type RouteItem = z.infer<typeof RouteItemSchema>
 type Kind = RouteItem['kind']
-type Field = Exclude<keyof RouteItem, 'kind' | 'trigger_id'>
+type Field = Exclude<keyof RouteItem, 'kind' | 'trigger_id' | 'resource_ids'>
 /** Each field's check, the kinds whose items read it and those that need it; an item of another kind leaves it unread. */
 const FIELDS: Record<Field, { check: z.ZodType; reads: readonly Kind[]; needs: readonly Kind[] }> = {
   ticket_id: { check: z.string(), reads: ['attach', 'stop'], needs: ['attach', 'stop'] },
@@ -95,7 +97,7 @@ function route(host: MainToolsHost, item: RouteItem, decided: ReadonlyMap<string
     case 'accept': {
       const before = host.store.triggers.disposition(item.trigger_id)?.decisionId
       const decision = host.engine.decide(item.trigger_id, { kind: 'accept', title: item.title!, scope: item.title!, reason: { code: 'explicitRouted' },
-        acknowledgement: item.acknowledgement!, name: item.worktree_name!, ...note })
+        audit: { resource_ids: item.resource_ids ?? [] }, acknowledgement: item.acknowledgement!, name: item.worktree_name!, ...note })
       // A Decision that created no ticket is the item's refusal; one that existed before keeps what it was accepted with.
       if (decision.kind !== 'accept' || !decision.ticketId) return { refused: `Ticket was not created: ${reasonText(decision.reason)}` }
       if (decision.id === before) {
@@ -141,7 +143,7 @@ function routeTool(host: MainToolsHost): Tool {
           return { ...head, ...(result.decision ? { decision: result.decision } : {}), reason: result.reason,
             ...(ticket ? { ticket: ticketCard(ticket) } : {}) }
         } catch (error) {
-          if (error instanceof UserError) return { ...head, refused: error.message }
+          if (error instanceof UserError || error instanceof RoutingDenied) return { ...head, refused: error.message }
           host.context.logger.warn('dsh-super-personal-agent could not route trigger %s: %s', item.trigger_id, String(error))
           return { ...head, refused: `Not recorded: ${error instanceof Error ? error.message : String(error)}; retry this item` }
         }

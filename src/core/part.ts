@@ -12,6 +12,13 @@ export interface EngineOptions {
   assessor: Assessor
   executor: Executor
   outbox: Outbox
+  /** Validate application-owned scheduled messages before subscription fanout. */
+  beforeReceive?: (trigger: Trigger) => void
+  /** Check current application grants before automatically adding a subscribed Trigger to a ticket. */
+  permitsInput?: (ticket: Ticket, trigger: Trigger) => boolean
+  beforeFollow?: (ticket: Ticket, thread: ThreadRef) => void
+  /** Application routing guard; called before an explicit attachment transaction. */
+  beforeAttach?: (ticket: Ticket, trigger: Trigger) => void
   prepareTicket?: (ticket: Ticket, outcome: Extract<AssessmentOutcome, { kind: 'accept' }>) => Ticket
   now?: () => string
   emit?: (event: DomainEvent) => void

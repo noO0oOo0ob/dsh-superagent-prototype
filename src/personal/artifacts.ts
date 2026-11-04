@@ -10,7 +10,7 @@ export async function artifactText(workspace: string, path: string, maxBytes: nu
   if (!path || isAbsolute(path) || path.split(/[\\/]/).includes('..') || path.includes('\0')) throw new Error('Artifact path must stay inside the task workspace')
   const root = await realpath(workspace), target = await realpath(resolve(root, path)), local = relative(root, target)
   if (!local || local === '..' || local.startsWith(`..${sep}`) || isAbsolute(local)) throw new Error('Artifact escapes the task workspace')
-  const file = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW)
+  const file = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
   try {
     const info = await file.stat()
     if (!info.isFile() || info.size > maxBytes) throw new Error('Artifact must be a text file within the configured size limit')

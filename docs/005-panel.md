@@ -12,7 +12,7 @@ Opening the panel answers three questions, in this order:
 
 ## Tabs
 
-The tabs follow the workflow: **Overview**, **Source**, **Trigger**, **Eval**, **Execution**, and **Settings**. Until repository and account setup succeeds, Overview shows what is missing and links to the relevant setting.
+The tabs follow the workflow: **Overview**, **Source**, **Trigger**, **Eval**, **Execution**, and **Settings**. Overview shows missing prerequisites for enabled capabilities and links to the relevant setting. Personal tasks do not require a repository or external account.
 
 | Tab | Shows |
 | --- | --- |
@@ -21,7 +21,7 @@ The tabs follow the workflow: **Overview**, **Source**, **Trigger**, **Eval**, *
 | Trigger | Threads filtered by Subscribed, Evaluating, New Triggers in 24 h, or All Threads. Each Thread shows its Triggers newest first, Decisions and Subscriptions |
 | Eval | Decisions with their reason and matched rules |
 | Execution | Executor state, Pause processing, and Tickets filtered by Open, Pending, Working, Waiting for a Trigger or Ended. Ticket details show actions, authorization, waiting Inputs, Subscriptions and Assignments |
-| Settings | Sources, Eval, Execution, Prompts and Deployment. Each group includes its save history |
+| Settings | Personal agent, Sources, Eval, Execution, Prompts and Deployment. Configuration drafts retain local edits and detect concurrent saves |
 
 ### Reading individual records
 
@@ -33,6 +33,7 @@ Ticket details show the originating Trigger, Decision and reason, scope and Poli
 
 ## Settings groups
 
+- **Personal agent:** JSON editors for IM connections, Vault, repository resources, identity routing, scheduler options, Hook exports and result file limits. Saving validates the complete configuration and revision. An invalid document stays in the editor; a concurrent update retains conflicting local text and asks the person to review it before saving again.
 - **Sources:** one card per Source with its switch, fields and verified account facts. GitHub also offers receive-all switches for new Issues, pull requests, comments and default-branch CI. Polling and read limits are under Advanced.
 - **Eval:** the Policy version and rules, followed by **On each Source** and the Eval settings. Each Source tab contains its allowed list, membership sync, admission table and bot list. Sync runs at startup and on **Sync now**. The admission table distinguishes receiving scope, sender membership and whether the message addresses the agent. Eval settings select the accept mode, timeout and assessment model.
 - **Execution:** worker model, concurrency, directory root, prepare command and blocked commands. Clicking an available variable inserts it into the prepare command.
@@ -40,6 +41,14 @@ Ticket details show the originating Trigger, Decision and reason, scope and Poli
 
   An upgrade that changes an overridden default marks it **Default updated** (默认内容已更新). The panel compares the old and new defaults above the team's text. If the old default was not recorded, it compares the team's text with the new default instead. Choose **Keep my text** or **Use the new default**. Overrides for removed parts are listed below the tab bar and dropped on the next save.
 - **Deployment:** startup problems with **Check again**, the state directory and machine limits. Saved limits apply without restart. The DeepSeek Harness Plugin Manager exposes the same page.
+
+### Personal operations
+
+**Discover accounts** reads the current dsh-im service on demand. It displays bot IDs, channels, connection state, account names and fingerprints, supported capabilities and discovery errors. Copy verified account values into the Connector configuration; discovery does not enable accounts. Source settings own the resulting Source admission policy. Uncertain outbound deliveries require a note describing the inspection of the original conversation before **Verified as sent** or **Retry after verification** becomes available. Retrying may duplicate a message when the first send actually succeeded.
+
+The same page creates schedules from an explicit human `originTriggerId`, edits future instructions, and pauses, resumes or stops schedules. A stopped or completed schedule cannot be edited or resumed. A failed intake can be retried only while its schedule remains active at the same revision. These controls do not stop or repeat accepted Worker tasks; use Execution for those tasks. The schedules and hooks guide describes their fields.
+
+Vault exports show their path, status and error, with an Obsidian link after successful publication and independent export retries. A preserved file contains user changes and remains untouched. Hook deliveries show their destinations and errors; retry retains the original destination, while explicit confirmed replay uses the currently enabled destination. Neither action reruns the Worker. Routing decisions show the source conversations and the reason an attachment was allowed or rejected. Read-only refresh failures keep the last successful data visible.
 
 ## Search
 

@@ -72,6 +72,10 @@ export interface ExecutorHost {
   readonly lifetime: AbortSignal
   /** Session manager for worker sessions and for relaying worker reports to the main Session. */
   readonly sessions: Pick<Sessions, 'ensure' | 'prompt' | 'promptedId' | 'relay' | 'holds'>
+  /** Prepares explicitly selected resources and returns their logged worker descriptors. */
+  prepareResources?(ticket: Ticket, signal: AbortSignal): Promise<unknown[]>
+  /** Rechecks source routing before a queued Trigger reaches the worker model. */
+  canDeliver?(ticket: Ticket, trigger: Trigger): boolean
   closing(): boolean
   /** Whether processing is paused, which holds launches and input deliveries. */
   paused(): boolean
@@ -221,6 +225,8 @@ export class DshExecutor implements Executor {
   private readonly settling = new Map<string, AbortController>()
   /** The stops of tickets' background work that run, by ticket, which a launch or a delivery of the ticket waits for. */
   private readonly stopping = new Map<string, Promise<void>>()
+  /** Resource and workspace preparation belongs to an Assignment and stops only after its ending transaction commits. */
+  private readonly preparing = new Map<string, Set<AbortController>>()
   /** The jobs workers left to a person when they handed off, by ticket, and the collecting of their ends. */
   private readonly left = new Map<string, { jobs: Set<string>; collect: AbortController }>()
   /** When a person's message typed into a worker's Session last started a turn, by ticket. */
@@ -247,22 +253,38 @@ export class DshExecutor implements Executor {
    * A failed prepare command throws `PrepareFailed`, which is not retried automatically; an empty directory it left is removed, a non-empty one kept.
    * @throws PrepareFailed with the command's output when the prepare command fails.
    */
-  private async prepareDirectory(ticket: Ticket): Promise<void> {
+  private async prepareDirectory(ticket: Ticket, cancellation: AbortSignal): Promise<void> {
     const directory = ticket.execution?.directory ?? ''
     await mkdir(dirname(directory), { recursive: true })
+    cancellation.throwIfAborted()
     const command = this.host.store.settings().executor.prepare.trim()
     const env = { ...Object.fromEntries(this.host.environment(ticket).map(variable => [variable.key, variable.value])), ...this.host.workerEnvironment() }
     // Enforce a timeout so a hung prepare command (such as on a credential prompt) fails the ticket instead of holding a worker slot indefinitely.
-    const signal = AbortSignal.any([this.host.lifetime, AbortSignal.timeout(PREPARE_TIMEOUT_MS)])
+    const signal = AbortSignal.any([cancellation, AbortSignal.timeout(PREPARE_TIMEOUT_MS)])
     if (command) await runAsWorker(this.host.context.subprocess, ['sh', '-c', command], dirname(directory), signal, env)
       .catch(async (error: unknown) => {
         // Remove an empty directory left by a failed prepare command so a later retry does not treat it as already prepared.
         await rmdir(directory).catch(() => { /* Absent, or holding what the command wrote, which the output explains. */ })
         throw new PrepareFailed(`The prepare command failed: ${error instanceof Error ? error.message : String(error)}`)
       })
+    signal.throwIfAborted()
     await mkdir(directory, { recursive: true })
     if (await stat(join(directory, '.git')).then(() => true, error => { if (error.code === 'ENOENT') return false; throw error }))
-      await verifyDirectory(directory, this.host.context.subprocess, this.host.lifetime, env)
+      await verifyDirectory(directory, this.host.context.subprocess, signal, env)
+  }
+  private async prepareFor<T>(assignment: Assignment, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const controller = new AbortController(), active = this.preparing.get(assignment.id) ?? new Set<AbortController>()
+    active.add(controller); this.preparing.set(assignment.id, active)
+    const signal = AbortSignal.any([this.host.lifetime, controller.signal])
+    try {
+      signal.throwIfAborted()
+      const result = await run(signal)
+      signal.throwIfAborted()
+      return result
+    } finally {
+      active.delete(controller)
+      if (!active.size) this.preparing.delete(assignment.id)
+    }
   }
   /** Enqueues a `launch` effect for an accepted or resumed assignment; launches start in queue order as worker slots free up. */
   start(ticket: Ticket, assignment: Assignment): void {
@@ -305,7 +327,6 @@ export class DshExecutor implements Executor {
         const inputId = ticket?.undelivered[0]
         if (!ticket || !assignment || inputId === undefined) return
         // Waking an idle worker reserves a slot (including the extra slot reserved for human follow-ups).
-        const sessionId = workerSessionId(ticketId)
         if (!woken && !this.running(ticket)) {
           // A person's message wakes its worker ahead of new launches, in the slot kept for it.
           const person = ticket.undelivered.some(id => fromPerson(ticket.inputs.find(item => item.id === id)))
@@ -314,10 +335,6 @@ export class DshExecutor implements Executor {
         }
         const input = ticket.inputs.find(item => item.id === inputId)
         try {
-          // Recreate the worker session if it was externally deleted.
-          if (!this.host.context.agents.get(sessionId as SessionId)) {
-            await this.host.sessions.ensure(sessionId, ticket.execution?.directory ?? '', ticket.title, 'worker')
-          }
           if (input) await this.deliverInput(ticket, assignment, input)
         } catch (error) {
           if (this.host.closing() || error instanceof Later) throw error
@@ -331,10 +348,13 @@ export class DshExecutor implements Executor {
     } finally { if (woken) this.slots.free(ticketId) }
   }
   private async deliverInput(ticket: Ticket, assignment: Assignment, input: TicketInput): Promise<void> {
+    const source = input.kind === 'trigger' ? this.host.store.triggers.get(input.triggerId) : undefined
     // Re-check right before session delivery because the ticket may have ended while awaiting `sourceLink`.
     const live = () => {
       const current = this.host.store.tickets.get(ticket.id)
       if (!current || !liveTicket(current) || runningAssignment(current)?.id !== assignment.id) throw new Error('The ticket ended or another Assignment took it over')
+      if (input.kind === 'trigger' && this.host.canDeliver && (!source || !this.host.canDeliver(current, source)))
+        throw new Error('Routing permission for this input was withdrawn')
       // A stop of the worker's background work that started meanwhile ends with a cancel, which would drop the Input.
       if (this.stopping.has(ticket.id)) throw new Later('The worker\'s background work is stopping')
     }
@@ -343,7 +363,21 @@ export class DshExecutor implements Executor {
     const message = inputMessage(input, trigger)
     if (message === undefined) return
     const text = message.length > ASSIGNMENT_CHARS ? JSON.stringify(capped(message, ASSIGNMENT_CHARS, inputResource(ticket.id, input.id))) : message
-    await this.host.sessions.prompt(workerSessionId(ticket.id), input.id, text, 'steer', live)
+    live()
+    const sessionId = workerSessionId(ticket.id)
+    let agent = this.host.context.agents.get(sessionId as SessionId)
+    const verified = agent?.status !== 'running'
+    if (verified) {
+      await this.prepareFor(assignment, async signal => this.host.prepareResources?.(ticket, signal))
+      live()
+    }
+    // A missing Session must not be recreated over resources whose ownership checks failed.
+    if (!agent) { agent = await this.host.sessions.ensure(sessionId, ticket.execution?.directory ?? '', ticket.title, 'worker'); live() }
+    await this.host.sessions.prompt(sessionId, input.id, text, 'steer', () => {
+      live()
+      if (this.host.context.agents.get(sessionId as SessionId) !== agent || !verified && agent.status !== 'running')
+        throw new Later('Worker resources must be checked before resuming this Session')
+    })
   }
   /** Formats a trigger on `ticket` for the worker, including a preview of the replied-to message when the worker has not yet seen it. */
   private async triggerCard(ticket: Ticket, triggerId: string, note?: string): Promise<object | undefined> {
@@ -365,6 +399,7 @@ export class DshExecutor implements Executor {
     const ownTurn = (report?.state === 'ready' || report?.state === 'dropped') && !busy
     const sessionId = workerSessionId(ticket.id)
     this.host.store.afterCommit(() => {
+      for (const preparation of this.preparing.get(assignment.id) ?? []) preparation.abort(new Error('The Assignment ended during preparation'))
       this.settling.get(ticket.id)?.abort()
       if (!ownTurn) this.host.context.agents.get(sessionId as SessionId)?.cancel({ kind: 'user' }, { keepInbox: false })
       // Its shell jobs and subagents stop with it, also those of a worker that ends its own turn.
@@ -435,11 +470,13 @@ export class DshExecutor implements Executor {
     const source = sourceTrigger(this.host, ticket)
     const workspace = ticket.execution?.directory ?? ''
     if (!current()) return
-    // Prepare the workspace directory once; an existing directory counts as already prepared, including worktrees created before `prepare` commands existed.
-    if (!await stat(workspace).then(() => true, () => false)) {
-      await this.prepareDirectory(ticket)
-      if (!current()) return
-    }
+    const resources = await this.prepareFor(assignment, async signal => {
+      // Existing workspace directories retain the prepare-command behavior; selected resources are verified on every launch.
+      if (!await stat(workspace).then(() => true, () => false)) await this.prepareDirectory(ticket, signal)
+      signal.throwIfAborted()
+      if (!current()) return undefined
+      return this.host.prepareResources?.(ticket, signal)
+    })
     if (!current()) return
     const sessionId = workerSessionId(ticket.id)
     const agent = await this.host.sessions.ensure(sessionId, workspace, ticket.title, 'worker')
@@ -463,7 +500,7 @@ export class DshExecutor implements Executor {
     if (!current()) return
     const batch = told ? [] : batchOf(this.host, ticket).map(batchLine)
     const text = told ? JSON.stringify({ ticket_id: ticket.id, assignment: ticket.assignments.length, ...retried })
-      : JSON.stringify({ ticket_id: ticket.id, title: ticket.title, ...(brief ? { assignment: brief } : {}),
+      : JSON.stringify({ ticket_id: ticket.id, title: ticket.title, ...(resources?.length ? { resources } : {}), ...(brief ? { assignment: brief } : {}),
         ...(read ? { assignment_chars: chars, assignment_read: read } : {}), ...(card ? { trigger: card } : {}),
         ...(batch.length ? { batch } : {}), ...retried })
     const requestId = later ? `assignment:${ticket.id}:${assignment.id}` : first

@@ -37,7 +37,7 @@ interface Skill { name: string; description: string; content: string }
  * Maximum combined character count of system prompt and tool definitions per role (~5% above baseline).
  * Lower this limit when shrinking model-facing text; raise it only intentionally and explain why in the commit message.
  */
-const BUDGET: Record<Role, number> = { orchestrator: 62_000, worker: 41_000 }
+const BUDGET: Record<Role, number> = { orchestrator: 68_000, worker: 42_000 }
 const PROMPTS = 'prompts/, skills/', TOOLS = 'src/app/tools/', SESSIONS = 'src/app/sessions.ts'
 const NOTICES = 'src/app/notices.ts', LINKS = 'src/app/links.ts', ASSESSMENT = 'src/app/assessment.ts'
 const EXECUTOR = 'src/executor/dsh.ts', ERRORS = 'src/core/errors.ts'
@@ -174,6 +174,7 @@ async function drive(host: Host) {
   const refusal = await run(master, 'personal_agent_reply', answer).then(() => '', (error: Error) => error.message)
   const proposal = feishu('5', '把副标题改成“浏览网页”', { mentions: [] })
   await runtime.receive(proposal)
+  await runtime.idle()
   vi.spyOn(Commands.prototype, 'lark').mockResolvedValue({ items: [{ message_id: 'om_5', chat_id: CHAT }] })
   await run(master, 'personal_agent_eval', { trigger_id: proposal.id })
   const proactive = (await run(master, 'personal_agent_eval_decide', { trigger_id: proposal.id, decision: 'accept', title: '文案修订', worktree_name: 'copy-fix',
@@ -352,7 +353,7 @@ function failures(): Map<string, string> {
 }
 
 it('collects both roles\' tools, prompts, skills and inputs', () => {
-  expect([...toolsOf('worker').keys()].sort()).toEqual(['personal_agent_ack', 'personal_agent_read', 'personal_agent_report',
+  expect([...toolsOf('worker').keys()].sort()).toEqual(['personal_agent_ack', 'personal_agent_artifact', 'personal_agent_read', 'personal_agent_report',
     'personal_agent_thread_follow',
     'personal_agent_thread_unrelated', 'personal_agent_trigger_handback'])
   expect([...toolsOf('orchestrator').keys()]).toEqual(expect.arrayContaining(['personal_agent_route', 'personal_agent_eval_decide', 'personal_agent_reply']))

@@ -9,6 +9,8 @@ import type { HealthBoard, HealthEntry } from '../infra/health.ts'
 import type { Store } from './store.ts'
 
 export interface EffectPayloads {
+  /** Export a committed result to its configured Markdown vault. */
+  vault: { id: string }
   /** Publish a persisted result to the Main Session and the source channel. */
   result: { id: string }
   /** Build an Eval's candidate card and relay it to the main Session; the key is the Eval ID. */

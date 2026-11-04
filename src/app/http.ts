@@ -28,6 +28,13 @@ import { sourcesStatus, type SetupState } from './views/sources.ts'
 import { decisionList, search, threadDetail, threadList } from './views/threads.ts'
 import { executorLoad, ticketDetail, ticketList } from './views/tickets.ts'
 import { resultHtml, type Results } from './results.ts'
+import { PersonalConflict, type PersonalSettings } from '../personal/config.ts'
+import type { Vault } from '../personal/vault.ts'
+import type { Routing } from '../personal/routing.ts'
+import { ScheduleConflict, type Schedules } from '../personal/schedules.ts'
+import type { Hooks } from '../personal/hooks.ts'
+import type { Effects } from './effects.ts'
+import type { Connectors } from './connectors.ts'
 
 export interface HttpHost {
   readonly store: Store
@@ -43,6 +50,13 @@ export interface HttpHost {
   readonly machine: Machine
   readonly masterId: string
   readonly results?: Results
+  readonly personal?: PersonalSettings
+  readonly connectors?: Connectors
+  readonly vault?: Vault
+  readonly routing?: Routing
+  readonly schedules?: Schedules
+  readonly hooks?: Hooks
+  readonly effects?: Effects
   /** Resolves once startup finishes or setup determines what is still missing. */
   readonly ready: Promise<void>
   /** Resolved deployment; throws if read while waiting for setup (`!configured()`). */
@@ -99,7 +113,7 @@ function failure(error: unknown): [number, Record<string, unknown>] {
   if (error instanceof SetupError) return [400, { error: error.message, setup: error.problem }]
   if (error instanceof RouteError) return [error.status, { error: error.message }]
   if (error instanceof UserError) return [error.missing ? 404 : 400, { error: error.message, code: error.code, values: error.values }]
-  if (error instanceof SettingsConflict || error instanceof PromptConflict) return [409, { error: error.message }]
+  if (error instanceof ScheduleConflict || error instanceof PersonalConflict || error instanceof SettingsConflict || error instanceof PromptConflict) return [409, { error: error.message }]
   return [500, { error: error instanceof Error ? error.message : String(error) }]
 }
 
@@ -166,6 +180,59 @@ function routes(runtime: HttpHost): Routes {
   const ticket = (id: string) => { if (!store.tickets.get(id)) throw new RouteError(404, 'Ticket not found'); return id }
   const promptBody = (input: { body: (maxBytes?: number) => Promise<unknown> }) => input.body(4 * runtime.machine.promptMaxChars.get() + 4096)
   return {
+    'GET personal': () => {
+      if (!runtime.personal || !runtime.connectors) throw new RouteError(404, 'Personal runtime is unavailable')
+      return { ...runtime.personal.view(), connectors: runtime.connectors.status(), deliveries: runtime.connectors.pending(), vault: runtime.vault?.list() ?? [],
+        routeDecisions: runtime.routing?.list() ?? [], schedules: runtime.schedules?.list() ?? [], runs: runtime.schedules?.runs() ?? [], hooks: runtime.hooks?.deliveries() ?? [] }
+    },
+    'PUT personal': async ({ body }) => {
+      if (!runtime.personal || !runtime.connectors) throw new RouteError(404, 'Personal runtime is unavailable')
+      const value = z.object({ revision: z.number().int().nonnegative(), config: z.unknown() }).strict().parse(await body())
+      const saved = runtime.personal.save(value.config, value.revision)
+      await runtime.connectors.refresh()
+      return saved
+    },
+    'GET personal/bots': async () => ({ bots: await runtime.connectors?.discover() ?? [] }),
+    'POST personal/deliveries/:id': async ({ params, body }) => {
+      if (!runtime.connectors) throw new RouteError(404, 'Connectors are unavailable')
+      const value = z.object({ action: z.enum(['confirm_sent', 'retry']), note: z.string().trim().min(1).max(1000) }).strict().parse(await body())
+      runtime.connectors.reconcile(params.id, value.action, value.note)
+      runtime.effects?.enqueue('reply', params.id, {})
+      runtime.requestPass()
+      return { recorded: true }
+    },
+    'POST personal/schedules': async ({ body }) => {
+      if (!runtime.schedules) throw new RouteError(404, 'Schedules unavailable')
+      const value = z.object({ spec: z.unknown() }).strict().parse(await body())
+      const record = runtime.schedules.create(value.spec); runtime.requestPass(); return record
+    },
+    'PUT personal/schedules/:id': async ({ params, body }) => {
+      if (!runtime.schedules) throw new RouteError(404, 'Schedules unavailable')
+      const value = z.object({ spec: z.unknown(), revision: z.number().int().positive() }).strict().parse(await body())
+      const record = runtime.schedules.update(params.id, value.spec, value.revision); runtime.requestPass(); return record
+    },
+    'POST personal/schedules/:id': async ({ params, body }) => {
+      if (!runtime.schedules) throw new RouteError(404, 'Schedules unavailable')
+      const value = z.object({ action: z.enum(['pause', 'resume', 'stop']) }).strict().parse(await body())
+      const record = runtime.schedules[value.action](params.id); runtime.requestPass(); return record
+    },
+    'POST personal/runs/:id/retry': ({ params }) => {
+      if (!runtime.schedules) throw new RouteError(404, 'Schedules unavailable')
+      const record = runtime.schedules.retry(params.id); runtime.requestPass(); return record
+    },
+    'GET personal/hooks': () => runtime.hooks?.list() ?? [],
+    'POST personal/hooks/:id': async ({ params, body }) => {
+      if (!runtime.hooks) throw new RouteError(404, 'Hooks unavailable')
+      const value = z.object({ action: z.enum(['retry', 'replay']) }).strict().parse(await body())
+      const record = runtime.hooks[value.action](params.id); runtime.requestPass(); return record
+    },
+    'POST personal/vault/:id': ({ params }) => {
+      const result = runtime.results?.get(params.id)
+      if (!result) throw new RouteError(404, 'Result not found')
+      const intent = runtime.vault?.enqueue(result)
+      if (intent) runtime.effects?.enqueue('vault', intent.id, { id: intent.id })
+      return { queued: !!intent }
+    },
     'GET state': () => stateView(runtime),
     'GET overview': () => overview(views(runtime), runtime.health, policyVersion(store.settings()),
       executorLoad(store, runtime.executor.activeCount()), runtime.setupProblem ?? runtime.githubProblem ?? runtime.feishuProblem),
@@ -255,7 +322,7 @@ export function registerHttp(ctx: Context, runtime: HttpHost): () => void {
         if (!result) { json(res, 404, { error: 'Result not found' }); return }
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
           'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'", 'referrer-policy': 'no-referrer' })
-        res.end(resultHtml(result)); return
+        res.end(resultHtml(result, runtime.vault?.list(result.id))); return
       }
       if (!url.pathname.startsWith('/super-personal-agent/api/')) { res.writeHead(404); res.end(); return }
       if (!sameOrigin(req, ctx.webServer.port)) { json(res, 403, { error: 'Same-origin management request required' }); return }

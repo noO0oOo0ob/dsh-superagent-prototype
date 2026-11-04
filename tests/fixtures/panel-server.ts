@@ -1,3 +1,4 @@
+import { PersonalConfigSchema } from '../../src/personal/config.ts'
 /**
  * Typed fake management API server for panel tests. Implements every route in `src/app/api.ts` and records any
  * undeclared query parameter or body mismatch in `server.misuse`, which `usePanelServer` asserts is empty after each test.
@@ -291,6 +292,17 @@ const ticketOf = (id: string) =>
 const SourceSave = z.object({ enabled: z.boolean(), config: z.unknown() })
 
 const ROUTES: { [K in keyof Api]: Route<K> } = {
+  'GET personal': { answer: () => ({ revision: 0, config: PersonalConfigSchema.parse({}), connectors: {}, deliveries: [], vault: [], routeDecisions: [], schedules: [], runs: [], hooks: [] }) },
+  'PUT personal': { body: true, answer: ({ body }) => ({ revision: body.revision + 1, config: PersonalConfigSchema.parse(body.config) }) },
+  'GET personal/bots': { answer: () => ({ bots: [] }) },
+  'POST personal/deliveries/:id': { body: true, answer: () => ({ recorded: true }) },
+  'POST personal/schedules': { body: true, answer: () => refuse(400, 'Use a runtime fixture for schedules') },
+  'PUT personal/schedules/:id': { body: true, answer: () => refuse(400, 'Use a runtime fixture for schedules') },
+  'POST personal/schedules/:id': { body: true, answer: () => refuse(400, 'Use a runtime fixture for schedules') },
+  'POST personal/runs/:id/retry': { answer: () => refuse(400, 'Use a runtime fixture for schedules') },
+  'GET personal/hooks': { answer: () => [] },
+  'POST personal/hooks/:id': { body: true, answer: () => refuse(400, 'Use a runtime fixture for hooks') },
+  'POST personal/vault/:id': { answer: () => ({ queued: false }) },
   'GET state': { answer: stateView },
   'GET overview': { answer: overviewView },
   'GET search': { query: ['q'], answer: async ({ query }) => {

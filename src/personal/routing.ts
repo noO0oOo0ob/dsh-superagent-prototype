@@ -5,7 +5,7 @@ import { key, threadKey, type ThreadRef, type Ticket, type Trigger } from '../co
 import type { Store } from '../app/store.ts'
 
 const actor = z.object({ source: z.string().min(1), id: z.string().min(1) }).strict()
-const scope = z.object({ source: z.string().min(1), conversation: z.string().min(1) }).strict()
+const scope = z.object({ source: z.string().min(1), conversation: z.string().min(1), account: z.string().min(1).optional() }).strict()
 export const RoutingConfigSchema = z.object({
   identities: z.array(z.object({ principalId: z.string().min(1), actor }).strict()).default([]),
   grants: z.array(z.object({ from: scope, to: scope, principalId: z.string().min(1) }).strict()).default([]),
@@ -18,13 +18,17 @@ export const RoutingConfigSchema = z.object({
 export type RoutingConfig = z.infer<typeof RoutingConfigSchema>
 export interface RouteDecision {
   id: string; at: string; triggerId: string; ticketId: string; allowed: boolean; reason: string; revision: number
-  from: { source: string; conversation: string }; to: { source: string; conversation: string }; principalId?: string
+  from: { source: string; conversation: string; account?: string }; to: { source: string; conversation: string; account?: string }; principalId?: string
 }
 const records = family<RouteDecision>('personal-route:')
 const managed = (source: string) => source === 'main' || source === 'inbox' || source === 'schedule' || source.startsWith('im-')
 const originScope = (trigger: Trigger) => ({ source: trigger.source,
-  conversation: typeof trigger.meta.conversationId === 'string' ? trigger.meta.conversationId : trigger.channel?.thread ?? trigger.threads[0]?.id ?? trigger.id })
-const equal = (a: ReturnType<typeof originScope>, b: ReturnType<typeof originScope>) => a.source === b.source && a.conversation === b.conversation
+  conversation: typeof trigger.meta.conversationId === 'string' ? trigger.meta.conversationId : trigger.channel?.thread ?? trigger.threads[0]?.id ?? trigger.id,
+  ...(typeof trigger.meta.fingerprint === 'string' ? { account: trigger.meta.fingerprint } : {}) })
+const equal = (a: ReturnType<typeof originScope>, b: ReturnType<typeof originScope>) => a.source === b.source && a.conversation === b.conversation && a.account === b.account
+
+/** A deterministic routing refusal; retrying without changing the grant does not authorize the attachment. */
+export class RoutingDenied extends Error {}
 
 /** Identity bindings never grant intake permission; grants authorize only a particular task attachment. */
 export class Routing {
@@ -44,7 +48,7 @@ export class Routing {
     const decision: RouteDecision = { ...judged, id: key(ticket.id, trigger.id, String(judged.revision)),
       at: new Date().toISOString(), ticketId: ticket.id, triggerId: trigger.id }
     this.store.set(records(decision.id), decision)
-    if (!decision.allowed) throw new Error('This request belongs to another source or conversation. Create a separate task or configure an explicit identity routing grant.')
+    if (!decision.allowed) throw new RoutingDenied('This request belongs to another source or conversation. Create a separate task or configure an explicit identity routing grant.')
   }
   /** Check current grants for automatic intake or a worker read without appending another audit entry. */
   permits(ticket: Ticket, trigger: Trigger): boolean {

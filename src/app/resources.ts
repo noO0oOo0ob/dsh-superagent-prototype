@@ -1,6 +1,7 @@
 /** Serves paginated context resources to personal_agent_read so large bodies stay out of model prompts until requested. */
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { UserError, key, latestReport, reached, runningAssignment, threadKey, type Ticket, type Trigger } from '../core/index.ts'
+import { ticketContexts } from '../core/context.ts'
 import { batchOf, inputMessage, triggerMessage, workerSessionId } from '../executor/dsh.ts'
 import { readGithub } from '../sources/github-read.ts'
 import { feishuReferences, feishuRead } from '../sources/feishu-read.ts'
@@ -19,10 +20,13 @@ import type { Settings } from './settings.ts'
 import { KV } from '../kv.ts'
 import type { Store } from './store.ts'
 import type { TextCache } from './cache.ts'
+import type { RepositoryConfig, RepositorySelection, PreparedRepository } from '../personal/repositories.ts'
 import type { Results } from './results.ts'
 
 /** Resource descriptors exposed via personal_agent_read, marking which resources worker sessions may also read for their own ticket. */
 export const RESOURCES: readonly { name: string; holds: string; executor?: true }[] = [
+  { name: 'repositories', holds: 'configured optional repository resource IDs for explicit task selection' },
+  { name: 'ticket-resources/<id>', holds: 'selected resources and prepared directories for one ticket', executor: true },
   { name: 'result/<id>', holds: 'one immutable result snapshot, its source references and local result URL', executor: true },
   { name: 'context/<id>', holds: 'immutable source context, trace reference and original metadata; restricted to this worker’s reachable triggers', executor: true },
   { name: 'tickets', holds: 'ticket cards, newest first; a card\'s state is person/review after a ready report, person/blocked or person/failed after those reports, person/answer with a question, person/delivery when an input could not reach the worker, working or working/queued while it works, idle once the worker ended its turn without a report, else how the ticket ended' },
@@ -66,6 +70,10 @@ export interface ResourceHost {
   readonly commands: Commands
   readonly masterId: string
   readonly results?: Results
+  repositories?(): RepositoryConfig[]
+  selectedResources?(ticketId: string): { selected: RepositorySelection[]; prepared: PreparedRepository[] }
+  /** Rechecks current routing permission before a worker reads a Trigger or its source context. */
+  permitsRead?(ticket: Ticket, trigger: Trigger): boolean
   readonly context: Context
   promptVersion(sessionId: string): PromptVersion
   /** Whether a Session may read `revision` (the revision it currently runs under or any revision it ran under previously). */
@@ -95,8 +103,10 @@ function list<T>({ offset, limit }: Read, fetch: (offset: number, count: number)
   return { items: items.slice(0, size), next_offset: items.length > size ? offset + size : null }
 }
 /** Check whether a worker session's ticket is authorized to read a trigger (via delivery, ticket origin, or followed thread). */
-const readable = (host: ResourceHost, ticket: Ticket, trigger: Trigger): boolean => reached(ticket, trigger, key => host.store.threads.get(key))
-  || ticket.origin.triggerIds.includes(trigger.id) || trigger.threads.some(ref => ticket.follows?.some(follow => follow.thread === threadKey(ref)))
+const readable = (host: ResourceHost, ticket: Ticket, trigger: Trigger): boolean => (host.permitsRead?.(ticket, trigger) ?? true)
+  && (reached(ticket, trigger, key => host.store.threads.get(key)) || ticket.origin.triggerIds.includes(trigger.id)
+    || host.store.contexts.references(ticketContexts(ticket)).some(ref => ref.triggerId === trigger.id)
+    || trigger.threads.some(ref => ticket.follows?.some(follow => follow.thread === threadKey(ref))))
 const trigger = (host: ResourceHost, id: string, ticketId?: string): Trigger => {
   const found = host.store.triggers.get(id)
   if (!found) throw new UserError('unknownTrigger')
@@ -105,9 +115,10 @@ const trigger = (host: ResourceHost, id: string, ticketId?: string): Trigger => 
   return found
 }
 /** Fetch and cache a source resource on offset 0, serving subsequent offsets from the session cache. */
-async function sourcePage(read: Read, source: string, fetch: () => Promise<unknown>) {
+async function sourcePage(read: Read, source: string, fetch: () => Promise<unknown>, authorize?: () => void) {
   const { host, resource, offset, sessionId } = read
   const body = offset === 0 ? JSON.stringify(await fetch()) : host.pages.get(`${sessionId}:${resource}`)
+  authorize?.()
   if (body === undefined) throw new Error(`Read this ${source === 'feishu' ? 'Feishu' : 'GitHub'} resource from offset 0 first`)
   if (offset === 0) host.pages.set(`${sessionId}:${resource}`, body)
   return text(read, body)
@@ -120,6 +131,12 @@ async function transcript(host: ResourceHost, ticketId: string) {
 }
 
 const ROUTES: readonly Route[] = [
+  ['repositories', read => { main(read); return read.host.repositories?.() ?? [] }],
+  ['ticket-resources/', read => {
+    if (read.ticketId && read.ticketId !== read.rest) throw new Error('Resources belong to another ticket')
+    if (!read.host.store.tickets.get(read.rest)) throw new Error('Task is missing')
+    return read.host.selectedResources?.(read.rest) ?? { selected: [], prepared: [] }
+  }],
   ['result/', read => {
     const result = read.host.results?.get(read.rest)
     if (!result) throw new Error('Unknown result')
@@ -155,10 +172,15 @@ const ROUTES: readonly Route[] = [
       throw new Error('Unknown or inaccessible thread')
     }
     const { store } = host
+    if (ticket) {
+      const size = Math.min(read.limit ?? 20, 50), rows = store.read.threadPage(thread.key, read.offset, size + 1)
+      const first = store.read.firstTrigger(thread.key, true) ?? store.read.firstTrigger(thread.key)
+      return { thread: thread.key, source: thread.ref.source, label: first && readable(host, ticket, first) ? preview(first.text).slice(0, 80) : thread.key,
+        items: rows.slice(0, size).filter(item => readable(host, ticket, item)).map(triggerLine),
+        next_offset: rows.length > size ? read.offset + size : null }
+    }
     const { read: _read, tickets: ids, ...card } = threadCard(thread, threadTitle(store, thread))
     const page = list(read, (offset, count) => store.read.threadPage(thread.key, offset, count).map(triggerLine))
-    // Worker sessions cannot inspect other tickets or decisions on a shared thread.
-    if (ticketId) return { ...card, ...page }
     const tickets = ids.flatMap(id => { const found = store.tickets.get(id); return found ? [ticketCard(found)] : [] })
     const decisions = store.decisions.byThread(thread.key).slice(-THREAD_DECISIONS).reverse().map(decisionCard)
     return { ...card, tickets, decisions, ...page }
@@ -220,13 +242,16 @@ const ROUTES: readonly Route[] = [
     const ref = feishuRef(source)
     if (!ref) throw new Error('A Feishu source trigger is required')
     const commands = read.host.commands.withSignal(read.signal)
-    return sourcePage(read, 'feishu', () => feishuRead(commands, ref, read.resource, read.host.feishuPageSize()))
+    return sourcePage(read, 'feishu', () => feishuRead(commands, ref, read.resource, read.host.feishuPageSize()),
+      () => { trigger(read.host, source.id, read.ticketId) })
   }],
   ['github/', read => sourcePage(read, 'github', () => readGithub(read.host.commands.withSignal(read.signal), read.resource))],
   ['trigger/', async read => {
     const { host, rest, ticketId, offset, signal } = read
     if (!rest || rest.includes('/')) throw new Error('Unknown context resource')
     const found = trigger(host, rest, ticketId)
+    const link = await host.sourceLink(found, signal)
+    trigger(host, rest, ticketId)
     const ref = feishuRef(found)
     // Redact decision IDs, other tickets, and unreachable neighbour triggers when a worker session reads a trigger.
     const ticket = ticketId ? host.store.tickets.get(ticketId) : undefined
@@ -240,7 +265,7 @@ const ROUTES: readonly Route[] = [
     const repliedTo = shown(parent ? host.store.triggers.get(feishuTriggerId(parent)) : undefined)
     const neighbours = host.store.read.neighbours(threadKey(found.threads[0]!), found.at, found.id)
     const around = { before: shown(neighbours.before), after: shown(neighbours.after) }
-    return { ...card, metadata: found.meta, ...await host.sourceLink(found, signal), acknowledgement: host.store.replyStatus(key('ack', found.id)) ?? 'not_requested',
+    return { ...card, metadata: found.meta, ...link, acknowledgement: host.store.replyStatus(key('ack', found.id)) ?? 'not_requested',
       ...(ref ? { context: feishuReferences(ref) } : {}),
       ...(offset === 0 ? {
         ...repliedTo ? { replied_to: triggerLine(repliedTo) } : {},
@@ -255,6 +280,15 @@ const ROUTES: readonly Route[] = [
     if (ticketId && ticketId !== id) throw new Error('Ticket does not belong to this worker')
     const ticket = host.store.tickets.get(id)
     if (!ticket) throw new UserError('unknownTicket')
+    const inputVisible = (input: Ticket['inputs'][number]) => {
+      if (!ticketId || input.kind !== 'trigger' && input.kind !== 'resumed') return true
+      const original = host.store.triggers.get(input.triggerId)
+      return !!original && readable(host, ticket, original)
+    }
+    const inputs = ticket.inputs.filter(inputVisible)
+    const checkTranscript = () => {
+      if (ticketId && ticket.inputs.some(input => !inputVisible(input))) throw new UserError('notReached')
+    }
     if (section === undefined) {
       const running = runningAssignment(ticket) && workerSessionId(ticket.id)
       const retry = 'sessions' in host ? (host as MainResourceHost).sessions.modelRetry(running) : {}
@@ -265,27 +299,31 @@ const ROUTES: readonly Route[] = [
         ({ thread: key, ...context ? { context: true } : {}, ...bound.has(key) ? { bound: true } : {} })
       const threads = [...subscribed.map(thread => marked(thread.key, !!thread.context?.includes(id))),
         ...[...bound].filter(key => !subscribed.some(thread => thread.key === key)).map(key => marked(key, false))]
-      return { ...ticketDetails(ticket, threads, batchOf(host, ticket), !!ticketId), ...retry }
+      return { ...ticketDetails({ ...ticket, inputs }, threads, batchOf(host, ticket), !!ticketId), ...retry }
     }
     if (section === 'assignments' || section === 'inputs') {
       if (part !== undefined) throw new Error('Unknown context resource')
       const size = Math.min(read.limit ?? (section === 'assignments' ? ASSIGNMENTS : INPUTS), 50)
       const { items, next_offset } = section === 'assignments'
         ? newestPage(ticket.assignments, read.offset, size, item => assignmentLine(ticket, item), resource)
-        : newestPage(ticket.inputs, read.offset, size, input => inputLine(ticket, input, !!ticketId), resource)
+        : newestPage(inputs, read.offset, size, input => inputLine(ticket, input, !!ticketId), resource)
       return { items, next_offset: next_offset ?? null }
     }
     let body: string
     if (section === 'input' && part) {
       // Render the input on demand with its resolved source link, matching either its short key or full input ID.
       const input = ticket.inputs.find(item => key(item.id) === part || item.id === part)
+      if (input && !inputVisible(input)) throw new UserError('notReached')
       const trigger = input?.kind === 'trigger' ? host.store.triggers.get(input.triggerId) : undefined
       const card = trigger && input?.kind === 'trigger' ? triggerMessage(trigger, await host.sourceLink(trigger, signal), input.note) : undefined
+      if (input && !inputVisible(input)) throw new UserError('notReached')
       const message = input && inputMessage(input, card)
       if (message === undefined) throw new Error('Unknown ticket input')
       body = message
     } else if (section === 'message' && part && /^\d+$/.test(part)) {
+      checkTranscript()
       const event = (await transcript(host, id))[Number(part)]
+      checkTranscript()
       const entry = event && transcriptEntry(event)
       if (!entry) throw new Error('Unknown transcript entry')
       body = JSON.stringify(entry)
@@ -297,7 +335,10 @@ const ROUTES: readonly Route[] = [
     else if (section === 'assignment') body = ticket.execution?.assignment ?? ''
     else if (section === 'result') body = latestReport(ticket)?.summary ?? ''
     else if (section === 'transcript') {
-      body = (await transcript(host, id)).flatMap((event, index) => {
+      checkTranscript()
+      const events = await transcript(host, id)
+      checkTranscript()
+      body = events.flatMap((event, index) => {
         const entry = transcriptEntry(event)
         const said = entry?.message.content.map(block => block.type === 'text' ? block.text : `[${block.type}]`).join(' ') ?? ''
         return entry ? [{ type: entry.type, preview: preview(said).slice(0, 80), chars: JSON.stringify(entry).length,

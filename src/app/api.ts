@@ -8,6 +8,12 @@ import type { SettingsView } from './views/settings.ts'
 import type { SourceStatusView } from './views/sources.ts'
 import type { DecisionListView, SearchView, ThreadDetailView, ThreadListView } from './views/threads.ts'
 import type { TicketListView } from './views/tickets.ts'
+import type { PersonalConfig } from '../personal/config.ts'
+import type { VaultExport } from '../personal/vault.ts'
+import type { RouteDecision } from '../personal/routing.ts'
+import type { ScheduleRecord, ScheduleRun } from '../personal/schedules.ts'
+import type { HookDelivery, HookEvent } from '../personal/hooks.ts'
+import type { ImDelivery } from './connectors.ts'
 
 export const TICKET_FILTERS = ['open', 'person', 'working', 'idle', 'ended'] as const
 export const THREAD_FILTERS = ['subscribed', 'evaluating', 'recent', 'all'] as const
@@ -18,6 +24,17 @@ interface Paged { offset?: number; limit?: number }
 type Delivery = 'injected' | 'pending'
 
 export interface Api {
+  'GET personal': { response: { revision: number; config: PersonalConfig; connectors: Record<string, { state: string; detail: string }>; deliveries: ImDelivery[]; vault: VaultExport[]; routeDecisions: RouteDecision[]; schedules: ScheduleRecord[]; runs: ScheduleRun[]; hooks: HookDelivery[] } }
+  'PUT personal': { body: { revision: number; config: unknown }; response: { revision: number; config: PersonalConfig } }
+  'GET personal/bots': { response: { bots: unknown[] } }
+  'POST personal/deliveries/:id': { body: { action: 'confirm_sent' | 'retry'; note: string }; response: { recorded: true } }
+  'POST personal/schedules': { body: { spec: unknown }; response: ScheduleRecord }
+  'PUT personal/schedules/:id': { body: { spec: unknown; revision: number }; response: ScheduleRecord }
+  'POST personal/schedules/:id': { body: { action: 'pause' | 'resume' | 'stop' }; response: ScheduleRecord }
+  'POST personal/runs/:id/retry': { response: ScheduleRun }
+  'POST personal/hooks/:id': { body: { action: 'retry' | 'replay' }; response: HookDelivery }
+  'GET personal/hooks': { response: HookEvent[] }
+  'POST personal/vault/:id': { response: { queued: boolean } }
   'GET state': { response: StateView }
   'GET overview': { response: OverviewView }
   'GET search': { query: { q: string }; response: SearchView }

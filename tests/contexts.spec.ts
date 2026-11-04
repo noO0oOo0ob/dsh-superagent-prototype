@@ -2,7 +2,7 @@
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
 import { Store } from '../src/app/store.ts'
-import { contextRef } from '../src/core/context.ts'
+import { contextRef, messageContext } from '../src/core/context.ts'
 import type { Trigger } from '../src/core/index.ts'
 import { startRuntime } from './fixtures/host.ts'
 
@@ -10,6 +10,20 @@ const message = (id: string, root = id): Trigger => ({ id, source: 'local-test',
   actor: { source: 'local-test', id: 'owner' }, human: true, addressed: 'direct',
   threads: [{ source: 'local-test', id: root }], at: new Date().toISOString(), text: 'Prepare a travel plan',
   meta: { external: { traceId: 'external-trace', source: 'forged', accountId: 'owner-account' } } })
+
+it('projects only provided scalar source fields while leaving full metadata behind its context reference', () => {
+  const source = message('projection'), fields = { channel: 'feishu', botId: 'bot-1', senderName: 'Alice', conversationTitle: 'Trip',
+    conversationId: 'chat-1', conversationType: 'group', threadId: 'thread-1', messageId: 'message-1', sentAt: source.at }
+  const full = { ...source, meta: { ...fields, fingerprint: 'a'.repeat(64), token: 'private-token', raw: { private: true } } }
+  expect(messageContext(full)).toEqual({ ...contextRef(source.id), source: source.source, actor: source.actor,
+    threads: source.threads, ...fields, read: `context/${contextRef(source.id).id}` })
+  const omitted = messageContext({ ...source, meta: { senderName: { secret: 'do not stringify' }, conversationTitle: '', messageId: 42 } })
+  expect(omitted).not.toHaveProperty('senderName')
+  expect(omitted).not.toHaveProperty('conversationTitle')
+  expect(omitted).not.toHaveProperty('messageId')
+  expect(omitted).not.toHaveProperty('sentAt')
+  expect(full.meta).toHaveProperty('token', 'private-token')
+})
 
 it('retains separate source records through routing, attempts, worker reports and reopening the database', async () => {
   const h = await startRuntime(store => store.saveSettings({ ...store.settings(),

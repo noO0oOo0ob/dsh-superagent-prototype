@@ -1,4 +1,5 @@
 /** Executor Session tools for reading ticket context, acknowledging requests, managing threads, handing back out-of-scope triggers, and reporting status. */
+import { artifactText } from '../../personal/artifacts.ts'
 import { z } from 'zod'
 import { requireGithub } from '../../deployment.ts'
 import { liveTicket, type EngineForExecutor, type Ticket } from '../../core/index.ts'
@@ -12,6 +13,7 @@ import type { Sessions } from '../sessions.ts'
 import { AcknowledgementSchema, readTool, tool, type Tool } from './tool.ts'
 
 export interface ExecutorToolsHost {
+  artifactLimit?(): number
   readonly engine: Pick<EngineForExecutor, 'report' | 'reply' | 'markUnrelated' | 'handback' | 'followForContext'>
   readonly store: Pick<Store, 'tickets' | 'replyStatus' | 'atomic'>
   readonly sessions: Pick<Sessions, 'relay' | 'notify'>
@@ -37,6 +39,19 @@ export function executorTools(host: ExecutorToolsHost, ticket: Ticket): Tool[] {
         const reply = host.engine.reply({ purpose: 'acknowledgement', ticketId, triggerId: args.trigger_id, text: args.text })
         if (reply.status !== 'sent') await host.sendReplies()
         return { trigger_id: args.trigger_id, acknowledgement: host.store.replyStatus(reply.id)!, reused: reply.reused }
+      },
+    }),
+    tool({
+      name: 'personal_agent_artifact', description: 'Publish a completed UTF-8 text or Markdown file from this task workspace as an immutable deliverable. Its link is included in the next report and it is exported to the configured Obsidian Vault.',
+      schema: z.object({ path: z.string().min(1), title: z.string().trim().min(1).max(200) }).strict(),
+      execute: async args => {
+        const ticket = host.store.tickets.get(ticketId)
+        if (!ticket?.execution || !host.resources.results || !host.artifactLimit) throw new Error('Artifact storage unavailable')
+        const content = await artifactText(ticket.execution.directory, args.path, host.artifactLimit())
+        const current = host.store.tickets.get(ticketId)
+        if (!current || current.ended || current.assignments.at(-1)?.id !== ticket.assignments.at(-1)?.id) throw new Error('Task execution changed before publication')
+        const result = host.resources.results.artifact(current, args.title, content, args.path)
+        return { artifact_id: result.id, read: `result/${result.id}`, url: result.url }
       },
     }),
     tool({

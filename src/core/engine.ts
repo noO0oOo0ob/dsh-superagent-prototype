@@ -45,7 +45,7 @@ export class Engine {
    * and queue it for Eval on its primary Thread unless a ticket's worker decides it (see `followupOwners`).
    * Triggers that arrive while an Eval of that Thread runs wait together for the next one.
    */
-  receive(trigger: Trigger): ReceiveResult { return this.repo.atomic(() => this.intake.receive(trigger)) }
+  receive(trigger: Trigger): ReceiveResult { return this.repo.atomic(() => { this.options.beforeReceive?.(trigger); return this.intake.receive(trigger) }) }
   /**
    * A Source's request to make an open ticket follow one of its Threads, such as a pull request's, `own` when the ticket
    * opened it: the ticket subscribes to it, and a ready report ends it only once `followsDone` holds (see `Tickets.followsDone`).
@@ -107,6 +107,8 @@ export class Engine {
    * @throws UserError for a ticket a person stopped, which withdrew its Mandate, or one whose Mandate the Policy no longer holds.
    */
   attach(ticketId: string, triggerId: string, note?: string): Ticket {
+    const ticket = this.repo.tickets.get(ticketId), trigger = this.repo.triggers.get(triggerId)
+    if (ticket && trigger) this.options.beforeAttach?.(ticket, trigger)
     return this.repo.atomic(() => {
       // A message this ticket's worker handed back is not its work: attached here, no worker would decide it, and it could not be handed back again.
       const handedBack = this.repo.triggers.disposition(triggerId)?.handbacks?.some(item => item.ticketId === ticketId)
@@ -212,6 +214,8 @@ export class Engine {
    * @throws UserError when the ticket is unknown or has ended.
    */
   followForContext(ticketId: string, thread: ThreadRef): boolean {
+    const ticket = this.repo.tickets.get(ticketId)
+    if (ticket) this.options.beforeFollow?.(ticket, thread)
     return this.repo.atomic(() => this.tickets.followForContext(ticketId, thread))
   }
   /**

@@ -11,6 +11,7 @@ export interface OutboxHost {
   readonly effects: Pick<Effects, 'enqueue' | 'cancel' | 'handle' | 'idle'>
   readonly sources: Pick<SourceRegistry, 'instance' | 'channelAllowed' | 'send'>
   readonly commands: Commands
+  onStatus?(message: OutboundMessage, status: 'pending' | 'sending' | 'sent' | 'dropped' | 'cancelled' | 'unknown'): void
   paused(): boolean
 }
 
@@ -28,12 +29,12 @@ export class Outbox implements OutboxPort {
     // Validate IM reply length here; acknowledgements are already validated when decided.
     if (message.kind === 'reply' && message.channel.source === 'feishu') checkedImText(message.text)
     const { store, effects } = this.host
-    store.atomic(() => { if (store.receipts.add(message)) effects.enqueue('reply', message.id, {}) })
+    store.atomic(() => { if (store.receipts.add(message)) { effects.enqueue('reply', message.id, {}); this.host.onStatus?.(message, 'pending') } })
   }
   status(id: string): ReplyStatus | undefined { return this.host.store.receipts.get(id)?.status }
   withdraw(id: string): void {
     const { store, effects } = this.host
-    store.atomic(() => { if (store.receipts.withdraw(id)) effects.cancel('reply', id) })
+    store.atomic(() => { const receipt = store.receipts.get(id); if (store.receipts.withdraw(id)) { effects.cancel('reply', id); if (receipt) this.host.onStatus?.(receipt, 'cancelled') } })
   }
   sent(): Promise<void> { return this.host.effects.idle('reply') }
   private async deliver(id: string): Promise<void> {
@@ -43,10 +44,14 @@ export class Outbox implements OutboxPort {
     if (!sources.instance(receipt.channel.source)?.enabled) throw new Later('The Source is off or not installed')
     // Hold later messages for the same ticket and conversation behind an earlier pending message until it exceeds the failure threshold.
     if (store.receipts.behind(id, FAILURES_BEFORE_ERROR)) throw new Later('An earlier message of this ticket to this conversation waits')
-    if (!sources.channelAllowed(receipt.channel)) { store.receipts.settle(receipt, 'channelIgnored'); return }
+    if (!sources.channelAllowed(receipt.channel)) { store.receipts.settle(receipt, 'channelIgnored'); this.host.onStatus?.(receipt, 'dropped'); return }
     // A permanently unreachable target (such as a recalled message or deleted Issue) settles as `channelGone` so its receipt prevents retries.
-    const result = await sources.send(receipt, commands)
+    this.host.onStatus?.(receipt, 'sending')
+    let result: Awaited<ReturnType<SourceRegistry['send']>>
+    try { result = await sources.send(receipt, commands) }
+    catch (error) { this.host.onStatus?.(receipt, 'unknown'); throw error }
     if (result === 'waiting') throw new Later('The Source is not installed')
     store.receipts.settle(receipt, result === 'gone' ? 'channelGone' : 'sent')
+    this.host.onStatus?.(receipt, result === 'gone' ? 'dropped' : 'sent')
   }
 }
