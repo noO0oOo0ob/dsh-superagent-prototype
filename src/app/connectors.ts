@@ -73,8 +73,13 @@ export class Connectors {
     const service = this.service
     if (!service) return []
     return Promise.all((await service.listBots()).map(async bot => {
-      try { return ImBotSchema.parse(await service.describeBot(bot.botId)) }
-      catch (error) { return { ...bot, available: false, error: imErrorCode(error) } }
+      try {
+        const described = ImBotSchema.parse(await service.describeBot(bot.botId))
+        if (described.botId !== bot.botId) throw unavailable('account-changed')
+        const { version, botId, channel, connected, account, capabilities } = described
+        return { version, botId, channel, connected, account: { fingerprint: account.fingerprint, ...(account.name ? { name: account.name } : {}) }, capabilities }
+      }
+      catch (error) { return { botId: bot.botId, channel: bot.channel, available: false, error: imErrorCode(error) } }
     }))
   }
   status() { return Object.fromEntries(this.states) }
@@ -128,7 +133,10 @@ export class Connectors {
       for (const config of configs) {
         const id = sourceId(config.id)
         after.sources[id] = { enabled: config.enabled, config: { binding: config } }
-        after.policy.sources[id] = { admission: {}, ...before.policy.sources[id], allowed: config.allowedSenders.map(id => ({ id })) }
+        const admission = config.intake === 'account'
+          ? { dm: { unlistedAddressed: 'explicit' as const }, group: { unlistedAddressed: 'explicit' as const } }
+          : before.policy.sources[id]?.admission ?? {}
+        after.policy.sources[id] = { ...before.policy.sources[id], admission, allowed: config.allowedSenders.map(id => ({ id })) }
       }
       if (JSON.stringify(after) !== JSON.stringify(before)) {
         this.host.store.saveSettings(after)
@@ -168,7 +176,7 @@ export class Connectors {
             const event = ImEventSchema.parse(raw)
             if (event.botId !== config.botId || event.fingerprint !== config.fingerprint) throw new Error('Untrusted source account')
             const conversation = config.conversations.find(item => item.id === event.conversation.id && item.kind === event.conversation.kind)
-            if (!conversation || !config.allowedSenders.includes(event.actor.id)) return { accepted: true }
+            if (config.intake === 'restricted' && (!conversation || !config.allowedSenders.includes(event.actor.id))) return { accepted: true }
             const trigger = this.trigger(config, event)
             await this.host.receive(trigger)
             return { accepted: true }
@@ -206,8 +214,12 @@ export class Connectors {
       description: { zh: '由个人助理设置管理的独立账号连接。', en: 'An account connection managed in Personal settings.' },
       schema: SourceConfigSchema, fields: [], health: [],
       scope: ({ meta }, { binding: current }) => {
-        const conversation = current?.conversations.find(item => item.id === meta.conversationId && item.kind === meta.conversationType)
-        return current?.enabled && current.id === config.id && current.botId === meta.botId && current.fingerprint === meta.fingerprint && conversation && current.allowedSenders.includes(String(meta.actorId))
+        if (!current?.enabled || current.id !== config.id || current.botId !== meta.botId || current.fingerprint !== meta.fingerprint)
+          return { listened: false, reason: 'connector_scope_denied' }
+        if (current.intake === 'account' && (meta.conversationType === 'dm' || meta.conversationType === 'group'))
+          return { listened: true, observed: false, row: meta.conversationType }
+        const conversation = current.conversations.find(item => item.id === meta.conversationId && item.kind === meta.conversationType)
+        return conversation && current.allowedSenders.includes(String(meta.actorId))
           ? { listened: true, observed: conversation.listen === 'all', row: conversation.kind }
           : { listened: false, reason: 'connector_scope_denied' }
       },
@@ -247,7 +259,8 @@ export class Connectors {
   private allowed(config: ConnectorConfig, address: Record<string, string>): boolean {
     if (!config.enabled || address.connectorId !== config.id || config.botId !== address.botId || config.fingerprint !== address.fingerprint) return false
     const route = parseRoute(address.route)
-    return !!route && config.conversations.some(item => item.id === route.conversationId && item.kind === address.conversationKind) && config.allowedSenders.includes(route.actorId)
+    if (!route || !['dm', 'group'].includes(address.conversationKind ?? '')) return false
+    return config.intake === 'account' || config.conversations.some(item => item.id === route.conversationId && item.kind === address.conversationKind) && config.allowedSenders.includes(route.actorId)
   }
   private async send(id: string, message: OutboundMessage): Promise<'sent' | 'gone'> {
     const service = this.service, config = this.config(id), active = this.active.get(id)

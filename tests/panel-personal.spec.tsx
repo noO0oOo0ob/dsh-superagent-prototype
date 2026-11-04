@@ -91,7 +91,7 @@ it('discovers only account diagnostics and requires a note before reconciling un
   current.connectors = { personal: { state: 'ready', detail: 'Listening' } }
   current.deliveries = [{ id: 'delivery-1', connectorId: 'personal', state: 'uncertain', at: atTime, fingerprint: 'a'.repeat(64), routeHash: 'route', textHash: 'text', attempts: 1 }]
   await mount()
-  expect(requests.some(item => item.path === 'personal/bots')).toBe(false)
+  expect(requests.some(item => item.path === 'personal/bots')).toBe(true)
   await click(zh['personal.discover'])
   expect(text()).toContain('bot-1')
   expect(text()).not.toContain('not-for-display')
@@ -101,6 +101,56 @@ it('discovers only account diagnostics and requires a note before reconciling un
   await click(zh['personal.confirmSent'])
   expect(requests.find(item => item.path === 'personal/deliveries/delivery-1')?.body).toEqual({ action: 'confirm_sent', note: 'Confirmed in the original conversation' })
   expect(text()).not.toContain(zh['personal.checkNote'])
+})
+
+it('selects a discovered account without manual IDs and activates it only on save', async () => {
+  bots = [{ botId: 'bot-1', channel: 'feishu', connected: true, account: { fingerprint: 'a'.repeat(64), name: 'Assistant' },
+    capabilities: ['exclusive-text-consumer', 'reply-text-checked'] }]
+  await mount()
+  expect(text()).toContain('Assistant')
+  expect(current.config.connectors).toEqual([])
+  await click(zh['personal.selectAccount'].replace('{name}', 'Assistant'))
+  expect(current.config.connectors).toEqual([])
+  expect(requests.filter(item => item.method === 'PUT')).toHaveLength(0)
+  await click(zh.save)
+  expect(current.config.connectors).toEqual([{ id: 'account-1', enabled: true, intake: 'account', botId: 'bot-1', fingerprint: 'a'.repeat(64), conversations: [], allowedSenders: [] }])
+  await click(zh['personal.unselectAccount'].replace('{name}', 'Assistant'))
+  await click(zh.save)
+  expect(current.config.connectors[0]?.enabled).toBe(false)
+})
+
+it('does not select an unsupported account or silently replace a changed fingerprint', async () => {
+  bots = [{ botId: 'bot-1', channel: 'feishu', connected: true, account: { fingerprint: 'b'.repeat(64), name: 'Assistant' },
+    capabilities: ['exclusive-text-consumer', 'reply-text-checked'] },
+    { botId: 'bot-2', channel: 'weixin', connected: true, account: { fingerprint: 'c'.repeat(64), name: 'Weixin' }, capabilities: [] }]
+  current.config = PersonalConfigSchema.parse({ connectors: [{ id: 'existing', intake: 'account', enabled: true, botId: 'bot-1', fingerprint: 'a'.repeat(64) }] })
+  await mount()
+  expect(text()).toContain(zh['personal.accountChanged'])
+  const unsupported = all('button').find(item => item.textContent === zh['personal.selectAccount'].replace('{name}', 'Weixin')) as HTMLButtonElement
+  expect(unsupported.disabled).toBe(true)
+  expect(current.config.connectors[0]?.fingerprint).toBe('a'.repeat(64))
+  await click(zh['personal.selectAccount'].replace('{name}', 'Assistant'))
+  await click(zh.save)
+  expect(current.config.connectors[0]).toMatchObject({ id: 'existing', fingerprint: 'b'.repeat(64) })
+})
+
+it('can disable an unavailable configured account without editing IDs', async () => {
+  current.config = PersonalConfigSchema.parse({ connectors: [{ id: 'existing', intake: 'account', enabled: true, botId: 'missing', fingerprint: 'a'.repeat(64) }] })
+  await mount()
+  await click(zh['personal.unselectAccount'].replace('{name}', 'missing'))
+  await click(zh.save)
+  expect(current.config.connectors[0]?.enabled).toBe(false)
+})
+
+it('retains existing restrictions when selecting the same saved account again', async () => {
+  bots = [{ botId: 'bot-1', channel: 'feishu', connected: true, account: { fingerprint: 'a'.repeat(64), name: 'Assistant' },
+    capabilities: ['exclusive-text-consumer', 'reply-text-checked'] }]
+  current.config = PersonalConfigSchema.parse({ connectors: [{ id: 'existing', enabled: false, botId: 'bot-1', fingerprint: 'a'.repeat(64),
+    conversations: [{ id: 'chat-1', kind: 'dm' }], allowedSenders: ['alice'] }] })
+  await mount()
+  await click(zh['personal.selectAccount'].replace('{name}', 'Assistant'))
+  await click(zh.save)
+  expect(current.config.connectors[0]).toMatchObject({ enabled: true, intake: 'restricted', conversations: [{ id: 'chat-1', kind: 'dm' }], allowedSenders: ['alice'] })
 })
 
 it('pauses a schedule and hides intake retry until that schedule is active at the recorded revision', async () => {

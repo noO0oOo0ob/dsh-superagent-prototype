@@ -13,14 +13,19 @@ export const PersonalId = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/)
 export const ConnectorConfigSchema = z.object({
   id: PersonalId,
   enabled: z.boolean().default(false),
+  intake: z.enum(['account', 'restricted']).default('restricted'),
   botId: z.string().trim().default(''),
   fingerprint: z.string().regex(/^(?:[0-9a-f]{64})?$/).default(''),
   conversations: z.array(z.object({ id: z.string().min(1), kind: z.enum(['dm', 'group']),
     listen: z.enum(['mentions', 'all']).default('mentions') }).strict()).default([]),
   allowedSenders: z.array(z.string().trim().min(1)).default([]),
 }).strict().superRefine((value, ctx) => {
-  if (value.enabled && (!value.botId || !value.fingerprint || !value.conversations.length || !value.allowedSenders.length))
-    ctx.addIssue({ code: 'custom', message: 'An enabled Connector needs a bot, verified fingerprint, conversations and allowed senders' })
+  if (value.enabled && (!value.botId || !value.fingerprint))
+    ctx.addIssue({ code: 'custom', message: 'An enabled Connector needs a bot and verified fingerprint' })
+  if (value.enabled && value.intake === 'restricted' && (!value.conversations.length || !value.allowedSenders.length))
+    ctx.addIssue({ code: 'custom', message: 'Restricted intake needs conversations and allowed senders' })
+  if (value.intake === 'account' && (value.conversations.length || value.allowedSenders.length))
+    ctx.addIssue({ code: 'custom', message: 'Account intake does not use local conversation or sender lists' })
   if (new Set(value.conversations.map(item => item.id)).size !== value.conversations.length)
     ctx.addIssue({ code: 'custom', message: 'Duplicate conversation IDs' })
 })

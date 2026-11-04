@@ -56,8 +56,9 @@ function PersonalConfig({ data, reload }: { data: PersonalView; reload: Reload }
   return <form className="spa-form spa-block" onSubmit={event => { void draft.submit(event) }}>
     <Hint>{t('personal.intro')}</Hint>
     <Fields disabled={draft.busy}>
-      {CONFIG_KEYS.map(name => <Field key={name} label={t(`personal.config.${name}`)} note={t(`personal.help.${name}`)}>
-        <textarea className="spa-textarea spa-mono" rows={name === 'connectors' || name === 'routing' ? 8 : 5} spellCheck={false}
+      {CONFIG_KEYS.map(name => name === 'connectors' ? <ConnectorChoices key={name} value={draft.value[name]}
+        onChange={value => draft.edit({ ...draft.value, connectors: value })} /> : <Field key={name} label={t(`personal.config.${name}`)} note={t(`personal.help.${name}`)}>
+        <textarea className="spa-textarea spa-mono" rows={name === 'routing' ? 8 : 5} spellCheck={false}
           value={draft.value[name]} onChange={event => draft.edit({ ...draft.value, [name]: event.target.value })} />
       </Field>)}
     </Fields>
@@ -65,20 +66,72 @@ function PersonalConfig({ data, reload }: { data: PersonalView; reload: Reload }
   </form>
 }
 
-function Connections({ data, reload }: { data: PersonalView; reload: Reload }) {
-  const { t, call } = usePanel()
-  const [bots, setBots] = useState<unknown[]>()
-  const discover = useAction(async () => { setBots((await call('GET personal/bots')).bots) })
-  return <Section title={t('personal.connections')} action={<Button variant="outline" size="sm" disabled={discover.busy}
-    onClick={() => { void discover.run() }}>{t('personal.discover')}</Button>}>
+function ConnectorChoices({ value, onChange }: { value: string; onChange(value: string): void }) {
+  const { t, call } = usePanel(), { restarts } = usePanelData()
+  const { data, error, reload } = usePoll(() => call('GET personal/bots'), [call, restarts], 60_000)
+  const refresh = useAction(reload)
+  let entries: Record<string, unknown>[] | undefined
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (Array.isArray(parsed) && parsed.every(item => item && typeof item === 'object' && !Array.isArray(item))) entries = parsed
+  } catch (error) { if (!(error instanceof SyntaxError)) throw error }
+  const choose = (bot: ReturnType<typeof accountFields>, selected: boolean) => {
+    if (!entries || !bot.botId || !bot.account.fingerprint) return
+    const previous = entries.find(item => item.botId === bot.botId)
+    if (selected) { onChange(json(entries.map(item => item === previous ? { ...item, enabled: false } : item))); return }
+    let index = 1
+    while (entries.some(item => item.id === `account-${index}`)) index++
+    const next = previous?.fingerprint === bot.account.fingerprint ? { ...previous, enabled: true }
+      : { id: previous?.id ?? `account-${index}`, enabled: true, intake: 'account', botId: bot.botId,
+      fingerprint: bot.account.fingerprint, conversations: [], allowedSenders: [] }
+    onChange(json(previous ? entries.map(item => item === previous ? next : item) : [...entries, next]))
+  }
+  return <Section title={t('personal.config.connectors')} action={<Button variant="outline" size="sm" disabled={refresh.busy}
+    onClick={() => { void refresh.run() }}>{t('personal.discover')}</Button>}>
     <Hint>{t('personal.connectionsHelp')}</Hint>
+    <Hint>{t('personal.providerAdmission')}</Hint>
+    {!data || error ? <LoadState loading={!data && !error} error={error} /> : null}
+    {data?.bots.map(accountFields).map((bot, index) => {
+      const current = entries?.find(item => item.botId === bot.botId)
+      const selected = current?.enabled === true && current.fingerprint === bot.account.fingerprint
+      const compatible = bot.connected && ['feishu', 'lark'].includes(bot.channel ?? '') && bot.botId
+        && /^[a-f0-9]{64}$/.test(bot.account.fingerprint ?? '')
+        && ['exclusive-text-consumer', 'reply-text-checked'].every(capability => bot.capabilities.includes(capability))
+      const name = bot.account.name || bot.botId || t('personal.unknownAccount')
+      return <div className="spa-form spa-block" key={bot.botId ?? index}>
+        <div className="spa-row-title">{name} · {bot.channel} · {t(bot.connected ? 'personal.accountOnline' : 'personal.accountOffline')}</div>
+        <Button variant="outline" aria-pressed={selected} disabled={!entries || !selected && (!!error || !compatible)}
+          aria-label={t(selected ? 'personal.unselectAccount' : 'personal.selectAccount', { name })}
+          onClick={() => choose(bot, selected)}>{t(selected ? 'personal.unselectAccount' : 'personal.selectAccount', { name })}</Button>
+        {!compatible && <Hint>{bot.error || t('personal.accountUnsupported')}</Hint>}
+        {current?.enabled === true && current.fingerprint !== bot.account.fingerprint && <Hint>{t('personal.accountChanged')}</Hint>}
+        <details><summary>{t('personal.accountDetails')}</summary><pre className="spa-event-text spa-mono">{json(bot)}</pre></details>
+      </div>
+    })}
+    {data?.bots.length === 0 && <Hint>{t('personal.noAccounts')}</Hint>}
+    {data && entries?.filter(item => item.enabled === true && !data.bots.map(accountFields).some(bot => bot.botId === item.botId)).map((item, index) => {
+      const name = typeof item.botId === 'string' ? item.botId : t('personal.unknownAccount')
+      return <div className="spa-form spa-block" key={index}>
+        <Hint>{t('personal.missingAccount', { name })}</Hint>
+        <Button variant="outline" onClick={() => onChange(json(entries!.map(entry => entry === item ? { ...entry, enabled: false } : entry)))}>
+          {t('personal.unselectAccount', { name })}</Button>
+      </div>
+    })}
+    <details><summary>{t('personal.advancedConnections')}</summary>
+      <Field label={t('personal.config.connectors')} note={t('personal.help.connectors')}>
+        <textarea className="spa-textarea spa-mono" rows={8} spellCheck={false} value={value} onChange={event => onChange(event.target.value)} />
+      </Field>
+    </details>
+  </Section>
+}
+
+function Connections({ data, reload }: { data: PersonalView; reload: Reload }) {
+  const { t } = usePanel()
+  return <Section title={t('personal.connections')}>
     {Object.entries(data.connectors).length ? Object.entries(data.connectors).map(([id, status]) => <div className="spa-form spa-block" key={id}>
       <div className="spa-row-title">{id} · {stateLabel(t, status.state)}</div>
       {status.detail && <p className="spa-hint">{status.detail}</p>}
     </div>) : <Hint>{t('personal.noConnections')}</Hint>}
-    {bots && <details open><summary>{t('personal.accounts', { count: bots.length })}</summary>
-      {bots.length ? <pre className="spa-event-text spa-mono">{json(bots.map(accountFields))}</pre> : <Hint>{t('personal.noAccounts')}</Hint>}
-    </details>}
     {data.deliveries.length > 0 && <Hint>{t('personal.deliveryHelp')}</Hint>}
     {data.deliveries.map(item => <Delivery key={item.id} item={item} reload={reload} />)}
   </Section>

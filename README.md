@@ -10,7 +10,7 @@ The package ID is `dsh-super-personal-agent`. It uses its own service, presets, 
 
 Start with [SETUP.md](SETUP.md), or follow the [phase-one local inbox walkthrough](docs/009-personal-agent.md). The walkthrough needs no external account. [Deployment](docs/006-deployment.md) covers installation alongside the original plugin and optional GitHub configuration.
 
-Phase one does not add IM connectors, Obsidian, cross-channel account linking or multiple instances of a Source kind. The retained GitHub adapter still watches one repository; this no longer limits local tasks or workspace preparation.
+Personal settings provide account discovery and selection for dsh-im, Obsidian exports, repository resources, schedules, hooks and explicit cross-conversation routing. The retained GitHub adapter still watches one repository; this does not limit local tasks or workspace preparation.
 
 ## Documentation
 

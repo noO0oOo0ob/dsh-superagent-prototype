@@ -8,7 +8,7 @@ import { Store } from '../src/app/store.ts'
 import type { OutboundMessage, Trigger } from '../src/core/index.ts'
 import { ImEventSchema, type DshImService, type ImEvent } from '../src/connectors/dsh-im.ts'
 import { ConnectorConfigSchema, PersonalSettings, type ConnectorConfig } from '../src/personal/config.ts'
-import type { Settings } from '../src/policy.ts'
+import { settingsPolicy, type Settings } from '../src/policy.ts'
 import { SourceRegistry } from '../src/sources/registry.ts'
 
 const fingerprint = 'a'.repeat(64), otherFingerprint = 'b'.repeat(64)
@@ -72,6 +72,47 @@ function host(configs = [config()]) {
 const failure = (code: string) => Object.assign(new Error(code), { code })
 
 describe('dsh-im Connector', () => {
+  it('accepts account intake without local lists and retains account checks and revocation', async () => {
+    const h = host([config({ intake: 'account', conversations: [], allowedSenders: [] })])
+    await h.start()
+    await h.deliver(event({ actor: 'new-user', chat: 'new-conversation' }))
+    const trigger = h.receive.mock.calls[0]![0]
+    expect(h.sources.scope(trigger)).toEqual({ listened: true, observed: false, row: 'group' })
+    const policy = settingsPolicy(h.store.settings(), h.sources)
+    const thread = { key: 'test', ref: trigger.threads[0]!, createdAt: '', subscriptions: [], correlated: [], pending: [], meta: {} }
+    const gate = policy.gate(trigger, thread, [])
+    expect(gate).toMatchObject({ admissible: true, strength: 'explicit', basis: { via: 'admission', cell: 'unlistedAddressed' } })
+    if (!gate.admissible) throw new Error('Expected an admitted request')
+    const mandate = { actor: trigger.actor, strength: gate.strength, basis: gate.basis, policyVersion: policy.version, scope: 'Plan a trip' }
+    expect(policy.revalidate(mandate)).toBe(true)
+    const message = { id: 'account-reply', channel: trigger.channel!, kind: 'notice' as const, text: 'Ready' }
+    expect(h.sources.channelAllowed(message.channel)).toBe(true)
+    await expect(h.deliver(event({ fingerprint: otherFingerprint }))).rejects.toThrow('Untrusted source account')
+    h.configure([config({ intake: 'account', enabled: false, conversations: [], allowedSenders: [] })])
+    await h.connectors.refresh()
+    expect(settingsPolicy(h.store.settings(), h.sources).revalidate(mandate)).toBe(false)
+    expect(h.sources.scope(trigger)).toMatchObject({ listened: false })
+  })
+
+  it('keeps legacy scope restrictions and rejects ambiguous account lists', () => {
+    expect(config().intake).toBe('restricted')
+    expect(() => config({ intake: 'account' })).toThrow('does not use local')
+    expect(() => config({ conversations: [], allowedSenders: [] })).toThrow('Restricted intake')
+  })
+
+  it('discovers account identifiers without activating consumers or exposing provider extras', async () => {
+    const h = host([config({ enabled: false })])
+    await h.start()
+    h.fake.describeBot.mockResolvedValue({ version: 1, botId: 'bot-1', channel: 'feishu', connected: true,
+      account: { fingerprint, name: 'Assistant' }, capabilities: ['exclusive-text-consumer', 'reply-text-checked'], token: 'private-provider-value' })
+    expect(await h.connectors.discover()).toEqual([{ version: 1, botId: 'bot-1', channel: 'feishu', connected: true,
+      account: { fingerprint, name: 'Assistant' }, capabilities: ['exclusive-text-consumer', 'reply-text-checked'] }])
+    expect(h.fake.consumeInbound).not.toHaveBeenCalled()
+    h.fake.describeBot.mockResolvedValue({ version: 1, botId: 'another', channel: 'feishu', connected: true,
+      account: { fingerprint }, capabilities: [] })
+    expect(await h.connectors.discover()).toMatchObject([{ available: false, error: 'account-changed' }])
+  })
+
   it('requires explicit enabled account bindings and reports a missing service', async () => {
     const h = host([config({ enabled: false })])
     await h.start()
