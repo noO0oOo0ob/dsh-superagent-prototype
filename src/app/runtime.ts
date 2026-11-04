@@ -51,6 +51,8 @@ import type { ResourceHost } from './resources.ts'
 import { mainTools, type MainToolsHost } from './tools/main.ts'
 import { executorTools, type ExecutorToolsHost } from './tools/executor.ts'
 import { MainInput } from './main-input.ts'
+import { ArtifactFiles } from '../messaging/files.ts'
+import { MessageDelivery } from '../messaging/delivery.ts'
 import { Results } from './results.ts'
 import { Connectors } from './connectors.ts'
 import { ticketContexts } from '../core/context.ts'
@@ -90,6 +92,7 @@ export class Runtime extends Service implements SourceHost {
   readonly ready: Promise<void>
   readonly main: MainInput
   readonly results: Results
+  readonly messageDelivery: MessageDelivery
   readonly schedules: Schedules
   readonly hooks: Hooks
   readonly vault: Vault
@@ -190,7 +193,8 @@ export class Runtime extends Service implements SourceHost {
           this.hooks.record({ version: 1, kind: 'delivery.status', id: key('delivery', message.id, status, at), at,
             taskId: ticket.id, contexts: store.contexts.references(ticketContexts(ticket)), deliveryId: message.id, status })
         } })
-      this.results = new Results({ store, effects, outbox, masterId, vault: this.vault, port: ctx.webServer.port,
+      this.messageDelivery = new MessageDelivery(store)
+      this.results = new Results({ files: new ArtifactFiles(join(machine.stateDir, 'artifacts')), store, effects, outbox, masterId, vault: this.vault, port: ctx.webServer.port,
         onSaved: result => this.hooks.record({ version: 1, kind: 'result.saved', id: key('hook-result', result.id), at: result.at,
           taskId: result.ticketId, resultId: result.id, contexts: result.contexts, artifactIds: this.vault.list(result.id).map(item => item.id) }) })
       const { assessor, executor } = this

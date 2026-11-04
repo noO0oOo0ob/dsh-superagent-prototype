@@ -14,7 +14,7 @@ The Personal Agent owns account onboarding, inbound commands, conversation conte
 ## Stages
 
 1. [x] Pin and copy upstream Feishu/shared/UI source and focused tests.
-2. [ ] Rich publication protocol, binary artifacts and durable part receipts.
+2. [x] Rich publication protocol, binary artifacts and durable part receipts.
 3. [ ] Native Feishu inbound and text/image/file delivery without dsh-im.
 4. [ ] Stable conversation Threads, commands and isolated context generations.
 5. [ ] QR/manual onboarding and account management UI.
@@ -26,3 +26,5 @@ Each stage is committed locally; no push. Live binding is left to the owner afte
 ## Upstream
 
 `vendor/dsh-im/UPSTREAM.json` pins v5.10.0 at c826bfa415d79669d8ebba206cf4a1eac554d8e2 and records SHA-256 for every copied file. The first import is mechanical. Subsequent local adaptations are tracked in Git and the manifest. Original plugin registration and independent Session execution are not activated. Retain the included LICENSE and THIRD_PARTY_NOTICES.md.
+
+The Worker prompt/tool character budget is 44,000 (previously 42,000), accounting for the typed publication schema. Only implemented text/image/file blocks are exposed in the Worker tool; other types remain in the persisted protocol for future adapters.

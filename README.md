@@ -42,3 +42,5 @@ Read the numbered documents in order; each builds only on the ones before it.
 ## License
 
 [MIT](LICENSE)
+
+Native messaging migration and publication rules: [implementation notes](docs/native-messaging.md). Results support ordered text, image and file parts with immutable artifact snapshots and per-part delivery receipts.

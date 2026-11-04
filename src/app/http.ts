@@ -313,6 +313,19 @@ export function registerHttp(ctx: Context, runtime: HttpHost): () => void {
   const disposers = [
     ctx.webServer.register({ kind: 'prefix', path: '/super-personal-agent', handler: async (req, res) => {
       const url = new URL(req.url ?? '/', 'http://localhost')
+      if (url.pathname.startsWith('/super-personal-agent/artifact/') && req.method === 'GET') {
+        if (!resultNavigationAllowed(req.headers, ctx.webServer.port)) { json(res, 403, { error: 'Local artifact navigation required' }); return }
+        await runtime.ready
+        try {
+          const artifact = await runtime.results?.materialize(url.pathname.slice('/super-personal-agent/artifact/'.length))
+          if (!artifact) { json(res, 404, { error: 'Artifact not found' }); return }
+          res.writeHead(200, { 'content-type': artifact.file.mediaType, 'content-length': artifact.bytes.length,
+            'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(artifact.file.fileName)}`,
+            'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; sandbox" })
+          res.end(artifact.bytes)
+        } catch (error) { json(res, 404, { error: 'Artifact is unavailable' }) }
+        return
+      }
       if (url.pathname.startsWith('/super-personal-agent/result/') && req.method === 'GET') {
         if (!resultNavigationAllowed(req.headers, ctx.webServer.port)) {
           json(res, 403, { error: 'Local result navigation required' }); return

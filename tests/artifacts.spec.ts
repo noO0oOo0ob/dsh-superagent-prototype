@@ -20,7 +20,7 @@ it('reads text once and rejects traversal, escaping links, binary and oversized 
     await expect(artifactText(workspace, '.', 1024)).rejects.toThrow()
     if (process.platform !== 'win32') {
       await promisify(execFile)('mkfifo', [join(workspace, 'pipe.md')])
-      await expect(artifactText(workspace, 'pipe.md', 1024)).rejects.toThrow('text file')
+      await expect(artifactText(workspace, 'pipe.md', 1024)).rejects.toThrow('file')
     }
   } finally { await rm(root, { recursive: true, force: true }) }
 })

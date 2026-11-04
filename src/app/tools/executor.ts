@@ -1,5 +1,5 @@
 /** Executor Session tools for reading ticket context, acknowledging requests, managing threads, handing back out-of-scope triggers, and reporting status. */
-import { artifactText } from '../../personal/artifacts.ts'
+import { WorkerPublicationSchema } from '../../messaging/content.ts'
 import { z } from 'zod'
 import { requireGithub } from '../../deployment.ts'
 import { liveTicket, type EngineForExecutor, type Ticket } from '../../core/index.ts'
@@ -42,15 +42,12 @@ export function executorTools(host: ExecutorToolsHost, ticket: Ticket): Tool[] {
       },
     }),
     tool({
-      name: 'personal_agent_artifact', description: 'Publish a completed UTF-8 text or Markdown file from this task workspace as an immutable deliverable. Its link is included in the next report and it is exported to the configured Obsidian Vault.',
+      name: 'personal_agent_artifact', description: 'Snapshot a file from this task workspace as an immutable artifact. Supports documents, images and binary files. Registration is not delivery: select its artifact_id in report publication blocks to send it.',
       schema: z.object({ path: z.string().min(1), title: z.string().trim().min(1).max(200) }).strict(),
       execute: async args => {
         const ticket = host.store.tickets.get(ticketId)
         if (!ticket?.execution || !host.resources.results || !host.artifactLimit) throw new Error('Artifact storage unavailable')
-        const content = await artifactText(ticket.execution.directory, args.path, host.artifactLimit())
-        const current = host.store.tickets.get(ticketId)
-        if (!current || current.ended || current.assignments.at(-1)?.id !== ticket.assignments.at(-1)?.id) throw new Error('Task execution changed before publication')
-        const result = host.resources.results.artifact(current, args.title, content, args.path)
+        const result = await host.resources.results.capture(ticket, args.title, args.path, host.artifactLimit())
         return { artifact_id: result.id, read: `result/${result.id}`, url: result.url }
       },
     }),
@@ -93,6 +90,7 @@ export function executorTools(host: ExecutorToolsHost, ticket: Ticket): Tool[] {
       schema: z.object({
         state: z.enum(['progress', 'ready', 'blocked', 'failed', 'dropped']),
         summary: z.string().min(1),
+        publication: WorkerPublicationSchema.optional().describe('Explicitly publish ordered text/image/file blocks, or keep this report internal. Omission supports pre-upgrade workers only. Destinations are resolved by the host.'),
         human_action: z.string().trim().min(1).max(1000).nullish().describe('One concrete question for a person, also with state=progress; omit to keep the pending one, null to clear it.'),
         question_for_trigger_id: z.string().optional().describe('With human_action: the human message that raised the question, which is asked where that person wrote.'),
         pr_number: z.number().int().positive().nullish().describe('Optional GitHub PR, only when the GitHub Source is enabled and verified. Omit for tasks without a PR.'),
@@ -101,20 +99,21 @@ export function executorTools(host: ExecutorToolsHost, ticket: Ticket): Tool[] {
       execute: async (args, signal) => {
         const current = host.store.tickets.get(ticketId)
         if (!current || !liveTicket(current)) throw new Error('Ticket ended (PR was closed or work finished); do not resume it')
+        if (args.publication) host.resources.results?.validatePublication(current, args.publication)
         if (args.pr_number != null) requireGithub(host.github.deployment)
         const pull = args.pr_number != null ? await readPull(host.github, args.pr_number, signal) : undefined
         // Claim the PR, record the report, and queue the relay atomically so a rejected PR claim or invalid report leaves no partial state, and a recorded report always reaches the main Session.
         return host.store.atomic(() => {
           const refused = pull && claimPull(host.github, ticketId, pull)
           if (refused) throw new Error(refused)
-          const report = { state: args.state, summary: args.summary, ...(args.human_action !== undefined ? { question: args.human_action } : {}),
+          const report = { state: args.state, summary: args.summary, ...(args.publication ? { publication: args.publication } : {}), ...(args.human_action !== undefined ? { question: args.human_action } : {}),
             ...(args.question_for_trigger_id ? { askedBy: args.question_for_trigger_id } : {}),
             ...(args.reply_to_trigger_id ? { answers: args.reply_to_trigger_id } : {}) }
           const updated = host.engine.report(ticketId, report)
           const relay = reportRelay(updated, report)
           if (relay) host.sessions.relay(relay.id, relay.text)
           const notification = relay ? 'orchestrator' : 'internal_only'
-          return { reported: true, notification, ...(updated.attention ? { attention: updated.attention } : {}) }
+          return { reported: true, notification, ...(args.publication ? { publication: args.publication.mode === 'publish' ? 'queued' : 'internal' } : {}), ...(updated.attention ? { attention: updated.attention } : {}) }
         })
       },
     }),

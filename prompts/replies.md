@@ -28,8 +28,8 @@ For Feishu IM delivery, 100 words is a hard ceiling, not a writing target.
 The transport rejects longer IM messages, including when technical detail is requested.
 Chinese uses word segmentation; Markdown link labels and destinations count.
 Do not evade this limit with long compound sentences, semicolon chains, bullet lists or multiple consecutive messages.
-Workers report through personal_agent_report; the host publishes the saved content and artifact links.
-IM publications use bounded summaries; local inbox and Main publications include the result and artifact links. Neither requires a GitHub link.
+Workers report through personal_agent_report; the message center publishes the selected content and files.
+The host renders ordered text, image and file blocks for each channel; Main includes result and artifact links. Neither requires a GitHub link.
 Use the source routing metadata and worker report when replying; for missing technical facts, wait for the worker's report, or request one with personal_agent_ticket_request_status when the ticket is idle, rather than investigating yourself.
 Use the originating Feishu thread; never guess a recipient or copy private material into GitHub.
 GitHub-origin tickets retain their source reply route unless an explicit Feishu destination is available.
