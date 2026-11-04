@@ -1,5 +1,7 @@
 # dsh-super-personal-agent
 
+**License: [MIT](LICENSE).**
+
 **super-personal-Agent** is a personal-task fork of [DeepSeek's Superagent prototype](https://github.com/deepseek-ai/dsh-superagent-prototype). It is a research prototype, not an official DeepSeek product. The local inbox adapter is adapted from [JHOpenDev/dsh-superagent-inbox](https://github.com/JHOpenDev/dsh-superagent-inbox).
 
 A local message can become a durable Ticket, run in its own worker Session and ordinary directory, and deliver its result back through the main Session and the originating inbox. Research, plans, writing, brainstorming and local coding do not require a GitHub account, repository or PR. GitHub and the existing Feishu adapter remain optional Sources, disabled until configured and enabled.
@@ -32,6 +34,7 @@ Read the numbered documents in order; each builds only on the ones before it.
 - [Schedules and hooks](docs/013-schedules-hooks.md)
 - [Connectors](docs/014-connectors.md)
 - [Personal setup and acceptance](docs/015-personal-setup.md)
+- [Native messaging and publication rules](docs/native-messaging.md): ordered text, image and file results with immutable snapshots and per-part delivery receipts
 - [008 Cookbook](docs/008-cookbook.md): adding a Source
 - [009 Personal Agent](docs/009-personal-agent.md): first local task, metadata and coexistence
 
@@ -41,6 +44,13 @@ Read the numbered documents in order; each builds only on the ones before it.
 
 ## License
 
-[MIT](LICENSE)
+This project is open source under the [MIT License](LICENSE). The fork's contributions are distributed under MIT, and the original upstream copyright and license notices are retained. Reused third-party code and assets remain subject to their applicable licenses; see [Third-party notices](THIRD_PARTY_NOTICES.md).
 
-Native messaging migration and publication rules: [implementation notes](docs/native-messaging.md). Results support ordered text, image and file parts with immutable artifact snapshots and per-part delivery receipts.
+## Acknowledgements
+
+This project builds on and reuses code from these open-source projects:
+
+- **[DeepSeek Superagent prototype](https://github.com/deepseek-ai/dsh-superagent-prototype)**, by the DeepSeek Harness Team: the base implementation and task orchestration architecture of this fork, including Sources, Triggers, Threads, Tickets and Workers.
+- **[dsh-im](https://github.com/xmanrui/dsh-im)**, by xmanrui and contributors: selected Feishu/Lark connector, shared messaging and management UI modules, copied and adapted into this plugin. The source revision and local adaptations are recorded in [the upstream manifest](vendor/dsh-im/UPSTREAM.json); its [MIT license](vendor/dsh-im/LICENSE) and [upstream third-party notices](vendor/dsh-im/THIRD_PARTY_NOTICES.md) are preserved.
+
+Thank you to the maintainers and contributors of both projects for sharing their engineering work, architecture and implementations. Their work makes this Personal Agent fork possible. We also thank [JHOpenDev/dsh-superagent-inbox](https://github.com/JHOpenDev/dsh-superagent-inbox) for the local inbox adapter this project adapts.

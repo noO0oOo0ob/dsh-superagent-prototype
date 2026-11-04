@@ -29,6 +29,7 @@
     "prompts",
     "skills",
     "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
     "vendor/dsh-im/LICENSE",
     "vendor/dsh-im/THIRD_PARTY_NOTICES.md",
     "vendor/dsh-im/UPSTREAM.json"
