@@ -15,6 +15,12 @@ export interface EngineOptions {
   outbox: Outbox
   /** Resolve an authorized reply destination to its immutable publication and shared delivery ID. */
   resolveReply?: (target: ReplyTarget) => OutboundMessage | undefined
+  /** Select one admitted batch from the pending timeline; unselected triggers stay pending. */
+  evaluationBatch?: (triggers: Trigger[]) => Trigger[]
+  /** Check application-owned task mutation authority before recording a decision. */
+  beforeDecide?: (trigger: Trigger, outcome: AssessmentOutcome) => void
+  /** A stable conversation subscription need not imply that a message reached every task. */
+  permitsReach?: (ticket: Ticket, trigger: Trigger) => boolean
   /** Validate application-owned scheduled messages before subscription fanout. */
   beforeReceive?: (trigger: Trigger) => void
   /** Check current application grants before automatically adding a subscribed Trigger to a ticket. */
@@ -85,6 +91,6 @@ export abstract class EnginePart {
   }
   protected source(ticket: Ticket): Trigger | undefined { return this.repo.triggers.get(ticket.origin.triggerId) }
   protected reaches(ticket: Ticket, trigger: Trigger, context = true): boolean {
-    return reached(ticket, trigger, k => this.repo.threads.get(k), context)
+    return this.options.permitsReach?.(ticket, trigger) !== false && reached(ticket, trigger, k => this.repo.threads.get(k), context)
   }
 }

@@ -195,13 +195,13 @@ export class Connectors {
   private trigger(config: ConnectorConfig, event: ImEvent): Trigger {
     const source = sourceId(config.id), id = messageId(config, event.conversation.id, event.messageId)
     const root = event.reply.threadId ?? event.reply.rootId ?? event.messageId
-    const thread = key(config.fingerprint, event.conversation.kind, event.conversation.id, root)
+    const thread = key('im-conversation-v1', event.channel, config.fingerprint, event.conversation.kind, event.conversation.id)
     return { id, source, actor: { source, id: event.actor.id }, human: true,
-      ...(event.conversation.kind === 'dm' ? { addressed: 'direct' as const } : event.mentionedAccount ? { addressed: 'mention' as const } : {}),
+      ...(event.conversation.kind === 'dm' ? { addressed: 'direct' as const } : event.mentionedAccount ? { addressed: 'mention' as const } : event.respondToAll === true || event.reply.parentId ? { addressed: 'direct' as const } : {}),
       threads: [{ source, id: thread }], at: event.at, text: event.text,
       channel: { source, thread, address: { connectorId: config.id, botId: config.botId, fingerprint: config.fingerprint,
         triggerId: id, conversationKind: event.conversation.kind, route: JSON.stringify(event.reply) } },
-      meta: { connectorId: config.id, channel: event.channel, botId: event.botId, fingerprint: event.fingerprint,
+      meta: { conversationVersion: 1, settings: event.settings, resources: event.resources, connectorId: config.id, channel: event.channel, botId: event.botId, fingerprint: event.fingerprint,
         messageId: event.messageId, eventId: event.eventId, conversationId: event.conversation.id, conversationType: event.conversation.kind,
         actorId: event.actor.id, mentionedAccount: event.mentionedAccount, root, reply: event.reply, sentAt: event.at, mentions: event.mentions,
         ...(typeof event.actor.name === 'string' ? { senderName: event.actor.name } : {}),

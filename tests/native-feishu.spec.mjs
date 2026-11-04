@@ -188,3 +188,33 @@ it('awaits the same close operation after lifetime abort until the account runti
   await Promise.resolve(); expect(done).toBe(false);
   stopped.resolve(); await closing; expect(done).toBe(true);
 });
+
+
+it('downloads only a resource still attached to the checked source and enforces byte limits', async () => {
+  const h = await fixture(), account = await h.bind();
+  h.get.mockResolvedValue({ code: 0, data: { items: [{ message_id: 'om_1', chat_id: 'oc_chat', msg_type: 'file',
+    body: { content: JSON.stringify({ file_key: 'file_original', file_name: 'report.md' }) }, create_time: '1793788800000',
+    sender: { sender_type: 'user', id_type: 'open_id', id: 'ou_user' } }] } });
+  const options = { expectedFingerprint: account.fingerprint, signal: h.lifetime.signal, maxBytes: 100 };
+  expect((await h.native.readResource(account.id, route, 'file_original', options)).toString()).toBe('attachment');
+  await expect(h.native.readResource(account.id, route, 'invented', options)).rejects.toThrow('resource-not-in-message');
+  await expect(h.native.readResource(account.id, route, 'file_original', { ...options, maxBytes: 4 })).rejects.toThrow('resource-too-large');
+  expect(h.client.im.v1.messageResource.get).toHaveBeenCalledTimes(2);
+});
+
+
+it('aborts an active download when the plugin lifetime ends before closing its account queue', async () => {
+  const h = await fixture(), account = await h.bind(), stream = new Readable({ read() {} });
+  h.get.mockResolvedValue({ code: 0, data: { items: [{ message_id: 'om_1', chat_id: 'oc_chat', msg_type: 'file',
+    body: { content: JSON.stringify({ file_key: 'file_original', file_name: 'report.md' }) }, create_time: '1793788800000',
+    sender: { sender_type: 'user', id_type: 'open_id', id: 'ou_user' } }] } });
+  h.client.im.v1.messageResource.get.mockResolvedValue({ getReadableStream: () => stream });
+  const operation = h.native.readResource(account.id, route, 'file_original', { expectedFingerprint: account.fingerprint,
+    signal: new AbortController().signal, maxBytes: 100 });
+  const stopped = expect(operation).rejects.toThrow();
+  await vi.waitFor(() => expect(h.client.im.v1.messageResource.get).toHaveBeenCalled());
+  h.lifetime.abort();
+  await stopped;
+  await h.native.close();
+  expect(stream.destroyed).toBe(true);
+});

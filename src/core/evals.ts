@@ -88,7 +88,9 @@ export class Evals extends EnginePart {
     const started = thread.pending.filter(id => accepted.has(id))
     const startedTicket = (id: string): Reason => ({ code: 'startedTicket', triggerId: id, values: { ticket: accepted.get(id)!.ticketId! } })
     if (started.length) this.ignore(thread, started, started.map(startedTicket), policy, at)
-    const triggers = thread.pending.flatMap(id => { const trigger = this.repo.triggers.get(id); return trigger ? [trigger] : [] })
+    const pending = thread.pending.flatMap(id => { const trigger = this.repo.triggers.get(id); return trigger ? [trigger] : [] })
+    const triggers = this.options.evaluationBatch?.(pending) ?? pending
+    const selected = triggers.map(trigger => trigger.id)
     const tickets = this.ticketsOnThread(thread)
     const reasons: Reason[] = []
     let strongest: { trigger: Trigger; strength: Strength; basis: MandateBasis } | undefined
@@ -100,16 +102,16 @@ export class Evals extends EnginePart {
       if (weaker || later) strongest = { trigger, strength: gate.strength, basis: gate.basis }
     }
     if (!strongest) {
-      if (thread.pending.length) this.ignore(thread, [...thread.pending], reasons.length ? reasons : [{ code: 'noAdmissible' }], policy, at)
+      if (selected.length) this.ignore(thread, selected, reasons.length ? reasons : [{ code: 'noAdmissible' }], policy, at)
       this.repo.threads.save(thread)
       return
     }
-    const evalId = key('eval', thread.key, policy.version, at, ...thread.pending)
+    const evalId = key('eval', thread.key, policy.version, at, ...selected)
     const deadline = new Date(Date.parse(at) + policy.evalTimeoutMs).toISOString()
     const { strength, trigger: { actor }, basis } = strongest
-    thread.evaluating = { id: evalId, threadKey: thread.key, triggerIds: thread.pending, primary: strongest.trigger.id, strength, actor, basis,
+    thread.evaluating = { id: evalId, threadKey: thread.key, triggerIds: selected, primary: strongest.trigger.id, strength, actor, basis,
       policyVersion: policy.version, startedAt: at, deadline }
-    thread.pending = []
+    thread.pending = thread.pending.filter(id => !selected.includes(id))
     this.repo.threads.save(thread)
     for (const trigger of triggers) {
       this.repo.triggers.saveDisposition(trigger.id, { ...(this.repo.triggers.disposition(trigger.id) ?? { fanout: [], at }), evalId })

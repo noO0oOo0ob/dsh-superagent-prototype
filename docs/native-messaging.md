@@ -16,7 +16,7 @@ The Personal Agent owns account onboarding, inbound commands, conversation conte
 1. [x] Pin and copy upstream Feishu/shared/UI source and focused tests.
 2. [x] Rich publication protocol, binary artifacts and durable part receipts.
 3. [x] Native Feishu account lifecycle, text intake and text/image/file delivery without dsh-im. Attachment intake is completed with conversation integration.
-4. [ ] Stable conversation Threads, commands and isolated context generations.
+4. [x] Stable conversation Threads, commands and isolated context generations.
 5. [ ] QR/manual onboarding and account management UI.
 6. [ ] Feishu interaction parity, Main/Vault presentation and failure recovery UI.
 7. [ ] Remove legacy runtime binding, clear the authorized existing account, build and regression checks.
@@ -30,3 +30,8 @@ Each stage is committed locally; no push. Live binding is left to the owner afte
 The Worker prompt/tool character budget is 44,000 (previously 42,000), accounting for the typed publication schema. Only implemented text/image/file blocks are exposed in the Worker tool; other types remain in the persisted protocol for future adapters.
 
 Publication is mandatory on new Worker reports. Internal reports never select draft artifacts for external delivery. Each later publication has its own identity even while a human question remains pending. File snapshots become visible only after their bytes and metadata are durable.
+
+
+Stable IM Threads use a new `im-conversation-v1` identity; existing message IDs and delivery receipts are unchanged. Historical message/topic Threads remain readable. Each conversation generation owns an isolated router Session. Main receives an audit notice; it does not execute the same incoming candidate a second time. Ordinary messages never broadcast to subscribed Workers; an application-verified reply correlation or an explicit route selects one task. Group task mutations require the original task owner.
+
+Native slash commands are intercepted before model dispatch. `/new` and `/clear` increment the current conversation generation in the same transaction as the command receipt and reply; they cancel only its old router Session. `/tasks`, `/status`, `/stop`, `/steer`, `/retry`, `/result`, `/history` and `/help` use the same scoped command dispatcher. `/result` is an explicit resend under the command's own deduplication identity. Account/model/preset changes are made in the management UI and apply to new Sessions. Inbound attachments retain provider references; authorized tools validate the original message, download within the configured byte limit and snapshot bytes for later reads.

@@ -55,6 +55,10 @@ import { createNativeFeishu, type NativeFeishu, type NativeAccount } from '../co
 import { nativeConnectorConfigs } from '../connectors/native-accounts.ts'
 import { nativeDelivery } from '../connectors/native-delivery.ts'
 import { ArtifactFiles } from '../messaging/files.ts'
+import { InboundFiles } from '../messaging/inbound.ts'
+import { Conversations } from '../messaging/conversations.ts'
+import { dialogueTools, dialogueSettings, dialogueMessage, DIALOGUE_PROMPT } from '../messaging/dialogue.ts'
+import { commandOf, executeCommand } from '../messaging/commands.ts'
 import { MessageDelivery } from '../messaging/delivery.ts'
 import { Results } from './results.ts'
 import { Connectors } from './connectors.ts'
@@ -96,6 +100,8 @@ export class Runtime extends Service implements SourceHost {
   readonly main: MainInput
   readonly results: Results
   readonly messageDelivery: MessageDelivery
+  readonly conversations: Conversations
+  readonly inbound: InboundFiles
   readonly schedules: Schedules
   readonly hooks: Hooks
   readonly vault: Vault
@@ -130,6 +136,9 @@ export class Runtime extends Service implements SourceHost {
       const report = (error: unknown) => { ctx.logger.warn('dsh-super-personal-agent: %s', String(error)) }
       const store = opened = this.store = new Store(join(machine.stateDir, 'orchestrator.sqlite'), report)
       this.personal = new PersonalSettings(store)
+      this.messageDelivery = new MessageDelivery(store)
+      this.conversations = new Conversations(store, this.messageDelivery)
+      this.inbound = new InboundFiles(store, new ArtifactFiles(join(machine.stateDir, 'inbound')), () => this.nativeFeishu, () => this.personal.view().config.artifacts.maxBytes)
       this.hooks = new Hooks({ store, config: () => this.personal.view().config.hooks, signal: this.lifetime })
       this.vault = new Vault(store, () => this.personal.view().config.vault)
       this.repositories = new RepositoryRegistry({ stateDir: machine.stateDir, git: (args, cwd, signal) =>
@@ -159,7 +168,7 @@ export class Runtime extends Service implements SourceHost {
       const resources: ResourceHost = { store, pages: new TextCache(4_000_000), prompts, commands, masterId, context: ctx,
         get results() { return runtime.results },
         permitsRead: (ticket, trigger) => {
-          if (this.routing.permits(ticket, trigger)) return true
+          if (this.routing.permits(ticket, trigger) && (trigger.meta.conversationVersion !== 1 || ticketContexts(ticket).some(ref => ref.triggerId === trigger.id))) return true
           const allowed = ticketContexts(ticket).filter(ref => { const child = store.triggers.get(ref.triggerId); return !!child && this.routing.permits(ticket, child) })
           return store.contexts.references(allowed).some(ref => ref.triggerId === trigger.id && !allowed.some(own => own.id === ref.id))
         },
@@ -170,7 +179,23 @@ export class Runtime extends Service implements SourceHost {
       const sessions = this.sessions = new Sessions({ context: ctx, store, prompts, effects, health: board.claim('models'), masterId,
         lifetime: this.lifetime,
         closing: () => this.closing(), environment,
-        tools: (agent, ticket) => ticket ? executorTools(this.toolHost, ticket) : [...mainTools(this.toolHost, agent), ...this.main.tools(), ...personalTools({ store, schedules: this.schedules, currentRequest: () => this.main.currentRequest(), requestPass: () => this.passes.request() })] })
+        dialogue: id => this.conversations.isDialogue(id) ? { prompt: this.conversations.forSession(id) ? DIALOGUE_PROMPT : 'This conversation was reset. End the turn.' } : undefined,
+        defaults: id => {
+          const ticketId = id.startsWith('spa-worker-') ? id.slice('spa-worker-'.length) : undefined
+          const ticket = ticketId ? store.tickets.get(ticketId) : undefined
+          return dialogueSettings(ticket ? store.triggers.get(ticket.origin.triggerId) : this.conversations.history(id).at(-1))
+        },
+        tools: (agent, ticket) => ticket ? [...executorTools(this.toolHost, ticket), this.inbound.tool(agent, id => {
+          const current = store.tickets.get(ticket.id), trigger = store.triggers.get(id)
+          if (!current || !trigger || !ticketContexts(current).some(ref => ref.triggerId === id) || !this.routing.permits(current, trigger)) throw new Error('Input is outside this task')
+          return trigger
+        }, true)] : this.conversations.isDialogue(agent.id) ? [...dialogueTools(this.toolHost, store, this.conversations, agent),
+          this.inbound.tool(agent, id => {
+            const trigger = this.conversations.authorize(agent.id, id)
+            if (!this.sources.scope(trigger).listened) throw new Error('Source access was removed')
+            return trigger
+          }, false)] : [...mainTools(this.toolHost, agent), ...this.main.tools(), ...personalTools({ store, schedules: this.schedules, currentRequest: () => this.main.currentRequest(), requestPass: () => this.passes.request() })] })
+      effects.handle('dialogueReset', async ({ sessionId }) => sessions.cancel(sessionId))
       const policyChanged: EngineForSettings['policyChanged'] = (from, to, effects) => { this.engine.policyChanged(from, to, effects) }
       this.settings = new Settings({ store, sources, engine: { policyChanged }, health: board, context: ctx, lifetime: this.lifetime, sessions,
         sourceHost: this, setup, requestPass: () => { this.passes.request() } })
@@ -187,7 +212,7 @@ export class Runtime extends Service implements SourceHost {
         repliedTo: trigger => repliedTo({ store, sources }, trigger) })
       this.assessor = new MasterAssessor({ get engine() { return runtime.engine }, commands, get deployment() { return setup.deployment }, effects,
         settings: () => store.settings(), paused: () => this.paused(), threadContext: trigger => sources.threadContext(trigger),
-        deliver: (id, text) => sessions.prompt(masterId, id, text, 'steer'), candidateCard: candidate => candidateCard(links, candidate) })
+        deliver: (id, text, trigger) => this.deliverCandidate(id, text, trigger), candidateCard: candidate => candidateCard(links, candidate) })
       const outbox = this.outbox = new Outbox({ store, effects, sources, commands, paused: () => this.paused(),
         current: message => !message.attentionId || store.tickets.get(message.ticketId ?? '')?.attention?.id === message.attentionId,
         onStatus: (message, status) => {
@@ -197,7 +222,6 @@ export class Runtime extends Service implements SourceHost {
           this.hooks.record({ version: 1, kind: 'delivery.status', id: key('delivery', message.id, status, at), at,
             taskId: ticket.id, contexts: store.contexts.references(ticketContexts(ticket)), deliveryId: message.id, status })
         } })
-      this.messageDelivery = new MessageDelivery(store)
       this.results = new Results({ files: new ArtifactFiles(join(machine.stateDir, 'artifacts')), store, effects, outbox, masterId, vault: this.vault, port: ctx.webServer.port,
         onSaved: result => this.hooks.record({ version: 1, kind: 'result.saved', id: key('hook-result', result.id), at: result.at,
           taskId: result.ticketId, resultId: result.id, contexts: result.contexts, artifactIds: this.vault.list(result.id).map(item => item.id) }) })
@@ -205,15 +229,23 @@ export class Runtime extends Service implements SourceHost {
       const policy = () => scheduledPolicy(settingsPolicy(store.settings(), sources), this.schedules)
       const engine = this.engine = new Engine({ repo: store, scope: sources, policy, assessor, executor,
         resolveReply: target => this.results.replyMessage(target),
+        evaluationBatch: triggers => triggers[0]?.meta.conversationVersion === 1 ? triggers.slice(0, 1) : triggers,
+        permitsReach: (ticket, trigger) => trigger.meta.conversationVersion !== 1 || ticketContexts(ticket).some(ref => ref.triggerId === trigger.id),
+        beforeDecide: (trigger, outcome) => {
+          if (outcome.kind === 'stop') {
+            const ticket = store.tickets.get(outcome.ticketId)
+            if (ticket) this.conversations.authorizeMutation(ticket, trigger)
+          }
+        },
         beforeReceive: trigger => {
           if (trigger.source !== 'schedule') return
           const origin = this.schedules.originFor(trigger)
           if (!origin) throw new Error('Scheduled input is not authorized')
           store.contexts.parent(trigger, origin)
         },
-        permitsInput: (ticket, trigger) => this.routing.permits(ticket, trigger),
+        permitsInput: (ticket, trigger) => this.routing.permits(ticket, trigger) && this.conversations.permitsInput(ticket, trigger),
         beforeFollow: (ticket, thread) => this.routing.follow(ticket, thread),
-        beforeAttach: (ticket, trigger) => this.routing.attach(ticket, trigger),
+        beforeAttach: (ticket, trigger) => { this.conversations.authorizeMutation(ticket, trigger); this.routing.attach(ticket, trigger) },
         outbox, prepareTicket: (ticket, outcome) => {
           const ids = z.array(z.string()).parse(outcome.audit?.resource_ids ?? [])
           const selection = this.repositories.select(this.personal.view().config.repositories, ids)
@@ -226,6 +258,10 @@ export class Runtime extends Service implements SourceHost {
             : event.type === 'assignment.reported' ? task?.assignments.at(-1)?.report?.state === 'progress' ? 'running' : task?.assignments.at(-1)?.report?.state : undefined
           if (task && state) this.hooks.record({ version: 1, kind: 'task.state', id: key('hook-state', task.id, state, event.at, JSON.stringify(event.data), task.assignments.at(-1)?.report?.summary ?? ''),
             at: event.at, taskId: task.id, state, ...('assignmentId' in event.data ? { assignmentId: event.data.assignmentId } : {}), contexts: store.contexts.references(ticketContexts(task)) })
+          if (task && (event.type === 'ticket.created' || event.type === 'ticket.resumed')) {
+            const origin = store.triggers.get(task.origin.triggerId)
+            if (origin) this.conversations.focus(task, origin)
+          }
           if (event.type === 'assignment.reported') this.results.record(store.tickets.get(event.data.ticketId)!, event.data.replyTo)
           // Notify the main Session only about domain events it did not initiate itself.
           const notice = this.quiet ? undefined : eventNotice(event, id => store.tickets.get(id))
@@ -234,7 +270,11 @@ export class Runtime extends Service implements SourceHost {
           // and of one for an ended ticket once it resumes, unless it routed the message there itself.
           const followed = !this.quiet && (event.type === 'trigger.received' || event.type === 'ticket.resumed' || event.type === 'trigger.followup')
           const followup = followed ? followupNotice(store, sources, event.data.triggerId) : undefined
-          if (followup) sessions.relay(followup.id, followup.text)
+          if (followup) {
+            const input = 'triggerId' in event.data ? store.triggers.get(event.data.triggerId) : undefined
+            if (input?.meta.conversationVersion === 1) sessions.notify(followup.id, { kind: 'im_followup', text: followup.text }, 'IM task follow-up received')
+            else sessions.relay(followup.id, followup.text)
+          }
           // Notify the ticket's conversations whenever it ends via a pull request.
           const ended = event.type === 'ticket.ended' ? store.tickets.get(event.data.ticketId) : undefined
           if (ended && setup.configured() && setup.deployment.github) {
@@ -260,7 +300,7 @@ export class Runtime extends Service implements SourceHost {
         scope: ({ meta }) => typeof meta.executionId === 'string' && !!this.schedules.run(meta.executionId)
           ? { listened: true, observed: false } : { listened: false, reason: 'unknown_schedule' } }))
       this.main = new MainInput({ context: ctx, store, sources, sessions, engine, masterId, requestPass: () => passes.request() })
-      this.connectors = new Connectors({ store, sources, personal: this.personal, lifetime: this.lifetime, receive: trigger => passes.receive(trigger),
+      this.connectors = new Connectors({ store, sources, personal: this.personal, lifetime: this.lifetime, receive: trigger => this.receiveConversation(trigger),
         policyChanged: (before, after) => engine.policyChanged(policyVersion(before), policyVersion(after),
           policyEffects(store.tickets.open(), before, after, settings => ({ scope: input => sources.scope(input, settings) }))) })
 
@@ -279,6 +319,37 @@ export class Runtime extends Service implements SourceHost {
     }
   }
   get health(): Readonly<Record<string, Health>> { return this.board.all }
+  private receiveConversation(input: Trigger): ReceiveResult {
+    const received = this.store.atomic(() => {
+      if (this.store.triggers.get(input.id)) return 'duplicate' as const
+      const trigger = this.conversations.prepare(input)
+      if (commandOf(trigger.text)) trigger.meta.command = true
+      const result = this.engine.receive(trigger)
+      if (result !== 'stored') return result
+      this.conversations.link(trigger)
+      if (trigger.meta.command) executeCommand({ store: this.store, engine: this.engine, outbox: this.outbox,
+        effects: this.effects, conversations: this.conversations, results: this.results }, trigger)
+      return result
+    })
+    if (received === 'stored') this.passes.request()
+    return received
+  }
+  private async deliverCandidate(id: string, text: string, trigger?: Trigger): Promise<void> {
+    if (!trigger || trigger.meta.conversationVersion !== 1) return this.sessions.prompt(this.masterId, id, text, 'steer')
+    const conversation = this.conversations.forTrigger(trigger)
+    if (!conversation || conversation.generation !== trigger.meta.dialogueGeneration) return
+    const defaults = dialogueSettings(trigger)
+    await this.sessions.ensure(conversation.sessionId, defaults.workspace ?? join(this.machine.stateDir, 'conversations'),
+      `IM · ${String(trigger.meta.conversationTitle ?? trigger.meta.conversationId)}`, 'orchestrator')
+    const candidate = this.engine.candidate(trigger.id)
+    if (!candidate) return
+    const current = candidate.triggers.map(item => dialogueMessage(item, this.conversations.tasks(item)
+      .filter(ticket => this.store.triggers.get(ticket.origin.triggerId)?.meta.dialogueGeneration === conversation.generation)))
+    const message = JSON.stringify({ kind: 'candidate', strength: candidate.strength, messages: current,
+      next_action: 'personal_agent_route: respond, accept, attach, stop, ignore' })
+    await this.sessions.prompt(conversation.sessionId, id, message, 'steer', () => { this.conversations.authorize(conversation.sessionId, trigger.id) })
+    this.sessions.notify(id, { kind: 'im_candidate', sessionId: conversation.sessionId, messages: current }, 'IM conversation received')
+  }
   /** Native accounts are independent of any installed IM plugin. */
   private async startNativeFeishu(): Promise<void> {
     if (!this.ctx.get('credentials')) return
@@ -365,7 +436,7 @@ export class Runtime extends Service implements SourceHost {
       await this.connectors.stop()
       await this.nativeFeishu?.close()
       this.assessor.stop()
-      const ids = [this.masterId, ...this.store.tickets.list().map(ticket => workerSessionId(ticket.id))]
+      const ids = [this.masterId, ...this.conversations.sessionIds(), ...this.store.tickets.list().map(ticket => workerSessionId(ticket.id))]
       const agents = ids.map(id => this.ctx.agents.get(id as SessionId)).filter((agent): agent is Agent => agent !== undefined)
       for (const agent of agents) agent.cancel({ kind: 'user' }, { keepInbox: true })
       await Promise.allSettled([passes, this.effects.drain(), ...agents.map(agent => agent.whenIdle())])

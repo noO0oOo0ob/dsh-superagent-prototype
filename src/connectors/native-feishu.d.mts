@@ -10,6 +10,7 @@ export interface NativeFeishu {
   botSettings(id: string): unknown
   start(): Promise<void>
   rpc(endpoint: string, payload: unknown, signal?: AbortSignal): Promise<unknown>
+  readResource(botId: string, route: ImReplyRoute, key: string, options: { expectedFingerprint: string; signal: AbortSignal; maxBytes: number }): Promise<Buffer>
   sendPart(botId: string, route: ImReplyRoute, block: ContentBlock, options: { expectedFingerprint: string; id: string; signal: AbortSignal;
     file?: { file: StoredFile; bytes: Buffer }; resourceKey?: string; uploaded(key: string): void }): Promise<{ providerMessageIds: string[] }>
   close(): Promise<void>

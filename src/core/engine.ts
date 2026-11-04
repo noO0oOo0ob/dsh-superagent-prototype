@@ -97,7 +97,11 @@ export class Engine {
    * ticket's worker still decides the Trigger and the outcome is not a stop, or an inferred candidate is accepted outside `auto`
    * mode or without enabled matching rules.
    */
-  decide(triggerId: string, outcome: Outcome): Decision { return this.repo.atomic(() => this.evals.decide(triggerId, outcome)) }
+  decide(triggerId: string, outcome: Outcome): Decision { return this.repo.atomic(() => {
+    const trigger = this.repo.triggers.get(triggerId)
+    if (trigger) this.options.beforeDecide?.(trigger, outcome)
+    return this.evals.decide(triggerId, outcome)
+  }) }
   /**
    * Attach a Trigger to a ticket that the message points at: the ticket follows the Trigger's Threads and receives it as an
    * Input with the routing note, and the Eval that holds the Trigger ends, since the ticket has it now; the other Triggers of

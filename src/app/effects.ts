@@ -9,6 +9,8 @@ import type { HealthBoard, HealthEntry } from '../infra/health.ts'
 import type { Store } from './store.ts'
 
 export interface EffectPayloads {
+  /** Cancel the old conversation router after its context generation is reset. */
+  dialogueReset: { sessionId: string }
   /** Export a committed result to its configured Markdown vault. */
   vault: { id: string }
   /** Publish a persisted result to the Main Session and the source channel. */

@@ -21,8 +21,12 @@ export class ArtifactFiles {
   /** Snapshot a task-relative file before a result can reference it. */
   async capture(workspace: string, path: string, maxBytes: number): Promise<{ file: StoredFile; bytes: Buffer }> {
     const bytes = await artifactBytes(workspace, path, maxBytes)
-    const file = StoredFileSchema.parse({ digest: hash(bytes), size: bytes.length, fileName: basename(path),
-      mediaType: mediaTypes[extname(path).toLowerCase()] ?? 'application/octet-stream' })
+    return this.storeBytes(bytes, basename(path))
+  }
+  /** Snapshot bounded platform bytes; callers enforce their configured download limit. */
+  async storeBytes(bytes: Buffer, fileName: string, mediaType?: string): Promise<{ file: StoredFile; bytes: Buffer }> {
+    const file = StoredFileSchema.parse({ digest: hash(bytes), size: bytes.length, fileName,
+      mediaType: mediaType ?? mediaTypes[extname(fileName).toLowerCase()] ?? 'application/octet-stream' })
     await mkdir(this.root, { recursive: true, mode: 0o700 })
     const temporary = join(this.root, `.${file.digest}-${randomUUID()}`)
     const handle = await open(temporary, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600)
@@ -36,6 +40,8 @@ export class ArtifactFiles {
     } finally { await unlink(temporary) }
     return { file, bytes }
   }
+  /** Local read-only input path, derived solely from a validated content digest. */
+  path(file: StoredFile): string { return join(this.root, StoredFileSchema.parse(file).digest) }
   /** Validate the persisted descriptor and digest before bytes cross a channel boundary. */
   async read(value: StoredFile): Promise<Buffer> {
     const file = StoredFileSchema.parse(value)

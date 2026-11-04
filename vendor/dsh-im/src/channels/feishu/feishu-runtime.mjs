@@ -819,7 +819,7 @@ export class FeishuRuntime {
       throw Object.assign(new Error('stale-route'), { code: 'stale-route' });
     signal?.throwIfAborted();
     if (this.#client !== client) throw Object.assign(new Error('bot-not-connected'), { code: 'bot-not-connected' });
-    return operation({ client, channel: new VerifiedFeishuChannel({ client }) });
+    return operation({ client, channel: new VerifiedFeishuChannel({ client }), message: source });
   }
 
   async replyChecked(route, text, { signal } = {}) {

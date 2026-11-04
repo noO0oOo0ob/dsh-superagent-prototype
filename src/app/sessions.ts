@@ -17,6 +17,7 @@ import { initializeRoleModel } from './role-models.ts'
 import { bundledSkills } from './skill-files.ts'
 import { SKILL_PREFIX, type PromptVersion, type Prompts } from './prompts.ts'
 import type { Store } from './store.ts'
+import type { RoleModel } from '../policy.ts'
 import { KV } from '../kv.ts'
 import type { RegisterTool, Tool } from './tools/tool.ts'
 
@@ -36,6 +37,9 @@ export interface SessionsHost {
   environment(ticket: Ticket): Variable[]
   /** Tools to register on the main Session (`ticket === undefined`) or on `ticket`'s worker Session. */
   tools(agent: Agent, ticket?: Ticket): Tool[]
+  /** Isolated IM dialogue sessions keep their own model history and restricted router tools. */
+  dialogue?(id: string): { prompt: string } | undefined
+  defaults?(id: string): { model?: RoleModel | null; preset?: string } | undefined
 }
 
 /**
@@ -124,7 +128,8 @@ export class Sessions {
     ctx.inject(['agentPresets'], child => {
       child.on('agent-preset/selected', (sessionId, preset) => {
         const ticketId = ticketOfSession(sessionId), agent = ctx.agents.get(sessionId as SessionId)
-        const ours = sessionId === this.host.masterId ? ROUTER_PRESET : ticketId && this.host.store.tickets.get(ticketId) ? WORKER_PRESET : undefined
+        const managed = sessionId === this.host.masterId || this.host.dialogue?.(sessionId) || ticketId && this.host.store.tickets.get(ticketId)
+        const ours = managed ? this.host.defaults?.(sessionId)?.preset ?? (ticketId ? WORKER_PRESET : ROUTER_PRESET) : undefined
         if (!ours || preset === ours || !agent) return
         const presets = child.get('agentPresets') as { select(agent: Agent, preset: string): Promise<string> }
         presets.select(agent, ours).catch(() => {})
@@ -142,16 +147,21 @@ export class Sessions {
       const workspace = await ctx.workspaceRegistry.create(cwd)
       // A Session keeps the preset it was created with, one of the bundle's own (cordis.patch.yml).
       await ctx.sessionController.create({ sessionId: id as SessionId, workspaceId: workspace.id,
-        agentPreset: role === 'worker' ? WORKER_PRESET : ROUTER_PRESET })
+        agentPreset: this.host.defaults?.(id)?.preset ?? (role === 'worker' ? WORKER_PRESET : ROUTER_PRESET) })
       result = await ctx.sessionController.resolveAgent(id as SessionId)
     }
     if ('error' in result) throw result.error
     const settings = this.host.store.settings()
-    await initializeRoleModel(ctx, result.agent, role === 'orchestrator' ? settings.eval.model : settings.executor.model)
+    await initializeRoleModel(ctx, result.agent, this.host.defaults?.(id)?.model ?? (role === 'orchestrator' ? settings.eval.model : settings.executor.model))
     await this.decorate(result.agent)
     ctx.permissionPresets.set(result.agent.session, 'danger-full-access')
     await ctx.sessionController.rename({ sessionId: id as SessionId, title })
     return result.agent
+  }
+  /** Stop only the specified dialogue; task Workers are independent. */
+  async cancel(id: string): Promise<void> {
+    const agent = this.ctx.agents.get(id as SessionId)
+    if (agent) { agent.cancel({ kind: 'user' }); await agent.whenIdle() }
   }
   /** Returns whether `sessionId` already holds the message delivered under `requestId`, or `false` if the session does not exist. */
   async holds(sessionId: string, requestId: string): Promise<boolean> {
@@ -233,8 +243,9 @@ export class Sessions {
     if (this.bindings.has(agent)) return
     const host = this.host
     const master = agent.id === host.masterId
-    const ticket = master ? undefined : this.ticketOf(agent)
-    if (!master && !ticket) { this.limitSubagent(agent); return }
+    const dialogue = host.dialogue?.(agent.id)
+    const ticket = master || dialogue ? undefined : this.ticketOf(agent)
+    if (!master && !ticket && !dialogue) { this.limitSubagent(agent); return }
     const binding: SessionBinding = { disposers: [] }
     this.bindings.set(agent, binding)
     this.retryHealth.restore(agent.id, agent.session.snapshotEvents())
@@ -242,11 +253,12 @@ export class Sessions {
     this.updateModelHealth()
     // Disable variable interpolation so literal ${{ ... }} expressions in team prompts are preserved.
     binding.disposers.push(agent.ctx.systemPrompt.section({ name: 'dsh-super-personal-agent-policy', order: 9999, interpolate: false, text: context => {
+      if (dialogue) return host.dialogue?.(agent.id)?.prompt ?? 'This conversation context was reset. End this turn without calling tools.'
       const version = this.promptFor(agent, context.signal !== undefined)
       const current = ticket && host.store.tickets.get(ticket.id)
       const composed = host.prompts.compose(version.config, master ? 'orchestrator' : 'worker', current ? host.environment(current) : undefined)
       return `[dsh-super-personal-agent prompt revision ${version.revision}]\n${composed}\n${current ? mandateInstructions(current.mandate) : ''}`
-    }, ...(master ? { complete: true } : {}) }))
+    }, ...(master || dialogue ? { complete: true } : {}) }))
     // A recreated skill scope (e.g. after the skills service restarts) starts empty, so reset `binding.skills` before rebinding.
     const skillScope = agent.ctx.inject(['skills'], scope => {
       binding.scope = scope
@@ -259,7 +271,9 @@ export class Sessions {
     if (this.bindings.get(agent) !== binding) return
     const register = this.registerTool(agent, binding)
     for (const tool of host.tools(agent, ticket)) register(tool.name, tool.description, tool.schema, tool.execute)
-    if (master) {
+    if (dialogue) {
+      binding.disposers.push(agent.ctx.tools.restrict({ allow: [] }))
+    } else if (master) {
       binding.disposers.push(agent.ctx.tools.restrict({ allow: ['skill', 'bash', 'read', 'read_image', 'job_output', 'job_list', 'job_kill'] }),
         agent.ctx.tools.guard(execution => noWait(execution, () => this.routed(agent))))
     } else {

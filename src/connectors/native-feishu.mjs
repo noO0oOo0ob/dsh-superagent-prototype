@@ -113,7 +113,7 @@ export async function createNativeFeishu({ context, stateDir, lifetime, logger =
             senderIds: [event.actor.id], isCommand: /^\s*\//.test(event.text) });
           if (!owner && !allowed.allowed) return { accepted: true };
           if (event.conversation.kind === 'group' && current.groupResponseMode !== 'all' && !event.mentionedAccount && !event.reply.parentId) return { accepted: true };
-          return consumers.accept(botId, { ...event, settings: botSettings(botId) }, signal);
+          return consumers.accept(botId, { ...event, respondToAll: current.groupResponseMode === 'all', settings: botSettings(botId) }, signal);
         },
       });
       runtimes.set(botId, runtime);
@@ -149,6 +149,37 @@ export async function createNativeFeishu({ context, stateDir, lifetime, logger =
     service, accounts, botSettings,
     async start() { supervisor.start(); await supervisor.ready; await syncAccounts(); },
     async rpc(endpoint, payload, signal) { const result = await rpc(endpoint, payload, signal); await syncAccounts(); return result; },
+    async readResource(botId, route, key, options) {
+      options = { ...options, signal: AbortSignal.any([lifetime, options.signal]) };
+      return core.withNativeRoute(botId, route, async ({ client, message }) => {
+        const current = configStore.getBot(botId);
+        const raw = { event_id: route.messageId, app_id: current.appId, sender: { sender_type: 'user', sender_id: { open_id: route.actorId } },
+          message: { message_id: route.messageId, chat_id: route.conversationId, chat_type: message.chat_type === 'group' ? 'group' : 'p2p',
+            message_type: message.msg_type, content: message.body?.content, create_time: message.create_time } };
+        const normalized = normalizeNativeMessage(raw, current);
+        const resource = normalized?.resources.find(item => item.key === key);
+        if (!resource) throw failure('resource-not-in-message');
+        const response = await client.im.v1.messageResource.get({ path: { message_id: route.messageId, file_key: key },
+          params: { type: resource.kind === 'image' ? 'image' : 'file' } });
+        const stream = response?.getReadableStream?.();
+        if (!stream || typeof stream[Symbol.asyncIterator] !== 'function') throw failure('resource-download-failed');
+        const abort = () => stream.destroy?.(options.signal.reason);
+        options.signal.addEventListener('abort', abort, { once: true });
+        const chunks = []; let size = 0;
+        try {
+          options.signal.throwIfAborted();
+          for await (const chunk of stream) {
+            options.signal.throwIfAborted();
+            const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            size += bytes.length;
+            if (size > options.maxBytes) throw failure('resource-too-large');
+            chunks.push(bytes);
+          }
+          options.signal.throwIfAborted();
+          return Buffer.concat(chunks);
+        } finally { options.signal.removeEventListener('abort', abort); stream.destroy?.(); }
+      }, options);
+    },
     async sendPart(botId, route, block, options) {
       const send = async ({ client, channel }) => {
         if (block.type === 'image' || block.type === 'file') {
