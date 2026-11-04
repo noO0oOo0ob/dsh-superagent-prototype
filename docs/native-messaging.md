@@ -19,7 +19,9 @@ The Personal Agent owns account onboarding, inbound commands, conversation conte
 4. [x] Stable conversation Threads, commands and isolated context generations.
 5. [x] QR/manual onboarding and account management UI.
 6. [x] Feishu interaction parity, Main/Vault presentation and failure recovery UI.
-7. [ ] Remove legacy runtime binding, clear the authorized existing account, build and regression checks.
+7. [x] Remove the installed-plugin runtime dependency, build and run regression checks.
+
+Deployment acceptance is separate: remove the old bot listener before transferring an account, bind the native account, then verify a real text/image/file round trip. Clearing a Personal Agent Connector does not remove the independently installed dsh-im account.
 
 Each stage is committed locally; no push. Live binding is left to the owner after completion. Tests must distinguish local mocked validation from actual platform delivery.
 
@@ -41,3 +43,9 @@ Account settings include QR/manual binding, reconnect/remove, permission repair,
 
 
 `/menu` publishes a host-generated card. Actions are bound to the originating bot, sender, chat, context generation and actual delivered provider message ID. Each action is consumed once and then dispatched as a logged command; the model cannot choose arbitrary recipients or provider payloads. Main result notices and the local result page retain artifact download links. Obsidian exports include immutable binary attachments beside Markdown; edited exports are preserved and reported rather than overwritten.
+
+## Local validation
+
+The fork regression suite passed 85 files and 1,382 tests. The copied Feishu suite passed 324 tests. After the final workspace-binding fix, the 15 native adapter tests passed again. The production build and post-build TypeScript check passed. Mocked UI checks cover account binding, repeated settings saves, namespace coexistence and recovery of more than 30 unfinished deliveries. Two isolated reviews checked requirement coverage and lifecycle/authorization rules; their reported findings were fixed and rechecked.
+
+These checks use temporary accounts, directories and fake platform services. They do not constitute a live Feishu/Lark delivery test. A real account must still be bound by its owner; no production message is sent as part of these checks.
