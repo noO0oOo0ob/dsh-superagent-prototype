@@ -22,7 +22,7 @@ Choose the actual Vault path before enabling this setting. No production Vault i
 
 Each result has one stable filename, the SHA-256 hash of its result ID plus `.md`. Titles do not control paths. Frontmatter stores `personal_agent.schema: 1`, result, task and assignment IDs, the report timestamp and state, title, local result URL, and the complete list of stable context, trace and trigger references. Values use JSON serialization, which is valid YAML and prevents newlines or quotes in titles from introducing new frontmatter fields. Account credentials, raw source payloads, and arbitrary metadata are not copied into notes.
 
-The Markdown body contains the result title and summary. A new result produces a new file. The export receipt includes its local file path and `obsidian://open?path=…` link. This desktop-local link is useful in DSH on the host; an IM client on another device cannot use the host filesystem path without its own synchronization and path mapping.
+The Markdown body contains the result title and summary. Selected binary attachments are copied into Results/Attachments using digest-prefixed filenames and linked with relative Markdown links. File bytes come from the immutable artifact snapshot; an edited attachment is preserved and reported as an export failure. A new result produces a new file. The export receipt includes its local file path and `obsidian://open?path=…` link. This desktop-local link is useful in DSH on the host; an IM client on another device cannot use the host filesystem path without its own synchronization and path mapping.
 
 ## Publication and recovery
 
@@ -36,6 +36,6 @@ Filesystem failures are recorded on the export receipt and rethrown to the expor
 
 ## Runtime integration
 
-The runtime constructs `Vault(store, () => personal.view().config.vault)`. While recording a new result, call `vault.enqueue(result)` in the same SQLite transaction; if it returns an intent, enqueue a separate durable `vault` effect keyed by the intent ID. The handler calls `vault.publish(id)`. Register that handler before the effect runner starts. Do not put publication inside the existing result-delivery effect: disk failures must remain independent of notifications.
+The runtime constructs `Vault` with the configuration reader and immutable artifact lookup/materialization methods. While recording a new result, call `vault.enqueue(result)` in the same SQLite transaction; if it returns an intent, enqueue a separate durable `vault` effect keyed by the intent ID. The handler calls `vault.publish(id)`. Register that handler before the effect runner starts. Do not put publication inside the existing result-delivery effect: disk failures must remain independent of notifications.
 
 Expose `vault.list(resultId)` with task/result details so users can see preservation and failure states and open a completed note. The queued intent contains no mutable task lookup; retries always publish the originally captured content. The existing effect scheduler owns attempts and retry timing. No Vault watcher or implicit note-to-task ingestion is installed: a future note Source needs an explicit Inbox directory and its own stable message identities, admission policy and archival rules.

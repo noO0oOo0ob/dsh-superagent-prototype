@@ -145,7 +145,7 @@ export class Runtime extends Service implements SourceHost {
           trigger.actor.id, trigger.meta.conversationType === 'group' ? 'group' : 'dm'))
       this.inbound = new InboundFiles(store, new ArtifactFiles(join(machine.stateDir, 'inbound')), () => this.nativeFeishu, () => this.personal.view().config.artifacts.maxBytes)
       this.hooks = new Hooks({ store, config: () => this.personal.view().config.hooks, signal: this.lifetime })
-      this.vault = new Vault(store, () => this.personal.view().config.vault)
+      this.vault = new Vault(store, () => this.personal.view().config.vault, { get: id => this.results.get(id), materialize: id => this.results.materialize(id) })
       this.repositories = new RepositoryRegistry({ stateDir: machine.stateDir, git: (args, cwd, signal) =>
         runAsWorker(ctx.subprocess, ['git', ...args], cwd, AbortSignal.any([signal, AbortSignal.timeout(90_000)]), this.setup.workerEnvironment) })
       this.routing = new Routing(store, () => { const view = this.personal.view(); return { revision: view.revision, routing: view.config.routing } })

@@ -5,6 +5,7 @@ import { link, lstat, mkdir, open, realpath, unlink } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { z } from 'zod'
 import type { ResultRecord } from '../app/results.ts'
+import { StoredFileSchema, type StoredFile } from '../messaging/files.ts'
 import type { Store } from '../app/store.ts'
 import { family } from '../kv.ts'
 
@@ -27,6 +28,7 @@ const ExportSchema = z.object({
   root: z.string().refine(value => isAbsolute(value) && !value.includes('\0')), directory,
   content: z.string(), digest: hex, canonicalRoot: z.string().optional(),
   state: z.enum(['pending', 'written', 'unchanged', 'preserved']),
+  files: z.array(z.object({ id: z.string(), file: StoredFileSchema }).strict()).optional(),
   path: z.string().optional(), uri: z.string().optional(), error: z.string().optional(),
 }).strict()
 
@@ -36,15 +38,20 @@ export const vaultExports = family<VaultExport>('personal-vault-export:')
 
 const digest = (text: string) => createHash('sha256').update(text).digest('hex')
 const exportId = (resultId: string, root: string, directory: string) => digest(JSON.stringify(['vault-v1', resultId, root, directory]))
+const attachmentName = (file: StoredFile) => {
+  let name = ''
+  for (const point of file.fileName) { if (Buffer.byteLength(name + point) > 180) break; name += point }
+  return `${file.digest}-${name}`
+}
 const fileName = (resultId: string) => `${digest(resultId)}.md`
 const codeIs = (error: unknown, code: string) => error instanceof Error && 'code' in error && error.code === code
 
 /** Render a result snapshot, with JSON-quoted YAML scalars and only stable context references. */
-export function vaultMarkdown(result: ResultRecord): string {
+export function vaultMarkdown(result: ResultRecord, files: { id: string; file: StoredFile }[] = []): string {
   const fields = { schema: 1, result_id: result.id, ticket_id: result.ticketId, assignment_id: result.assignmentId,
     created_at: result.at, state: result.state, title: result.title, result_url: result.url,
     context_refs: result.contexts.map(({ id, traceId, triggerId }) => ({ id, trace_id: traceId, trigger_id: triggerId })) }
-  return `---\npersonal_agent:\n${Object.entries(fields).map(([name, value]) => `  ${name}: ${JSON.stringify(value)}`).join('\n')}\n---\n\n# ${result.title.replace(/[\r\n]+/g, ' ')}\n\n${result.summary}\n`
+  return `---\npersonal_agent:\n${Object.entries(fields).map(([name, value]) => `  ${name}: ${JSON.stringify(value)}`).join('\n')}\n---\n\n# ${result.title.replace(/[\r\n]+/g, ' ')}\n\n${result.summary}\n${files.length ? '\n' + files.map(item => `[${item.file.fileName.replace(/[\[\]]/g, '_')}](<Attachments/${encodeURIComponent(attachmentName(item.file))}>)`).join('\n') + '\n' : ''}`
 }
 
 /**
@@ -53,7 +60,7 @@ export function vaultMarkdown(result: ResultRecord): string {
  */
 export class Vault {
   constructor(private readonly store: Pick<Store, 'get' | 'set' | 'keys' | 'atomic'>,
-    private readonly config: () => VaultConfig) {}
+    private readonly config: () => VaultConfig, private readonly artifacts?: { get(id: string): ResultRecord | undefined; materialize(id: string): Promise<{ file: StoredFile; bytes: Buffer }> }) {}
 
   /** Return a validated export intent; malformed persisted paths never reach the filesystem. */
   get(id: string): VaultExport | undefined {
@@ -75,7 +82,11 @@ export class Vault {
   enqueue(result: ResultRecord): VaultExport | undefined {
     const config = VaultConfigSchema.parse(this.config())
     if (!config.enabled) return undefined
-    const root = resolve(config.root), id = exportId(result.id, root, config.directory), content = vaultMarkdown(result)
+    const files = [...(result.file ? [{ id: result.id, file: result.file }] : []), ...(result.artifacts ?? []).flatMap(ref => {
+      const artifact = this.artifacts?.get(ref.id)
+      return artifact?.file ? [{ id: ref.id, file: artifact.file }] : []
+    })]
+    const root = resolve(config.root), id = exportId(result.id, root, config.directory), content = vaultMarkdown(result, files)
     return this.store.atomic(() => {
       const previous = this.get(id)
       if (previous) {
@@ -83,7 +94,7 @@ export class Vault {
         return previous
       }
       const item: VaultExport = { version: 1, id, resultId: result.id, ticketId: result.ticketId, at: result.at,
-        root, directory: config.directory, content, digest: digest(content), state: 'pending' }
+        root, directory: config.directory, content, ...(files.length ? { files } : {}), digest: digest(content), state: 'pending' }
       this.store.set(vaultExports(id), item)
       return item
     })
@@ -108,6 +119,33 @@ export class Vault {
         try { await mkdir(parent, { mode: 0o700 }) }
         catch (error) { if (!codeIs(error, 'EEXIST')) throw error }
         await this.checkDirectory(item, parent)
+      }
+      if (item.files?.length) {
+        const folder = join(parent, 'Attachments')
+        try { await mkdir(folder, { mode: 0o700 }) } catch (error) { if (!codeIs(error, 'EEXIST')) throw error }
+        await this.checkDirectory(item, folder)
+        for (const attachment of item.files) {
+          if (!this.artifacts) throw new Error('Vault attachment storage is unavailable')
+          const actual = await this.artifacts.materialize(attachment.id)
+          if (actual.file.digest !== attachment.file.digest || actual.bytes.length !== attachment.file.size
+            || createHash('sha256').update(actual.bytes).digest('hex') !== attachment.file.digest) throw new Error('Vault attachment snapshot changed')
+          const target = join(folder, attachmentName(attachment.file))
+          const prior = await this.existing(target, actual.bytes)
+          if (prior === 'preserved') throw new Error('Vault attachment was edited; existing bytes were preserved')
+          if (!prior) {
+            const temporary = join(folder, `.${attachment.file.digest}-${randomUUID()}.tmp`)
+            const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
+            try {
+              try { await handle.writeFile(actual.bytes); await handle.sync() } finally { await handle.close() }
+              this.authorize(item); await this.checkDirectory(item, folder)
+              try { await link(temporary, target) }
+              catch (error) { if (!codeIs(error, 'EEXIST')) throw error }
+              if (await this.existing(target, actual.bytes) !== 'unchanged') throw new Error('Vault attachment collision; existing bytes were preserved')
+            } finally { await unlink(temporary) }
+          }
+        }
+        const directoryHandle = await open(folder, constants.O_RDONLY | constants.O_NOFOLLOW)
+        try { await directoryHandle.sync() } finally { await directoryHandle.close() }
       }
       const target = join(parent, fileName(item.resultId))
       let state: 'written' | 'unchanged' | 'preserved' | undefined = await this.existing(target, item.content)
@@ -159,7 +197,7 @@ export class Vault {
     }
   }
 
-  private async existing(path: string, content: string): Promise<'unchanged' | 'preserved' | undefined> {
+  private async existing(path: string, content: string | Buffer): Promise<'unchanged' | 'preserved' | undefined> {
     try {
       const stat = await lstat(path)
       if (stat.isSymbolicLink() || !stat.isFile()) throw new Error('Vault result must be a regular file, not a symlink')
@@ -167,7 +205,8 @@ export class Vault {
       try {
         const actual = await handle.stat()
         if (!actual.isFile()) throw new Error('Vault result must be a regular file')
-        return actual.size === Buffer.byteLength(content) && await handle.readFile('utf8') === content ? 'unchanged' : 'preserved'
+        const expected = typeof content === 'string' ? Buffer.from(content) : content
+        return actual.size === expected.length && (await handle.readFile()).equals(expected) ? 'unchanged' : 'preserved'
       } finally { await handle.close() }
     } catch (error) { if (codeIs(error, 'ENOENT')) return undefined; throw error }
   }

@@ -160,3 +160,19 @@ describe('Vault Markdown projection', () => {
     expect(readdirSync(h.vaultRoot)).toEqual([])
   })
 })
+
+
+it('exports exact binary artifacts with readable links and preserves an edited attachment', async () => {
+  const h = host(), bytes = Buffer.from([0, 1, 255, 42]), file = { digest: createHash('sha256').update(bytes).digest('hex'),
+    size: bytes.length, fileName: '旅行.pdf', mediaType: 'application/pdf' }, artifact = result({ id: 'file', file, artifactPath: '旅行.pdf', state: 'artifact' })
+  const vault = new Vault(h.store, h.configOf, { get: id => id === 'file' ? artifact : undefined, materialize: async () => ({ file, bytes }) })
+  const publication = result({ artifacts: [{ id: 'file', title: 'PDF', url: artifact.url }] }), intent = vault.enqueue(publication)!
+  const exported = await vault.publish(intent.id), folder = join(h.vaultRoot, 'Personal Agent', 'Results', 'Attachments')
+  const attachment = join(folder, `${file.digest}-${file.fileName}`)
+  expect(readFileSync(attachment)).toEqual(bytes)
+  expect(readFileSync(exported.path!, 'utf8')).toContain(encodeURIComponent(`${file.digest}-${file.fileName}`))
+  expect((await vault.publish(intent.id)).state).toBe('unchanged')
+  writeFileSync(attachment, 'edited by user')
+  await expect(vault.publish(intent.id)).rejects.toThrow('preserved')
+  expect(readFileSync(attachment, 'utf8')).toBe('edited by user')
+})
