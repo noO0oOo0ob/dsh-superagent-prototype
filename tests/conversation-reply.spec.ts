@@ -25,6 +25,7 @@ async function conversation(kind: 'dm' | 'group' = 'dm', mentioned = false, text
   h.runtime.personal.save({ ...view.config, connectors: [{ id: 'chat', enabled: true, botId: 'bot', fingerprint, intake: 'account' }] }, view.revision)
   h.runtime.connectors.bind(service)
   await h.runtime.connectors.refresh()
+  await vi.waitFor(() => expect(Object.values(h.runtime.connectors.status()).some(value => value.state === 'connecting')).toBe(false))
   const event = ImEventSchema.parse({ version: 1, channel: 'feishu', botId: 'bot', fingerprint, eventId: 'greeting', messageId: 'greeting',
     actor: { kind: 'user', id: 'alice' }, conversation: { kind, id: 'chat' }, mentionedAccount: mentioned,
     at: '2026-11-04T09:35:15Z', text, reply: { messageId: 'greeting', conversationId: 'chat', actorId: 'alice' } })

@@ -3,7 +3,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import { basename } from 'node:path'
 import { z } from 'zod'
-import type { NativeFeishu } from '../connectors/native-feishu.mjs'
+import type { ConnectorService } from '../connectors/protocol.ts'
 import { ReplyRouteSchema } from '../connectors/protocol.ts'
 import { family } from '../kv.ts'
 import { key, type Trigger } from '../core/index.ts'
@@ -18,7 +18,7 @@ const imageType = (bytes: Buffer): ImageMediaType | undefined => bytes.subarray(
   : bytes.subarray(0, 4).toString() === 'RIFF' && bytes.subarray(8, 12).toString() === 'WEBP' ? 'image/webp' : undefined
 /** A source resource can be read only after the caller authorizes its persisted trigger. */
 export class InboundFiles {
-  constructor(private readonly store: Store, private readonly files: ArtifactFiles, private readonly native: () => Pick<NativeFeishu, 'readResource'> | undefined,
+  constructor(private readonly store: Store, private readonly files: ArtifactFiles, private readonly native: (trigger: Trigger) => Pick<ConnectorService, 'readResource'> | undefined,
     private readonly limit: () => number) {}
   async read(trigger: Trigger, resourceKey: string, signal: AbortSignal): Promise<{ file: StoredFile; bytes: Buffer; path: string }> {
     const resource = z.array(Resource).max(100).parse(trigger.meta.resources ?? []).find(item => item.key === resourceKey)
@@ -29,8 +29,8 @@ export class InboundFiles {
       if (file.size > this.limit()) throw new Error('Attachment exceeds the configured byte limit')
       return { file, bytes: await this.files.read(file), path: this.files.path(file) }
     }
-    const native = this.native()
-    if (!native) throw new Error('Native Connector is unavailable')
+    const native = this.native(trigger)
+    if (!native?.readResource) throw new Error('Source attachment reader is unavailable')
     const route = ReplyRouteSchema.parse(trigger.meta.reply)
     const bytes = await native.readResource(String(trigger.meta.botId), route, resourceKey, {
       expectedFingerprint: String(trigger.meta.fingerprint), signal, maxBytes: this.limit() })

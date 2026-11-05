@@ -170,7 +170,7 @@ it('keeps uncertain text and aborted file sends blocked instead of automatically
 it('keeps an existing native account restricted after status refresh and reconnect', () => {
   const previous = { id: 'native-bot-one', botId: 'bot_one', fingerprint: 'a'.repeat(64), enabled: false, intake: 'restricted',
     conversations: [{ id: 'private', kind: 'dm', listen: 'mentions' }], allowedSenders: ['alice'] };
-  expect(nativeConnectorConfigs([previous], [{ id: 'bot_one', fingerprint: previous.fingerprint, channel: 'feishu' }])).toEqual([previous]);
+  expect(nativeConnectorConfigs([previous], [{ id: 'bot_one', fingerprint: previous.fingerprint, channel: 'feishu' }])).toEqual([{ ...previous, provider: 'feishu', channel: 'feishu' }]);
 });
 
 it('awaits the same close operation after lifetime abort until the account runtime has stopped', async () => {

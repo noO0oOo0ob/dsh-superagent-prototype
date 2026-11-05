@@ -31,6 +31,7 @@ async function imTask() {
   h.runtime.personal.save({ ...view.config, connectors: [{ id: 'test', enabled: true, botId: 'bot', fingerprint, intake: 'account' }] }, view.revision)
   h.runtime.connectors.bind(service)
   await h.runtime.connectors.refresh()
+  await vi.waitFor(() => expect(Object.values(h.runtime.connectors.status()).some(value => value.state === 'connecting')).toBe(false))
   const event = ImEventSchema.parse({ version: 1, channel: 'feishu', botId: 'bot', fingerprint, eventId: 'event', messageId: 'message',
     actor: { kind: 'user', id: 'alice' }, conversation: { kind: 'dm', id: 'chat' }, mentionedAccount: false,
     at: '2026-11-04T01:00:00Z', text: 'Prepare a plan', reply: { messageId: 'message', conversationId: 'chat', actorId: 'alice' } })
@@ -126,6 +127,7 @@ it.each(['sent', 'uncertain'] as const)('reuses a persisted %s receipt after reo
   await restarted.ready
   restarted.connectors.bind(service)
   await restarted.connectors.refresh()
+  await vi.waitFor(() => expect(restarted.connectors.status().test?.state).toBe('ready'))
   restarted.effects.enqueue('result', result.id, { id: result.id })
   const again = restarted.engine.reply({ purpose: 'result', ticketId, text: 'Reworded after restart' })
   await restarted.idle()
@@ -139,6 +141,7 @@ it('deduplicates provider redelivery after a Connector rebind and rejects the ol
   const before = h.runtime.store.tickets.get(ticketId)!
   h.runtime.connectors.bind(service)
   await h.runtime.connectors.refresh()
+  await vi.waitFor(() => expect(Object.values(h.runtime.connectors.status()).some(value => value.state === 'connecting')).toBe(false))
   expect(old.signal.aborted).toBe(true)
   await expect(old.onEvent(event, { signal: new AbortController().signal })).rejects.toThrow()
   await receive({ ...event, eventId: 'redelivered-event' })
@@ -156,10 +159,12 @@ it('keeps input deduplication when the same Connector is disabled and enabled ag
   }
   configure(false)
   await h.runtime.connectors.refresh()
+  await vi.waitFor(() => expect(Object.values(h.runtime.connectors.status()).some(value => value.state === 'connecting')).toBe(false))
   expect(consumers.size).toBe(0)
   await expect(previous.onEvent(event, { signal: new AbortController().signal })).rejects.toThrow()
   configure(true)
   await h.runtime.connectors.refresh()
+  await vi.waitFor(() => expect(Object.values(h.runtime.connectors.status()).some(value => value.state === 'connecting')).toBe(false))
   await receive()
   expect(h.runtime.store.tickets.list()).toHaveLength(1)
   expect(h.runtime.store.tickets.get(ticketId)?.inputs.filter(input => input.kind === 'trigger')).toEqual(before.inputs.filter(input => input.kind === 'trigger'))
@@ -171,6 +176,7 @@ it('leaves intake unavailable on a consumer conflict instead of submitting to an
   service.consumeInbound = async () => { throw Object.assign(new Error('consumer-conflict'), { code: 'consumer-conflict' }) }
   h.runtime.connectors.bind(service)
   await h.runtime.connectors.refresh()
+  await vi.waitFor(() => expect(Object.values(h.runtime.connectors.status()).some(value => value.state === 'connecting')).toBe(false))
   expect(h.runtime.connectors.status().test).toMatchObject({ state: 'error', detail: 'Connector unavailable: consumer-conflict' })
   expect(consumers.size).toBe(0)
   expect(h.controller.prompt).not.toHaveBeenCalled()

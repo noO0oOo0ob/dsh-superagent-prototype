@@ -6,9 +6,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Connectors } from '../src/app/connectors.ts'
 import { Store } from '../src/app/store.ts'
 import type { OutboundMessage, Trigger } from '../src/core/index.ts'
-import { ImEventSchema, type ConnectorService, type ImEvent } from '../src/connectors/protocol.ts'
+import { FEISHU_PROVIDER, ImEventSchema, type ConnectorService, type ImEvent } from '../src/connectors/protocol.ts'
 import { ConnectorConfigSchema, PersonalSettings, type ConnectorConfig } from '../src/personal/config.ts'
 import { settingsPolicy, type Settings } from '../src/policy.ts'
+import { nativeConnectorConfigs } from '../src/connectors/native-accounts.ts'
 import { SourceRegistry } from '../src/sources/registry.ts'
 
 const fingerprint = 'a'.repeat(64), otherFingerprint = 'b'.repeat(64)
@@ -56,7 +57,8 @@ function host(configs = [config()]) {
   const connectors = new Connectors(connectorHost), fake = fakeService()
   cleanups.push(async () => { lifetime.abort(); await connectors.stop(); store.close(); rmSync(root, { recursive: true, force: true }) })
   const configure = (values: ConnectorConfig[]) => { const current = personal.view(); personal.save({ ...current.config, connectors: values }, current.revision) }
-  const start = async () => { connectors.bind(fake.service); await connectors.refresh() }
+  const refresh = async () => { await connectors.refresh(); await vi.waitFor(() => expect(Object.values(connectors.status()).some(value => value.state === 'connecting')).toBe(false)) }
+  const start = async () => { connectors.bind(fake.service); await refresh() }
   const deliver = async (value = event()) => {
     const consumer = fake.consumers.get(value.botId)
     if (!consumer) throw new Error('Test consumer is missing')
@@ -66,7 +68,7 @@ function host(configs = [config()]) {
     await deliver()
     return { id, channel: receive.mock.calls.at(-1)![0].channel!, kind: 'notice', text: 'Your plan is ready' }
   }
-  return { ...connectorHost, connectorHost, connectors, fake, configure, start, deliver, outgoing }
+  return { ...connectorHost, connectorHost, connectors, fake, configure, refresh, start, deliver, outgoing }
 }
 
 const failure = (code: string) => Object.assign(new Error(code), { code })
@@ -89,7 +91,7 @@ describe('dsh-im Connector', () => {
     expect(h.sources.channelAllowed(message.channel)).toBe(true)
     await expect(h.deliver(event({ fingerprint: otherFingerprint }))).rejects.toThrow('Untrusted source account')
     h.configure([config({ intake: 'account', enabled: false, conversations: [], allowedSenders: [] })])
-    await h.connectors.refresh()
+    await h.refresh()
     expect(settingsPolicy(h.store.settings(), h.sources).revalidate(mandate)).toBe(false)
     expect(h.sources.scope(trigger)).toMatchObject({ listened: false })
   })
@@ -105,7 +107,7 @@ describe('dsh-im Connector', () => {
     await h.start()
     h.fake.describeBot.mockResolvedValue({ version: 1, botId: 'bot-1', channel: 'feishu', connected: true,
       account: { fingerprint, name: 'Assistant' }, capabilities: ['exclusive-text-consumer', 'reply-text-checked'], token: 'private-provider-value' })
-    expect(await h.connectors.discover()).toEqual([{ version: 1, botId: 'bot-1', channel: 'feishu', connected: true,
+    expect(await h.connectors.discover()).toEqual([{ provider: 'feishu', version: 1, botId: 'bot-1', channel: 'feishu', connected: true,
       account: { fingerprint, name: 'Assistant' }, capabilities: ['exclusive-text-consumer', 'reply-text-checked'] }])
     expect(h.fake.consumeInbound).not.toHaveBeenCalled()
     h.fake.describeBot.mockResolvedValue({ version: 1, botId: 'another', channel: 'feishu', connected: true,
@@ -182,13 +184,13 @@ describe('dsh-im Connector', () => {
     const starting = h.start()
     await vi.waitFor(() => expect(h.fake.describeBot).toHaveBeenCalled())
     h.configure([config({ botId: 'bot-2', fingerprint: otherFingerprint })])
-    const refreshing = h.connectors.refresh()
+    const refreshing = h.refresh()
     describe.resolve({ version: 1, botId: 'bot-1', channel: 'feishu', connected: true, account: { fingerprint }, capabilities: ['exclusive-text-consumer', 'reply-text-checked'] })
     await Promise.all([starting, refreshing])
     expect(h.fake.consumeInbound.mock.calls.map(([id]) => id)).toEqual(['bot-2'])
     expect(h.connectors.status().work).toMatchObject({ state: 'ready' })
     const previous = h.fake.consumers.get('bot-2')!
-    h.configure([config()]); await h.connectors.refresh()
+    h.configure([config()]); await h.refresh()
     expect(previous.signal.aborted).toBe(true)
     await expect(previous.onEvent(event({ botId: 'bot-2', fingerprint: otherFingerprint }), { signal: new AbortController().signal })).rejects.toThrow()
     expect(h.fake.releases[0]).toHaveBeenCalledOnce()
@@ -203,7 +205,7 @@ describe('dsh-im Connector', () => {
       expect(h.sources.scope(trigger, after).listened).toBe(false)
     })
     h.configure([])
-    await h.connectors.refresh()
+    await h.refresh()
     expect(h.store.settings().sources['im-work']?.enabled).toBe(false)
     expect(h.sources.kind('im-work')).toBeUndefined()
     expect(h.policyChanged).toHaveBeenCalledTimes(2)
@@ -216,7 +218,7 @@ describe('dsh-im Connector', () => {
     const first = h.receive.mock.calls[0]![0], second = h.receive.mock.calls[1]![0]
     expect(first.id).not.toBe(second.id)
     expect(first.threads[0]).not.toEqual(second.threads[0])
-    h.configure([config({ botId: 'bot-2', fingerprint: otherFingerprint })]); await h.connectors.refresh()
+    h.configure([config({ botId: 'bot-2', fingerprint: otherFingerprint })]); await h.refresh()
     await h.deliver(event({ botId: 'bot-2', fingerprint: otherFingerprint }))
     expect(h.receive.mock.calls[2]![0].threads[0]).not.toEqual(first.threads[0])
   })
@@ -243,6 +245,7 @@ describe('dsh-im Connector', () => {
     cleanups.push(() => restarted.stop())
     restarted.bind(h.fake.service)
     await restarted.refresh()
+    await vi.waitFor(() => expect(restarted.status().work?.state).toBe('ready'))
     await expect(h.sources.send(message, {} as never)).rejects.toThrow('outcome is unknown')
     expect(h.fake.replyChecked).toHaveBeenCalledTimes(1)
     restarted.reconcile(message.id, 'confirm_sent', 'Visible in the original thread')
@@ -287,7 +290,7 @@ describe('dsh-im Connector', () => {
     const h = host()
     await h.start(); await h.deliver()
     const trigger = h.receive.mock.calls[0]![0], context = h.sources.threadContext(trigger)!
-    for (const other of [event({ fingerprint: otherFingerprint }), event({ chat: 'other' }), event({ thread: 'other' })]) {
+    for (const other of [ImEventSchema.parse({ ...event(), provider: 'mail' }), event({ fingerprint: otherFingerprint }), event({ chat: 'other' }), event({ thread: 'other' })]) {
       h.fake.historyChecked.mockResolvedValueOnce({ events: [other], hasMore: false })
       await expect(context.read({} as never, 'thread')).rejects.toThrow('another account, conversation or thread')
     }
@@ -326,10 +329,10 @@ describe('dsh-im Connector', () => {
 
   it('does not let an old disposer unbind a newer binding of the same service', async () => {
     const h = host(), old = h.connectors.bind(h.fake.service)
-    await h.connectors.refresh()
+    await h.refresh()
     h.connectors.bind(h.fake.service)
     old()
-    await h.connectors.refresh()
+    await h.refresh()
     expect(h.connectors.status().work).toMatchObject({ state: 'ready' })
     await expect(h.deliver()).resolves.toEqual({ accepted: true })
   })
@@ -340,7 +343,7 @@ describe('dsh-im Connector', () => {
     h.connectors.bind(h.fake.service)
     await vi.waitFor(() => expect(h.connectors.status()._runtime).toMatchObject({ state: 'error' }))
     expect(h.store.settings().sources['im-work']).toBeUndefined()
-    await h.connectors.refresh()
+    await h.refresh()
     expect(h.connectors.status().work).toMatchObject({ state: 'ready' })
   })
 })
@@ -358,4 +361,126 @@ it('uses the native per-part ledger without leaving a second whole-message recov
   await expect(kind.channel!.send!(undefined as never, message)).resolves.toBe('sent')
   expect(native).toHaveBeenCalledTimes(2)
   expect(h.fake.replyChecked).not.toHaveBeenCalled()
+})
+
+
+describe('provider isolation', () => {
+  const mail = { ...FEISHU_PROVIDER, id: 'mail', channels: ['email'] }
+  function secondService() {
+    const fake = fakeService()
+    fake.describeBot.mockImplementation(async botId => ({ version: 1, botId, channel: 'email', connected: true,
+      account: { fingerprint }, capabilities: ['exclusive-text-consumer', 'reply-text-checked'] }))
+    fake.service.listBots = async () => [{ botId: 'bot-1', channel: 'email' }]
+    return fake
+  }
+  it('keeps equal native IDs in separate providers and routes replies to the captured provider', async () => {
+    const h = host([config(), config({ id: 'mailbox', provider: 'mail', channel: 'email' })]), second = secondService()
+    await h.start()
+    const release = h.connectors.register(mail, second.service)
+    await h.refresh()
+    expect(h.fake.releases[0]).not.toHaveBeenCalled()
+    const original = await h.outgoing()
+    const incoming = { ...event(), channel: 'email' }
+    await second.consumers.get('bot-1')!.onEvent(incoming, { signal: h.lifetime })
+    const trigger = h.receive.mock.calls.at(-1)![0]
+    expect(trigger.meta.provider).toBe('mail')
+    expect(trigger.threads).not.toEqual(h.receive.mock.calls[0]![0].threads)
+    await h.sources.kind('im-mailbox')!.channel!.send!(undefined as never, { id: 'mail-out', channel: trigger.channel!, text: 'Mail result', kind: 'notice' })
+    expect(second.replyChecked).toHaveBeenCalledOnce()
+    expect(h.fake.replyChecked).not.toHaveBeenCalled()
+    await expect(h.sources.kind('im-work')!.channel!.send!(undefined as never, original)).resolves.toBe('sent')
+    release()
+    expect(h.connectors.status().mailbox).toMatchObject({ state: 'waiting' })
+    expect(h.connectors.status().work).toMatchObject({ state: 'ready' })
+    await expect(h.deliver(event({ message: 'after-mail-stop' }))).resolves.toEqual({ accepted: true })
+  })
+  it('starts a second provider even while the first provider description is stalled', async () => {
+    const h = host([config(), config({ id: 'mailbox', provider: 'mail', channel: 'email' })]), second = secondService()
+    h.fake.describeBot.mockImplementation(() => new Promise(() => {}))
+    h.connectors.bind(h.fake.service)
+    h.connectors.register(mail, second.service)
+    await h.connectors.refresh()
+    await vi.waitFor(() => expect(second.consumers.has('bot-1')).toBe(true))
+    expect(h.connectors.status().mailbox).toMatchObject({ state: 'ready' })
+    await h.connectors.stop()
+    expect(second.releases[0]).toHaveBeenCalledOnce()
+  })
+  it('rejects channel and provider substitution before creating a Trigger', async () => {
+    const h = host()
+    await h.start()
+    await expect(h.deliver(ImEventSchema.parse({ ...event(), channel: 'email' }))).rejects.toThrow('Untrusted source account')
+    await expect(h.deliver(ImEventSchema.parse({ ...event(), provider: 'mail' }))).rejects.toThrow('Untrusted source account')
+    expect(h.receive).not.toHaveBeenCalled()
+  })
+  it('contains discovery failures and dispatches account management to one provider', async () => {
+    const h = host(), second = secondService()
+    await h.start()
+    h.fake.service.listBots = async () => { throw failure('bot-not-connected') }
+    second.service.manage = vi.fn(async () => ({ ok: true }))
+    h.connectors.register(mail, second.service)
+    expect(await h.connectors.discover()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ provider: 'feishu', available: false }),
+      expect.objectContaining({ provider: 'mail', channel: 'email', botId: 'bot-1' }),
+    ]))
+    await expect(h.connectors.manage('mail', 'account.status', { botId: 'bot-1' })).resolves.toEqual({ ok: true })
+    expect(second.service.manage).toHaveBeenCalledWith('account.status', { botId: 'bot-1' }, undefined)
+    await expect(h.connectors.manage('missing', 'account.status', {})).rejects.toThrow('capability-unavailable')
+  })
+  it('reads attachments only through the captured provider and revokes an acquired reader', async () => {
+    const h = host([config(), config({ id: 'mailbox', provider: 'mail', channel: 'email' })]), second = secondService()
+    h.fake.service.readResource = vi.fn(async () => Buffer.from('feishu'))
+    second.service.readResource = vi.fn(async () => Buffer.from('mail'))
+    await h.start(); h.connectors.register(mail, second.service); await h.refresh()
+    const incoming = { ...event(), channel: 'email' }
+    await second.consumers.get('bot-1')!.onEvent(incoming, { signal: h.lifetime })
+    const reader = h.connectors.resourceReader(h.receive.mock.calls.at(-1)![0])!
+    const options = { expectedFingerprint: fingerprint, signal: h.lifetime, maxBytes: 100 }
+    await expect(reader.readResource!('bot-1', incoming.reply, 'file-1', options)).resolves.toEqual(Buffer.from('mail'))
+    expect(h.fake.service.readResource).not.toHaveBeenCalled()
+    await expect(reader.readResource!('bot-1', { ...incoming.reply, conversationId: 'another' }, 'file-1', options)).rejects.toThrow('account-changed')
+    h.configure([config()]); await h.refresh()
+    await expect(reader.readResource!('bot-1', incoming.reply, 'file-1', options)).rejects.toThrow('account-changed')
+  })
+  it('keeps the legacy Feishu destination and thread valid after an explicit provider migration', async () => {
+    const h = host(); await h.start()
+    const message = await h.outgoing(), original = h.receive.mock.calls.at(-1)![0]
+    delete message.channel.address.provider
+    h.configure([config({ provider: 'feishu', channel: 'feishu' })]); await h.refresh()
+    await h.deliver()
+    expect(h.receive.mock.calls.at(-1)![0].id).toBe(original.id)
+    expect(h.receive.mock.calls.at(-1)![0].threads).toEqual(original.threads)
+    await expect(h.sources.kind('im-work')!.channel!.send!(undefined as never, message)).resolves.toBe('sent')
+  })
+  it('does not prepare a directory for a rebound account or accept a late result after revocation', async () => {
+    const h = host(); h.fake.service.prepareDialogue = vi.fn(async () => '/original')
+    await h.start(); await h.deliver()
+    const trigger = h.receive.mock.calls[0]![0]
+    await expect(h.connectors.prepareDialogue(trigger, 'conversation')).resolves.toBe('/original')
+    const prepared = Promise.withResolvers<string>()
+    h.fake.service.prepareDialogue = vi.fn(() => prepared.promise)
+    const preparing = h.connectors.prepareDialogue(trigger, 'conversation')
+    h.configure([config({ botId: 'bot-2', fingerprint: otherFingerprint })])
+    prepared.resolve('/old')
+    await expect(preparing).rejects.toThrow('account-changed')
+    await expect(h.connectors.prepareDialogue(trigger, 'conversation')).rejects.toThrow('account-changed')
+    expect(h.fake.service.prepareDialogue).toHaveBeenCalledOnce()
+  })
+  it('stops waiting for a stalled dialogue directory when the provider is removed', async () => {
+    const h = host(), prepared = Promise.withResolvers<string>()
+    h.fake.service.prepareDialogue = () => prepared.promise
+    const unbind = h.connectors.bind(h.fake.service); await h.refresh(); await h.deliver()
+    const preparing = h.connectors.prepareDialogue(h.receive.mock.calls[0]![0], 'conversation')
+    const rejected = expect(preparing).rejects.toThrow()
+    unbind(); await rejected
+    prepared.reject(new Error('late provider rejection'))
+    await h.connectors.stop()
+  })
+  it('preserves another provider native account during Feishu account synchronization', () => {
+    const other = config({ id: 'native-mail', provider: 'mail', channel: 'email' })
+    const original = config({ id: 'native-old', enabled: false })
+    expect(nativeConnectorConfigs([other, original], [])).toEqual([other])
+    const refreshed = nativeConnectorConfigs([other], [{ id: 'bot_1', channel: 'feishu', fingerprint }])
+    expect(refreshed[0]).toEqual(other)
+    expect(refreshed[1]).toMatchObject({ id: 'native-bot-1', provider: 'feishu', channel: 'feishu' })
+  })
 })

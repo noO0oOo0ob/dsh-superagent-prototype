@@ -2,7 +2,7 @@
 import { z } from 'zod'
 import { key, type Trigger, type OutboundMessage } from '../core/index.ts'
 import { family } from '../kv.ts'
-import { ImBotSchema, ImEventSchema, ReplyRouteSchema, IM_PRE_SEND_FAILURES, imErrorCode, type ConnectorService, type ImEvent } from '../connectors/protocol.ts'
+import { ImBotSchema, ImEventSchema, ReplyRouteSchema, IM_PRE_SEND_FAILURES, imErrorCode, providerIdOf, FEISHU_PROVIDER, type ProviderDefinition, type ConnectorService, type ImEvent } from '../connectors/protocol.ts'
 import { ConnectorConfigSchema, type ConnectorConfig, type PersonalSettings } from '../personal/config.ts'
 import type { Settings } from '../policy.ts'
 import type { SourceKind } from '../sources/kind.ts'
@@ -22,7 +22,7 @@ interface ConnectorHost {
   receive(trigger: Trigger): unknown
   policyChanged(before: Settings, after: Settings): void
 }
-interface Connecting { signature: string; abort: AbortController; service: ConnectorService }
+interface Connecting { provider: string; signature: string; abort: AbortController; service: ConnectorService; channel?: string; pending?: Promise<void> }
 interface Active extends Connecting { release: () => void }
 const SourceConfigSchema = z.object({ binding: ConnectorConfigSchema.optional() }).strict()
 const messageId = (config: ConnectorConfig, conversationId: string, id: string) => key('dsh-im', config.id, config.fingerprint, conversationId, id)
@@ -43,45 +43,95 @@ function cancellable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> 
 
 /** Uses one exclusive consumer per configured account; no bot is discovered or enabled implicitly. */
 export class Connectors {
-  private service?: ConnectorService
+  private readonly providers = new Map<string, { definition: ProviderDefinition; service: ConnectorService; token: object }>()
   private readonly registered = new Map<string, () => void>()
   private readonly active = new Map<string, Active>()
   private readonly connecting = new Map<string, Connecting>()
   private readonly sending = new Set<string>()
   private readonly states = new Map<string, { state: string; detail: string }>()
-  private refreshing?: Promise<void>
-  private refreshNeeded = false
+  private readonly acquisitions = new Set<Promise<void>>()
   private closed = false
-  private binding = 0
   constructor(private readonly host: ConnectorHost) {}
-  bind(service: ConnectorService): () => void {
+  /** Compatibility entry for the existing Feishu adapter; additional providers use register(). */
+  bind(service: ConnectorService): () => void { return this.register(FEISHU_PROVIDER, service) }
+  /** Replace only this provider; a stale disposer cannot remove its successor or another provider. */
+  register(definition: ProviderDefinition, service: ConnectorService): () => void {
     if (this.closed || this.host.lifetime.aborted) throw new Error('Connector manager is stopping')
-    for (const id of this.active.keys()) this.release(id)
-    for (const item of this.connecting.values()) item.abort.abort()
-    this.service = service
-    const binding = ++this.binding
+    const token = {}, id = definition.id
+    const disconnect = () => {
+      for (const [connectorId, item] of [...this.active, ...this.connecting]) if (item.provider === id) {
+        item.abort.abort(); this.release(connectorId)
+      }
+    }
+    disconnect()
+    this.providers.set(id, { definition, service, token })
     void this.refresh().catch(error => { this.states.set('_runtime', { state: 'error', detail: `Connector refresh failed: ${imErrorCode(error)}` }) })
     return () => {
-      if (this.service !== service || this.binding !== binding) return
-      this.service = undefined
-      for (const id of this.active.keys()) this.release(id)
-      for (const item of this.connecting.values()) item.abort.abort()
-      for (const [id, state] of this.states) if (state.state === 'ready') this.states.set(id, { state: 'waiting', detail: 'Native Connector service is unavailable' })
+      if (this.providers.get(id)?.token !== token) return
+      disconnect(); this.providers.delete(id)
+      for (const config of this.host.personal.view().config.connectors) if (providerIdOf(config) === id && config.enabled)
+        this.states.set(config.id, { state: 'waiting', detail: `Provider ${id} is unavailable` })
     }
   }
-  async discover(): Promise<unknown[]> {
-    const service = this.service
-    if (!service) return []
-    return Promise.all((await service.listBots()).map(async bot => {
-      try {
-        const described = ImBotSchema.parse(await service.describeBot(bot.botId))
-        if (described.botId !== bot.botId) throw unavailable('account-changed')
-        const { version, botId, channel, connected, account, capabilities } = described
-        return { version, botId, channel, connected, account: { fingerprint: account.fingerprint, ...(account.name ? { name: account.name } : {}) }, capabilities }
-      }
-      catch (error) { return { botId: bot.botId, channel: bot.channel, available: false, error: imErrorCode(error) } }
-    }))
+  /** Capabilities of currently registered providers, without account credentials. */
+  definitions(): ProviderDefinition[] { return [...this.providers.values()].map(value => value.definition) }
+  /** Dispatch an owner management request to exactly one registered provider. */
+  async manage(provider: string, endpoint: string, payload: unknown, signal?: AbortSignal): Promise<unknown> {
+    const service = this.providers.get(provider)?.service
+    if (!service?.manage) throw unavailable('capability-unavailable')
+    return service.manage(endpoint, payload, signal)
   }
+  /** Prepare a dialogue through its own provider; another provider is never used as a fallback. */
+  async prepareDialogue(trigger: Trigger, conversationKey: string): Promise<string | undefined> {
+    const id = String(trigger.meta.connectorId), config = this.config(id), service = config && this.serviceFor(config)
+    const valid = () => {
+      const current = this.config(id)
+      if (!config || !current || !trigger.channel || !this.allowed(current, trigger.channel.address)
+        || signature(current) !== signature(config) || this.serviceFor(current) !== service) throw unavailable('account-changed')
+    }
+    valid()
+    const active = this.active.get(id)
+    if (!service || !active || active.service !== service) throw unavailable('consumer-unavailable')
+    const signal = AbortSignal.any([active.abort.signal, this.host.lifetime])
+    signal.throwIfAborted()
+    const workspace = await cancellable(Promise.resolve(service.prepareDialogue?.(config!.botId, conversationKey, config!.fingerprint)), signal)
+    signal.throwIfAborted()
+    valid()
+    return workspace
+  }
+  /** Resolve attachments against the captured account, not a global native service. */
+  resourceReader(trigger: Trigger): Pick<ConnectorService, 'readResource'> | undefined {
+    const id = String(trigger.meta.connectorId), config = this.config(id), service = config && this.serviceFor(config), active = this.active.get(id)
+    const address = trigger.channel?.address
+    if (!config || !service?.readResource || !active || active.service !== service || !address || !this.allowed(config, address)) return undefined
+    const valid = () => {
+      const current = this.config(id)
+      if (!current || this.serviceFor(current) !== service || signature(current) !== active.signature || !this.allowed(current, address)) throw unavailable('account-changed')
+    }
+    return { readResource: async (botId, route, key, options) => {
+      valid()
+      if (botId !== config.botId || options.expectedFingerprint !== config.fingerprint || JSON.stringify(route) !== JSON.stringify(parseRoute(address.route))) throw unavailable('account-changed')
+      const signal = AbortSignal.any([options.signal, active.abort.signal, this.host.lifetime])
+      signal.throwIfAborted()
+      const bytes = await service.readResource!(botId, route, key, { ...options, signal })
+      signal.throwIfAborted(); valid()
+      return bytes
+    } }
+  }
+
+  async discover(): Promise<unknown[]> {
+    return (await Promise.all([...this.providers.values()].map(async ({ definition, service }) => {
+      try { return await Promise.all((await service.listBots()).map(async bot => {
+        try {
+          const described = ImBotSchema.parse(await service.describeBot(bot.botId))
+          if (described.botId !== bot.botId || !definition.channels.includes(described.channel)) throw unavailable('account-changed')
+          const { version, botId, channel, connected, account, capabilities } = described
+          return { provider: definition.id, version, botId, channel, connected, account: { fingerprint: account.fingerprint, ...(account.name ? { name: account.name } : {}) }, capabilities }
+        } catch (error) { return { provider: definition.id, botId: bot.botId, channel: bot.channel, available: false, error: imErrorCode(error) } }
+      })) } catch (error) { return [{ provider: definition.id, available: false, error: imErrorCode(error) }] }
+    }))).flat()
+  }
+  private serviceFor(config: ConnectorConfig): ConnectorService | undefined { return this.providers.get(providerIdOf(config))?.service }
   status() { return Object.fromEntries(this.states) }
   pending(): ImDelivery[] { return this.host.store.keys(deliveries).flatMap(name => this.host.store.get(name) ?? []).filter(item => item.state !== 'sent' && item.state !== 'gone') }
   /** Called only by the local management API after a person inspected the remote conversation. */
@@ -93,25 +143,17 @@ export class Connectors {
     this.host.store.set(deliveries(id), { ...value, state: action === 'confirm_sent' ? 'sent' : 'retryable',
       resolution: { action, note, at: new Date().toISOString() } })
   }
+  /** Reconcile settings and start independent acquisitions without waiting for provider I/O. */
   async refresh(): Promise<void> {
-    this.refreshNeeded = true
     const configs = this.host.personal.view().config.connectors
     for (const [id, item] of [...this.active, ...this.connecting]) {
       const current = configs.find(config => config.id === id)
-      if (this.closed || this.host.lifetime.aborted || !current?.enabled || signature(current) !== item.signature || this.service !== item.service) {
+      if (this.closed || this.host.lifetime.aborted || !current?.enabled || signature(current) !== item.signature || this.serviceFor(current) !== item.service) {
         item.abort.abort(); this.release(id)
       }
     }
-    return this.refreshing ??= Promise.resolve().then(async () => {
-      while (this.refreshNeeded && !this.closed && !this.host.lifetime.aborted) {
-        this.refreshNeeded = false
-        await this.refreshNow()
-        this.states.delete('_runtime')
-      }
-    }).finally(() => {
-      this.refreshing = undefined
-      if (this.refreshNeeded && !this.closed && !this.host.lifetime.aborted) return this.refresh()
-    })
+    this.refreshNow()
+    this.states.delete('_runtime')
   }
   private config(id: string): ConnectorConfig | undefined { return this.host.personal.view().config.connectors.find(item => item.id === id) }
   private release(id: string): void {
@@ -122,7 +164,7 @@ export class Connectors {
       catch (error) { this.states.set(id, { state: 'error', detail: `Consumer release failed: ${imErrorCode(error)}` }) }
     }
   }
-  private async refreshNow(): Promise<void> {
+  private refreshNow(): void {
     if (this.closed || this.host.lifetime.aborted) return
     const configs = this.host.personal.view().config.connectors
     for (const config of configs) if (!this.registered.has(config.id)) this.registered.set(config.id, this.host.sources.register(this.kind(config)))
@@ -146,62 +188,73 @@ export class Connectors {
     for (const [id, release] of this.registered) if (!configs.some(config => config.id === id)) {
       this.release(id); release(); this.registered.delete(id); this.states.delete(id)
     }
-    for (const config of configs) {
-      const sig = signature(config)
-      if (!config.enabled) { this.release(config.id); this.states.set(config.id, { state: 'disabled', detail: 'Connector disabled' }); continue }
-      if (this.active.has(config.id)) continue
-      const service = this.service
-      if (!service) { this.states.set(config.id, { state: 'waiting', detail: 'Native account service is unavailable' }); continue }
-      const abort = new AbortController(), signal = AbortSignal.any([abort.signal, this.host.lifetime])
-      this.connecting.set(config.id, { signature: sig, abort, service })
-      try {
-        if (service.contractVersion !== 1 || service.inboundVersion !== 1) throw unavailable('incompatible-protocol')
-        const bot = ImBotSchema.parse(await cancellable(service.describeBot(config.botId), signal))
-        signal.throwIfAborted()
-        if (signature(this.config(config.id)) !== sig || this.service !== service) { this.refreshNeeded = true; continue }
-        if (bot.botId !== config.botId || bot.account.fingerprint !== config.fingerprint) throw unavailable('account-changed')
-        if (!bot.connected || !bot.capabilities.includes('exclusive-text-consumer') || !bot.capabilities.includes('reply-text-checked'))
-          throw unavailable('capability-unavailable')
-        if (bot.channel !== 'feishu' && bot.channel !== 'lark') throw unavailable('channel-unavailable')
-        let dispose: (() => void) | undefined
-        const release = () => {
-          signal.removeEventListener('abort', release)
-          const current = dispose; dispose = undefined; current?.()
-        }
-        signal.addEventListener('abort', release, { once: true })
-        const acquiring = service.consumeInbound(config.botId, { expectedFingerprint: config.fingerprint, signal,
-          onEvent: async (raw, context) => {
-            signal.throwIfAborted(); context.signal.throwIfAborted()
-            if (signature(this.config(config.id)) !== sig || !this.config(config.id)?.enabled) throw new Error('Connector configuration changed')
-            const event = ImEventSchema.parse(raw)
-            if (event.botId !== config.botId || event.fingerprint !== config.fingerprint) throw new Error('Untrusted source account')
-            const conversation = config.conversations.find(item => item.id === event.conversation.id && item.kind === event.conversation.kind)
-            if (config.intake === 'restricted' && (!conversation || !config.allowedSenders.includes(event.actor.id))) return { accepted: true }
-            const trigger = this.trigger(config, event)
-            await this.host.receive(trigger)
-            return { accepted: true }
-          } }).then(acquired => { dispose = acquired; if (signal.aborted) release() })
-        await cancellable(acquiring, signal)
-        if (signal.aborted || this.closed || this.service !== service || signature(this.config(config.id)) !== sig) { abort.abort(); release(); continue }
-        this.active.set(config.id, { signature: sig, abort, release, service })
-        this.states.set(config.id, { state: 'ready', detail: 'Exclusive checked-text intake is active' })
-      } catch (error) {
-        abort.abort()
-        if (!this.closed && this.service === service && signature(this.config(config.id)) === sig)
-          this.states.set(config.id, { state: 'error', detail: `Connector unavailable: ${imErrorCode(error)}` })
-      } finally { this.connecting.delete(config.id) }
-    }
+    for (const config of configs) this.connect(config)
+  }
+  private connect(config: ConnectorConfig): Promise<void> {
+    const existing = this.connecting.get(config.id)
+    if (existing && !existing.abort.signal.aborted) return existing.pending!
+    const service = this.serviceFor(config)
+    if (!config.enabled) { this.release(config.id); this.states.set(config.id, { state: 'disabled', detail: 'Connector disabled' }); return Promise.resolve() }
+    if (this.active.has(config.id)) return Promise.resolve()
+    if (!service) { this.states.set(config.id, { state: 'waiting', detail: `Provider ${providerIdOf(config)} is unavailable` }); return Promise.resolve() }
+    const item: Connecting = { provider: providerIdOf(config), signature: signature(config), abort: new AbortController(), service }
+    this.connecting.set(config.id, item)
+    this.states.set(config.id, { state: 'connecting', detail: 'Verifying account and acquiring consumer' })
+    item.pending = this.acquire(config, item).finally(() => { this.acquisitions.delete(item.pending!) })
+    this.acquisitions.add(item.pending)
+    return item.pending
+  }
+  private async acquire(config: ConnectorConfig, item: Connecting): Promise<void> {
+    const sig = item.signature
+    const { service, abort } = item, signal = AbortSignal.any([abort.signal, this.host.lifetime])
+    try {
+      if (service.contractVersion !== 1 || service.inboundVersion !== 1) throw unavailable('incompatible-protocol')
+      const bot = ImBotSchema.parse(await cancellable(service.describeBot(config.botId), signal))
+      signal.throwIfAborted()
+      if (signature(this.config(config.id)) !== sig || this.serviceFor(config) !== service) { return }
+      if (bot.botId !== config.botId || bot.account.fingerprint !== config.fingerprint) throw unavailable('account-changed')
+      if (!bot.connected || !bot.capabilities.includes('exclusive-text-consumer') || !bot.capabilities.includes('reply-text-checked'))
+        throw unavailable('capability-unavailable')
+      if (!this.providers.get(providerIdOf(config))?.definition.channels.includes(bot.channel) || config.channel && bot.channel !== config.channel) throw unavailable('channel-unavailable')
+      item.channel = bot.channel
+      let dispose: (() => void) | undefined
+      const release = () => {
+        signal.removeEventListener('abort', release)
+        const current = dispose; dispose = undefined; current?.()
+      }
+      signal.addEventListener('abort', release, { once: true })
+      const acquiring = service.consumeInbound(config.botId, { expectedFingerprint: config.fingerprint, signal,
+        onEvent: async (raw, context) => {
+          signal.throwIfAborted(); context.signal.throwIfAborted()
+          if (signature(this.config(config.id)) !== sig || !this.config(config.id)?.enabled) throw new Error('Connector configuration changed')
+          const event = ImEventSchema.parse(raw)
+          if (event.botId !== config.botId || event.fingerprint !== config.fingerprint || event.channel !== bot.channel || event.provider !== undefined && event.provider !== providerIdOf(config)) throw new Error('Untrusted source account')
+          const conversation = config.conversations.find(item => item.id === event.conversation.id && item.kind === event.conversation.kind)
+          if (config.intake === 'restricted' && (!conversation || !config.allowedSenders.includes(event.actor.id))) return { accepted: true }
+          const trigger = this.trigger(config, event)
+          await this.host.receive(trigger)
+          return { accepted: true }
+        } }).then(acquired => { dispose = acquired; if (signal.aborted) release() })
+      await cancellable(acquiring, signal)
+      if (signal.aborted || this.closed || this.serviceFor(config) !== service || signature(this.config(config.id)) !== sig) { abort.abort(); release(); return }
+      this.active.set(config.id, { provider: providerIdOf(config), signature: sig, abort, release, service, channel: bot.channel })
+      this.states.set(config.id, { state: 'ready', detail: 'Exclusive checked-text intake is active' })
+    } catch (error) {
+      abort.abort()
+      if (!this.closed && this.connecting.get(config.id) === item && this.serviceFor(config) === service && signature(this.config(config.id)) === sig)
+        this.states.set(config.id, { state: 'error', detail: `Connector unavailable: ${imErrorCode(error)}` })
+    } finally { if (this.connecting.get(config.id) === item) this.connecting.delete(config.id) }
   }
   private trigger(config: ConnectorConfig, event: ImEvent): Trigger {
     const source = sourceId(config.id), id = messageId(config, event.conversation.id, event.messageId)
     const root = event.reply.threadId ?? event.reply.rootId ?? event.messageId
-    const thread = key('im-conversation-v1', event.channel, config.fingerprint, event.conversation.kind, event.conversation.id)
+    const thread = key('im-conversation-v1', ...(providerIdOf(config) === 'feishu' ? [] : [providerIdOf(config)]), event.channel, config.fingerprint, event.conversation.kind, event.conversation.id)
     return { id, source, actor: { source, id: event.actor.id }, human: true,
       ...(event.conversation.kind === 'dm' ? { addressed: 'direct' as const } : event.mentionedAccount ? { addressed: 'mention' as const } : event.respondToAll === true || event.reply.parentId ? { addressed: 'direct' as const } : {}),
       threads: [{ source, id: thread }], at: event.at, text: event.text,
-      channel: { source, thread, address: { connectorId: config.id, botId: config.botId, fingerprint: config.fingerprint,
+      channel: { source, thread, address: { provider: providerIdOf(config), connectorId: config.id, botId: config.botId, fingerprint: config.fingerprint,
         triggerId: id, conversationKind: event.conversation.kind, route: JSON.stringify(event.reply) } },
-      meta: { conversationVersion: 1, settings: event.settings, resources: event.resources, connectorId: config.id, channel: event.channel, botId: event.botId, fingerprint: event.fingerprint,
+      meta: { provider: providerIdOf(config), conversationVersion: 1, settings: event.settings, resources: event.resources, connectorId: config.id, channel: event.channel, botId: event.botId, fingerprint: event.fingerprint,
         messageId: event.messageId, eventId: event.eventId, conversationId: event.conversation.id, conversationType: event.conversation.kind,
         actorId: event.actor.id, mentionedAccount: event.mentionedAccount, root, reply: event.reply, sentAt: event.at, mentions: event.mentions,
         ...(typeof event.actor.name === 'string' ? { senderName: event.actor.name } : {}),
@@ -214,7 +267,7 @@ export class Connectors {
       description: { zh: '由个人助理设置管理的独立账号连接。', en: 'An account connection managed in Personal settings.' },
       schema: SourceConfigSchema, fields: [], health: [],
       scope: ({ meta }, { binding: current }) => {
-        if (!current?.enabled || current.id !== config.id || current.botId !== meta.botId || current.fingerprint !== meta.fingerprint)
+        if (!current?.enabled || current.id !== config.id || providerIdOf(current) !== (meta.provider ?? 'feishu') || current.channel && current.channel !== meta.channel || current.botId !== meta.botId || current.fingerprint !== meta.fingerprint)
           return { listened: false, reason: 'connector_scope_denied' }
         if (current.intake === 'account' && (meta.conversationType === 'dm' || meta.conversationType === 'group'))
           return { listened: true, observed: false, row: meta.conversationType }
@@ -233,7 +286,7 @@ export class Connectors {
           ? messageId({ ...config, fingerprint: trigger.meta.fingerprint }, reply.data.conversationId, reply.data.parentId) : undefined
       },
       threadContext: { messageId: trigger => String(trigger.meta.messageId), read: async (_commands, trigger, part, cursor) => {
-        const service = this.service, current = this.config(config.id), active = this.active.get(config.id)
+        const current = this.config(config.id), service = current && this.serviceFor(current), active = this.active.get(config.id)
         if (!service?.historyChecked || !current || !active || active.service !== service || active.signature !== signature(current)
           || !trigger.channel || !this.allowed(current, trigger.channel.address)) throw new Error('Checked conversation history is unavailable')
         const route = ReplyRouteSchema.parse(trigger.meta.reply)
@@ -244,10 +297,10 @@ export class Connectors {
         const raw = await service.historyChecked(current.botId, route, { scope, limit: 20, ...(cursor ? { cursor } : {}) },
           { expectedFingerprint: current.fingerprint, signal })
         signal.throwIfAborted()
-        if (this.service !== service || signature(this.config(config.id)) !== active.signature) throw new Error('Connector configuration changed during history read')
+        if (this.serviceFor(current) !== service || signature(this.config(config.id)) !== active.signature) throw new Error('Connector configuration changed during history read')
         const page = z.object({ events: z.array(ImEventSchema).max(20), hasMore: z.boolean(), nextCursor: z.string().min(1).max(4096).optional() }).passthrough().parse(raw)
         if (page.hasMore && !page.nextCursor) throw new Error('History pagination cursor is missing')
-        for (const event of page.events) if (event.fingerprint !== current.fingerprint || event.botId !== current.botId || event.conversation.id !== route.conversationId
+        for (const event of page.events) if (event.fingerprint !== current.fingerprint || event.botId !== current.botId || event.channel !== active.channel || event.provider !== undefined && event.provider !== providerIdOf(current) || event.conversation.id !== route.conversationId
           || scope === 'thread' && event.reply.threadId !== route.threadId)
           throw new Error('History contains another account, conversation or thread')
         const messages = page.events.filter(event => part === 'thread' || event.messageId === (part === 'root' ? route.rootId ?? route.messageId : route.parentId))
@@ -257,13 +310,13 @@ export class Connectors {
     }
   }
   private allowed(config: ConnectorConfig, address: Record<string, string>): boolean {
-    if (!config.enabled || address.connectorId !== config.id || config.botId !== address.botId || config.fingerprint !== address.fingerprint) return false
+    if (!config.enabled || providerIdOf(config) !== (address.provider ?? 'feishu') || address.connectorId !== config.id || config.botId !== address.botId || config.fingerprint !== address.fingerprint) return false
     const route = parseRoute(address.route)
     if (!route || !['dm', 'group'].includes(address.conversationKind ?? '')) return false
     return config.intake === 'account' || config.conversations.some(item => item.id === route.conversationId && item.kind === address.conversationKind) && config.allowedSenders.includes(route.actorId)
   }
   private async send(id: string, message: OutboundMessage): Promise<'sent' | 'gone'> {
-    const service = this.service, config = this.config(id), active = this.active.get(id)
+    const config = this.config(id), service = config && this.serviceFor(config), active = this.active.get(id)
     if (!service || !config?.enabled || !active || active.service !== service || active.signature !== signature(config)) throw new Error('Connector is unavailable')
     if (message.channel.source !== sourceId(id) || !this.allowed(config, message.channel.address)) throw new Error('Connector reply route is no longer allowed')
     const route = ReplyRouteSchema.parse(parseRoute(message.channel.address.route)), prior = this.host.store.get(deliveries(message.id))
@@ -301,10 +354,11 @@ export class Connectors {
     this.closed = true
     for (const id of this.active.keys()) this.release(id)
     for (const item of this.connecting.values()) item.abort.abort()
-    try { await this.refreshing }
+    try { await Promise.all(this.acquisitions) }
     finally {
       for (const release of this.registered.values()) release()
-      this.registered.clear()
+      this.registered.clear(); this.providers.clear()
+      for (const id of this.states.keys()) this.states.set(id, { state: 'stopped', detail: 'Connector manager stopped' })
     }
   }
 }

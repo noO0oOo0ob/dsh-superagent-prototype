@@ -29,6 +29,8 @@ export interface Api {
   'POST personal/feishu': { body: { endpoint: string; payload: unknown }; response: unknown }
   'GET personal/messages': { response: import('../messaging/delivery.ts').DeliveryRecord[] }
   'POST personal/messages/:id': { body: { partId: string; action: 'confirm_sent' | 'retry'; note: string }; response: { recorded: true } }
+  'GET personal/providers': { response: import('../connectors/protocol.ts').ProviderDefinition[] }
+  'POST personal/providers/:id': { body: { endpoint: string; payload: unknown }; response: unknown }
   'GET personal/bots': { response: { bots: unknown[] } }
   'POST personal/deliveries/:id': { body: { action: 'confirm_sent' | 'retry'; note: string }; response: { recorded: true } }
   'POST personal/schedules': { body: { spec: unknown }; response: ScheduleRecord }

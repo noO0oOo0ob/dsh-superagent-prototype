@@ -1,4 +1,5 @@
 /** Native Connector account, captured source and checked transport interfaces. */
+import type { ContentBlock } from '../messaging/content.ts'
 import type { OutboundMessage } from '../core/index.ts'
 import { z } from 'zod'
 
@@ -6,7 +7,7 @@ const identifier = z.string().min(1).max(512)
 export const ReplyRouteSchema = z.object({ messageId: identifier, conversationId: identifier, actorId: identifier,
   threadId: identifier.optional(), rootId: identifier.optional(), parentId: identifier.optional() }).strict()
 export type ImReplyRoute = z.infer<typeof ReplyRouteSchema>
-export const ImEventSchema = z.object({ version: z.literal(1), channel: z.enum(['feishu', 'lark']), botId: z.string().min(1),
+export const ImEventSchema = z.object({ version: z.literal(1), channel: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/), botId: z.string().min(1),
   fingerprint: z.string().regex(/^[0-9a-f]{64}$/), eventId: z.string().min(1), messageId: z.string().min(1),
   actor: z.object({ kind: z.literal('user'), id: z.string().min(1) }).passthrough(),
   conversation: z.object({ kind: z.enum(['group', 'dm']), id: z.string().min(1) }).passthrough(),
@@ -19,7 +20,29 @@ export const ImEventSchema = z.object({ version: z.literal(1), channel: z.enum([
 export type ImEvent = z.infer<typeof ImEventSchema>
 export const ImBotSchema = z.object({ version: z.literal(1), botId: z.string().min(1), channel: z.string(), connected: z.boolean(),
   account: z.object({ fingerprint: z.string().regex(/^[0-9a-f]{64}$/), name: z.string().optional() }), capabilities: z.array(z.string()) }).passthrough()
+/** Provider-owned capabilities; hidden channels are not implied by generic transport support. */
+export interface ProviderDefinition {
+  id: string
+  channels: readonly string[]
+  onboarding: readonly ('qr' | 'credentials')[]
+  inbound: readonly ContentBlock['type'][]
+  outbound: readonly ContentBlock['type'][]
+  history: boolean
+  actions: boolean
+  replyTargets: readonly ('original-message' | 'thread')[]
+  sendIdempotency: 'none' | 'provider-window'
+}
+export const FEISHU_PROVIDER: ProviderDefinition = { id: 'feishu', channels: ['feishu', 'lark'], onboarding: ['qr', 'credentials'],
+  inbound: ['text', 'image', 'file', 'audio', 'video'], outbound: ['text', 'image', 'file', 'link', 'card'], history: true, actions: true,
+  replyTargets: ['original-message', 'thread'], sendIdempotency: 'provider-window' }
+/** Legacy accounts belong to Feishu without changing their durable Connector or message identities. */
+export function providerIdOf(account: { provider?: string }): string { return account.provider ?? 'feishu' }
 export interface ConnectorService {
+  /** Owner-only management operations; never registered as model tools. */
+  manage?(endpoint: string, payload: unknown, signal?: AbortSignal): Promise<unknown>
+  prepareDialogue?(botId: string, conversationKey: string, expectedFingerprint: string): Promise<string>
+
+  readResource?(botId: string, route: ImReplyRoute, key: string, options: { expectedFingerprint: string; signal: AbortSignal; maxBytes: number }): Promise<Buffer>
   contractVersion: number
   inboundVersion: number
   listBots(): Promise<{ botId: string; channel: string }[]>

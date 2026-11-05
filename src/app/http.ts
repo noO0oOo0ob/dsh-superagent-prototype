@@ -212,6 +212,12 @@ function routes(runtime: HttpHost): Routes {
       runtime.effects?.enqueue('reply', params.id, {})
       return { recorded: true }
     },
+    'GET personal/providers': () => runtime.connectors?.definitions() ?? [],
+    'POST personal/providers/:id': async ({ params, body }) => {
+      if (!runtime.connectors) throw new RouteError(404, 'Connectors are unavailable')
+      const input = z.object({ endpoint: z.string().min(1).max(100), payload: z.unknown() }).strict().parse(await body(64_000))
+      return runtime.connectors.manage(params.id, input.endpoint, input.payload)
+    },
     'GET personal/bots': async () => ({ bots: await runtime.connectors?.discover() ?? [] }),
     'POST personal/deliveries/:id': async ({ params, body }) => {
       if (!runtime.connectors) throw new RouteError(404, 'Connectors are unavailable')

@@ -145,7 +145,7 @@ export class Runtime extends Service implements SourceHost {
       this.messageActions = new MessageActions(store, this.conversations, this.messageDelivery, trigger =>
         this.sources.scope(trigger).listened && !!this.nativeFeishu?.allowsCommand(String(trigger.meta.botId), String(trigger.meta.fingerprint),
           trigger.actor.id, trigger.meta.conversationType === 'group' ? 'group' : 'dm'))
-      this.inbound = new InboundFiles(store, new ArtifactFiles(join(machine.stateDir, 'inbound')), () => this.nativeFeishu, () => this.personal.view().config.artifacts.maxBytes)
+      this.inbound = new InboundFiles(store, new ArtifactFiles(join(machine.stateDir, 'inbound')), trigger => this.connectors.resourceReader(trigger), () => this.personal.view().config.artifacts.maxBytes)
       this.hooks = new Hooks({ store, config: () => this.personal.view().config.hooks, signal: this.lifetime })
       this.vault = new Vault(store, () => this.personal.view().config.vault, { get: id => this.results.get(id), materialize: id => this.results.materialize(id) })
       this.repositories = new RepositoryRegistry({ stateDir: machine.stateDir, git: (args, cwd, signal) =>
@@ -347,9 +347,8 @@ export class Runtime extends Service implements SourceHost {
     const conversation = this.conversations.forTrigger(trigger)
     if (!conversation || conversation.generation !== trigger.meta.dialogueGeneration) return
     const defaults = dialogueSettings(trigger)
-    const workspace = conversation.workspace ?? this.conversations.bindWorkspace(conversation.sessionId, this.nativeFeishu
-      ? await this.nativeFeishu.prepareDialogue(String(trigger.meta.botId), conversation.id, String(trigger.meta.fingerprint))
-      : defaults.workspace ?? join(this.machine.stateDir, 'conversations'))
+    const workspace = conversation.workspace ?? this.conversations.bindWorkspace(conversation.sessionId, await this.connectors.prepareDialogue(trigger, conversation.id)
+      ?? defaults.workspace ?? join(this.machine.stateDir, 'conversations'))
     await this.sessions.ensure(conversation.sessionId, workspace,
       `IM · ${String(trigger.meta.conversationTitle ?? trigger.meta.conversationId)}`, 'orchestrator')
     const candidate = this.engine.candidate(trigger.id)
@@ -371,6 +370,9 @@ export class Runtime extends Service implements SourceHost {
       } })
     this.nativeFeishu = native
     nativeDelivery(native, this.messageDelivery, this.results)
+    native.service.readResource = (botId, route, key, options) => native.readResource(botId, route, key, options)
+    native.service.manage = (endpoint, payload, signal) => native.rpc(endpoint, payload, signal)
+    native.service.prepareDialogue = (botId, key, fingerprint) => native.prepareDialogue(botId, key, fingerprint)
     this.disposers.push(this.connectors.bind(native.service))
     await native.start()
   }

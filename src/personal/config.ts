@@ -12,6 +12,8 @@ import type { Store } from '../app/store.ts'
 export const PersonalId = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/)
 export const ConnectorConfigSchema = z.object({
   id: PersonalId,
+  provider: PersonalId.optional(),
+  channel: PersonalId.optional(),
   enabled: z.boolean().default(false),
   intake: z.enum(['account', 'restricted']).default('restricted'),
   botId: z.string().trim().default(''),
@@ -20,6 +22,8 @@ export const ConnectorConfigSchema = z.object({
     listen: z.enum(['mentions', 'all']).default('mentions') }).strict()).default([]),
   allowedSenders: z.array(z.string().trim().min(1)).default([]),
 }).strict().superRefine((value, ctx) => {
+  if (value.provider && value.provider !== 'feishu' && !value.channel)
+    ctx.addIssue({ code: 'custom', message: 'A provider account needs an explicit channel' })
   if (value.enabled && (!value.botId || !value.fingerprint))
     ctx.addIssue({ code: 'custom', message: 'An enabled Connector needs a bot and verified fingerprint' })
   if (value.enabled && value.intake === 'restricted' && (!value.conversations.length || !value.allowedSenders.length))
@@ -42,8 +46,10 @@ export const PersonalConfigSchema = z.object({
   if (new Set(value.connectors.map(item => item.id)).size !== value.connectors.length)
     ctx.addIssue({ code: 'custom', message: 'Duplicate Connector IDs' })
   const enabled = value.connectors.filter(item => item.enabled)
-  if (new Set(enabled.map(item => item.botId)).size !== enabled.length)
-    ctx.addIssue({ code: 'custom', message: 'One bot may have only one enabled Connector' })
+  if (new Set(enabled.map(item => `${item.provider ?? 'feishu'}:${item.botId}`)).size !== enabled.length)
+    ctx.addIssue({ code: 'custom', message: 'One bot may have only one enabled Connector per provider' })
+  if (new Set(enabled.map(item => `${item.provider ?? 'feishu'}:${item.fingerprint}`)).size !== enabled.length)
+    ctx.addIssue({ code: 'custom', message: 'One verified account may have only one enabled Connector per provider' })
 })
 export type PersonalConfig = z.infer<typeof PersonalConfigSchema>
 const configKey = record<{ version: 1; revision: number; config: PersonalConfig }>('personal-config')

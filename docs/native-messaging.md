@@ -17,6 +17,14 @@ Open **super-personal-Agent → Message center → Channels and bots** for Feish
 
 The copied channel rail and account pane occupy the remaining panel height and scroll independently. At narrow panel widths the rail moves above the content; settings tabs support arrow keys and retain their own horizontal scrolling. Returning from account settings preserves the card expansion, list position and keyboard focus. Unsupported channels and voice settings have no visible entry.
 
+## Provider management
+
+`Connectors.register(definition, service)` keeps independent provider lifecycles. Accounts select a provider and channel; Feishu and Lark share the Feishu provider. Registration, replacement and disposal only affect that provider. Refresh starts account acquisitions without waiting for provider I/O; callers observe the per-account connecting, ready or error state. Account discovery reports failures per provider. Management, dialogue-directory preparation, attachment reads, history and delivery resolve the captured account's service and never fall back to another provider.
+
+Capabilities describe onboarding, content types, reply targets, history, actions and whether provider deduplication has a bounded window. The transport still reports actual platform size or permission failures; unknown send outcomes require reconciliation. Only Feishu/Lark is shipped in the UI. The email-named adapter in tests verifies separation and is not an implemented email channel.
+
+Legacy accounts without a provider resolve to Feishu. Their Connector, Trigger, Thread and delivery identities stay unchanged. An explicit provider migration does not replay messages; native account synchronization removes only that provider's stale accounts. Enabled duplicate account fingerprints within one provider are rejected.
+
 ## Stages
 
 1. [x] Pin and copy upstream Feishu/shared/UI source and focused tests.
