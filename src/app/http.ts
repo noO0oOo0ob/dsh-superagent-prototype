@@ -11,6 +11,8 @@ import { PromptConflict, SKILL_NAME, SKILL_PREFIX, TEAM_SECTIONS, builtInBase, b
 import { policyVersion } from '../policy.ts'
 import { SettingsConflict, type Settings } from './settings.ts'
 import { SetupError, type SetupProblem } from '../setup.ts'
+import { WorkerModelsSchema, type WorkerModels } from '../models.ts'
+import type { inspectWorkerModels } from './worker-models.ts'
 import { UserError, type EngineForPeople, type Ticket } from '../core/index.ts'
 import type { Deployment, Machine } from '../deployment.ts'
 import type { DshExecutor } from '../executor/dsh.ts'
@@ -74,6 +76,7 @@ export interface HttpHost {
   checkSetup(): void
   requestPass(): void
   models(): Promise<ModelCatalog>
+  workerModels(config?: WorkerModels): ReturnType<typeof inspectWorkerModels>
 }
 /**
  * Represents a client-facing 400 or 404 error raised during management route parsing or lookup.
@@ -301,6 +304,8 @@ function routes(runtime: HttpHost): Routes {
     'POST policy-sync/:id': async ({ params }) => ({ policy: await runtime.settings.sync(params.id) }),
     'POST setup/check': () => { runtime.checkSetup(); return { restarting: true } },
     'GET models': () => runtime.models(),
+    'GET worker-models': () => runtime.workerModels(),
+    'POST worker-models/check': async input => runtime.workerModels(WorkerModelsSchema.parse(await promptBody(input))),
     'GET prompts': ({ query }) => { const { revision, offset } = PromptsQuery.parse(query); return promptsView(runtime, revision, offset) },
     'PUT prompts': async input => {
       const request = z.object({ config: z.unknown(), baseRevision: z.number().int().nonnegative() }).parse(await promptBody(input))

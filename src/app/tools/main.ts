@@ -14,6 +14,9 @@ import type { Sessions } from '../sessions.ts'
 import type { Settings } from '../settings.ts'
 import type { Store } from '../store.ts'
 import { AcknowledgementSchema, readTool, tool, type Tool } from './tool.ts'
+import { ModelProfileIdSchema } from '../../models.ts'
+import { ModelRoutingError } from '../model-routing.ts'
+import { planWorkerModel, profileChoices } from '../worker-models.ts'
 
 const RoutingNoteSchema = z.string().trim()
   .refine(text => wordCount(text) <= NOTE_WORDS, `Routing note must not exceed ${NOTE_WORDS} words (Chinese uses word segmentation). Shorten it; do not split it across deliveries.`)
@@ -32,6 +35,8 @@ export interface MainToolsHost {
   sendReplies(): Promise<void>
   /** Runs an Engine command initiated by the main Session without emitting self-notifications. */
   quietly<T>(run: () => T): T
+  /** Recheck conversation ownership after asynchronous model preflight. */
+  authorizeRoute?(triggerId: string, ticketId: string | undefined, kind: string): void
 }
 /** Schedules an Engine pass to execute the recorded routing decision and formats the tool response. */
 function routed(host: MainToolsHost, result: { decision?: DecisionKind; reason: string; ticketId?: string | undefined }) {
@@ -46,6 +51,7 @@ const fromDecision = (decision: Decision) => ({ decision: decision.kind, reason:
  * runs (`FIELDS`), so an item that lacks one, or whose value breaks a limit, is refused alone.
  */
 const RouteItemSchema = z.object({
+  model_profile: ModelProfileIdSchema.optional().describe('accept only: choose an enabled profile from personal_agent_model_profiles; omission uses the configured default. Existing tasks retain their model.'),
   resource_ids: z.array(z.string().min(1)).max(32).optional().describe('accept: explicit configured repository IDs; empty means no repository. Never guess resource IDs.'),
   kind: z.enum(['accept', 'attach', 'respond', 'ignore', 'stop']),
   text: z.string().nullish().describe('respond: the actual conversational answer in the source language, sent to the original message without creating a ticket.'),
@@ -60,7 +66,7 @@ const RouteItemSchema = z.object({
 }).strict()
 type RouteItem = z.infer<typeof RouteItemSchema>
 type Kind = RouteItem['kind']
-type Field = Exclude<keyof RouteItem, 'kind' | 'trigger_id' | 'resource_ids' | 'silence_requested'>
+type Field = Exclude<keyof RouteItem, 'kind' | 'trigger_id' | 'resource_ids' | 'silence_requested' | 'model_profile'>
 /** Each field's check, the kinds whose items read it and those that need it; an item of another kind leaves it unread. */
 const FIELDS: Record<Field, { check: z.ZodType; reads: readonly Kind[]; needs: readonly Kind[] }> = {
   text: { check: z.string().trim().min(1).max(20000), reads: ['respond'], needs: ['respond'] },
@@ -73,6 +79,7 @@ const FIELDS: Record<Field, { check: z.ZodType; reads: readonly Kind[]; needs: r
 }
 /** Why an item cannot run: a field its kind needs is missing, or one it reads breaks its limit. */
 function invalid(item: RouteItem): string | undefined {
+  if (item.model_profile !== undefined && item.kind !== 'accept') return 'model_profile is only allowed when accepting a new task; existing tasks retain their model'
   for (const [field, { check, reads, needs }] of Object.entries(FIELDS) as [Field, typeof FIELDS[Field]][]) {
     const value = item[field]
     if (!reads.includes(item.kind)) continue
@@ -90,7 +97,8 @@ type Routed = { decision?: DecisionKind | 'respond'; reason: string; ticketId?: 
  * Carry out one routing decision as its Engine command, in a transaction of its own. `decided` holds the Triggers that this
  * call's earlier items decided, with their batches.
  */
-function route(host: MainToolsHost, item: RouteItem, decided: ReadonlyMap<string, string>): Routed | { refused: string } {
+async function route(host: MainToolsHost, item: RouteItem, decided: ReadonlyMap<string, string>, signal: AbortSignal): Promise<Routed | { refused: string }> {
+  host.authorizeRoute?.(item.trigger_id, item.ticket_id ?? undefined, item.kind)
   const note = item.note ? { note: item.note } : {}
   // A Trigger an earlier item decided went with that item's Decision, also as a member of its batch.
   // A stop of it for another ticket is the Engine's to judge.
@@ -99,8 +107,12 @@ function route(host: MainToolsHost, item: RouteItem, decided: ReadonlyMap<string
   switch (item.kind) {
     case 'accept': {
       const before = host.store.triggers.disposition(item.trigger_id)?.decisionId
+      const existing = before && !host.engine.candidate(item.trigger_id) ? host.store.tickets.list().find(ticket => ticket.decisionId === before) : undefined
+      if (existing) return { decision: 'accept', reason: `Already accepted as ${existing.id}; model, title and acknowledgement unchanged`, ticketId: existing.id }
+      const modelPlan = await planWorkerModel(host.context, () => host.store.settings(), item.model_profile, signal)
+      host.authorizeRoute?.(item.trigger_id, undefined, item.kind)
       const decision = host.engine.decide(item.trigger_id, { kind: 'accept', title: item.title!, scope: item.title!, reason: { code: 'explicitRouted' },
-        audit: { resource_ids: item.resource_ids ?? [] }, acknowledgement: item.acknowledgement!, name: item.worktree_name!, ...note })
+        modelPlan, audit: { resource_ids: item.resource_ids ?? [] }, acknowledgement: item.acknowledgement!, name: item.worktree_name!, ...note })
       // A Decision that created no ticket is the item's refusal; one that existed before keeps what it was accepted with.
       if (decision.kind !== 'accept' || !decision.ticketId) return { refused: `Ticket was not created: ${reasonText(decision.reason)}` }
       if (decision.id === before) {
@@ -147,25 +159,29 @@ function routeTool(host: MainToolsHost): Tool {
     name: 'personal_agent_route',
     description: 'Route candidates by the card\'s trigger_id, one item each: accept new work; attach to a ticket; stop on a human request; respond to conversation without a ticket; ignore unaddressed observations or requested silence. Follow dispatch. Items run in order; refusal of one leaves the others. Inferred acceptance requires personal_agent_eval_decide.',
     schema: z.object({ decisions: z.array(RouteItemSchema).min(1).max(20) }).strict(),
-    execute: async ({ decisions }) => {
+    execute: async ({ decisions }, signal) => {
       const decided = new Map<string, string>()
-      const results = decisions.map(item => {
+      const run = async (item: RouteItem) => {
         const head = { trigger_id: item.trigger_id, kind: item.kind }
         const problem = invalid(item)
         if (problem) return { ...head, refused: problem }
         try {
-          const result = route(host, item, decided)
+          const result = await route(host, item, decided, signal)
           if ('refused' in result) return { ...head, ...result }
           for (const id of result.triggerIds ?? []) if (!decided.has(id)) decided.set(id, item.trigger_id)
           const ticket = result.ticketId ? host.store.tickets.get(result.ticketId) : undefined
           return { ...head, ...(result.decision ? { decision: result.decision } : {}), reason: result.reason,
             ...(ticket ? { ticket: ticketCard(ticket) } : {}), ...(result.reply ? { reply: result.reply } : {}) }
         } catch (error) {
+          signal.throwIfAborted()
+          if (error instanceof ModelRoutingError) return { ...head, refused: error.message, code: error.code }
           if (error instanceof UserError || error instanceof RoutingDenied) return { ...head, refused: error.message }
           host.context.logger.warn('dsh-super-personal-agent could not route trigger %s: %s', item.trigger_id, String(error))
           return { ...head, refused: `Not recorded: ${error instanceof Error ? error.message : String(error)}; retry this item` }
         }
-      })
+      }
+      const results = []
+      for (const item of decisions) results.push(await run(item))
       host.requestPass()
       if (results.some(result => 'reply' in result)) {
         await host.sendReplies()
@@ -179,6 +195,8 @@ function routeTool(host: MainToolsHost): Tool {
 export function mainTools(host: MainToolsHost, agent: Agent): Tool[] {
   const resources: MainResourceHost = { ...host.resources, sessions: host.sessions, settings: host.settings }
   return [
+    tool({ name: 'personal_agent_model_profiles', description: 'Read enabled Worker model profiles before accepting a new task. Follow-ups keep the existing task model.',
+      schema: z.object({}).strict(), execute: async () => profileChoices(host.store.settings()) }),
     readTool('Read one page of a resource the resource parameter lists, such as the ticket list or a ticket. Follow next_offset, and next_resource where a page names one.',
       false, (resource, offset, limit, signal) => readResource(resources, resource, offset, limit, undefined, signal)),
     routeTool(host),

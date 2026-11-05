@@ -1,6 +1,7 @@
 /** Proactive candidate assessment for the main Session: relays candidate cards, serves bounded context reads, and records outcomes. */
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { z } from 'zod'
+import { ModelProfileIdSchema, type ModelProfileId, type WorkerModelPlan } from '../models.ts'
 import { reasonText, threadKey, type Assessor, type AssessmentOutcome, type Candidate, type EngineForMainSession,
   type Trigger } from '../core/index.ts'
 import { AdmissionDirectionSchema, RuleAssessmentSchema, assessmentOutcome, directionAllowed, type Settings } from '../policy.ts'
@@ -19,6 +20,7 @@ import type { Effects } from './effects.ts'
 export const WorktreeNameSchema = z.string().max(32).regex(/^[a-z]+(?:-[a-z0-9]+){0,3}$/, 'Use 1–4 short English words in lowercase kebab-case, at most 32 characters').describe('Meaningful short English ticket name, e.g. fix-plan-color. Translate Chinese titles into English; no Chinese, pinyin or generic ticket names. 1–4 lowercase words in kebab-case, at most 32 characters.')
 /** Schema for the main Session's proactive candidate assessment decision (`personal_agent_eval_decide`). */
 export const AssessmentSchema = z.object({
+  model_profile: ModelProfileIdSchema.optional().describe('New accepted tasks only; omission uses the default Worker profile.'),
   decision: z.enum(['accept', 'ignore', 'unavailable']),
   rule_assessments: z.array(RuleAssessmentSchema)
     .refine(assessments => new Set(assessments.map(assessment => assessment.rule_id)).size === assessments.length,
@@ -47,6 +49,7 @@ interface EvalReads { cache: ReadCache; context?: AssessmentContext; error?: str
 const NO_CONTEXT = 'This Source gives no Thread context; assess the Trigger\'s own text and the batch.'
 /** Host dependencies used by `MasterAssessor`. */
 export interface AssessorHost {
+  planModel(profile: ModelProfileId | undefined, signal?: AbortSignal): Promise<WorkerModelPlan>
   /** Active evaluations in `Engine` that the assessor reads and decides. */
   readonly engine: Pick<EngineForMainSession, 'candidate' | 'candidateDelivered' | 'decide'>
   readonly commands: Commands
@@ -273,6 +276,7 @@ export class MasterAssessor implements Assessor {
     const { candidate } = this.evalFor(triggerId)
     signal?.throwIfAborted()
     let outcome: AssessmentOutcome = assessmentOutcome(result, this.host.settings(), candidate.strength)
+    if (outcome.kind === 'accept') outcome = { ...outcome, modelPlan: await this.host.planModel(result.model_profile, signal) }
     if (outcome.kind === 'accept' && outcome.acknowledgement) outcome = { ...outcome, acknowledgement: checkedImText(outcome.acknowledgement) }
     const decision = this.host.engine.decide(triggerId, { ...outcome, evalId: candidate.evalId })
     return { state: decision.kind, ...(decision.ticketId ? { ticket_id: decision.ticketId } : {}), reason: reasonText(decision.reason) }

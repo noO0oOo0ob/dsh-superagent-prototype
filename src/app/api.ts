@@ -60,6 +60,8 @@ export interface Api {
   'POST policy-sync/:id': { response: { policy: unknown } }
   'POST setup/check': { response: { restarting: true } }
   'GET models': { response: ModelCatalog }
+  'GET worker-models': { response: Awaited<ReturnType<typeof import('./worker-models.ts').inspectWorkerModels>> }
+  'POST worker-models/check': { body: import('../models.ts').WorkerModels; response: Api['GET worker-models']['response'] }
   'GET prompts': { query?: { revision?: number; offset?: number }; response: PromptsView }
   'PUT prompts': { body: { config: PromptConfig; baseRevision: number }; response: { revision: number; context_delivery: Delivery } }
   'POST prompts/preview': { body: PromptConfig; response: ReturnType<Prompts['preview']> }

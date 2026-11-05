@@ -8,6 +8,8 @@ import type { SourceHost } from '../sources/host.ts'
 import type { HealthBoard, HealthEntry } from '../infra/health.ts'
 import type { SourceRegistry } from '../sources/registry.ts'
 import { resolveRoleModel } from './role-models.ts'
+import { workerModels } from '../models.ts'
+import { validateWorkerModels } from './worker-models.ts'
 import { changedPaths, settingsNotice } from './notices.ts'
 import type { Sessions } from './sessions.ts'
 import { setupChanged, type Setup } from './setup.ts'
@@ -157,10 +159,14 @@ export class Settings {
     const parsed = rules.parse(value, sources, id)
     const current = store.settings()
     const candidate = rules.merge(current, parsed, id)
-    const model = block === 'eval' ? candidate.eval.model : block === 'executor' ? candidate.executor.model : null
-    const previous = block === 'eval' ? current.eval.model : block === 'executor' ? current.executor.model : null
+    const model = block === 'eval' ? candidate.eval.model : null
+    const previous = block === 'eval' ? current.eval.model : null
     if (model && JSON.stringify(model) !== JSON.stringify(previous)) {
       try { await resolveRoleModel(this.host.context, model) }
+      catch (error) { throw new UserError('modelUnavailable', { block, error: error instanceof Error ? error.message : String(error) }) }
+    }
+    if (block === 'executor' && JSON.stringify(workerModels(candidate.executor)) !== JSON.stringify(workerModels(current.executor))) {
+      try { await validateWorkerModels(this.host.context, workerModels(candidate.executor), this.host.lifetime) }
       catch (error) { throw new UserError('modelUnavailable', { block, error: error instanceof Error ? error.message : String(error) }) }
     }
     rules.guard?.(current, candidate, origin)

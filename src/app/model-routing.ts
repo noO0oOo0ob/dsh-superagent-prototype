@@ -3,7 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ResolvedModelRoute, RoleModel } from '../models.ts'
 import { resolveRoleModel } from './role-models.ts'
 
-export type ModelRoutingCode = 'modlensUnavailable' | 'modelUnavailable' | 'capabilitiesUnknown' | 'visionRouteUnavailable'
+export type ModelRoutingCode = 'modlensUnavailable' | 'modelUnavailable' | 'capabilitiesUnknown' | 'visionRouteUnavailable' | 'profileUnavailable' | 'configurationChanged'
 
 /** A failed preflight leaves task creation and Session selection untouched. */
 export class ModelRoutingError extends Error {

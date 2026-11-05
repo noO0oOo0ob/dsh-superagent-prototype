@@ -13,6 +13,8 @@ import { ticketCard } from './cards.ts'
 import type { Sessions } from './sessions.ts'
 import type { Store } from './store.ts'
 import { tool, type Tool } from './tools/tool.ts'
+import { ModelProfileIdSchema } from '../models.ts'
+import { planWorkerModel } from './worker-models.ts'
 
 const latest = record<string>('personal-main-latest-request')
 /** dsh-im 5.10 emits platform-prefixed UUIDs for both prompts and steering. */
@@ -98,14 +100,19 @@ export class MainInput {
     tool({ name: 'personal_agent_submit', description: 'Delegate the original local user request to background work, or explicitly continue an existing ticket. Never delegate mere discussion or a request to wait.',
       schema: z.object({ trigger_id: z.string().min(1), title: z.string().trim().min(1).max(200), worktree_name: WorktreeNameSchema,
         resource_ids: z.array(z.string().min(1)).max(32).optional(),
+        model_profile: ModelProfileIdSchema.optional().describe('New tasks only; omit to use the default Worker profile.'),
         ticket_id: z.string().min(1).optional() }).strict(),
-      execute: async args => {
+      execute: async (args, signal) => {
         const request = current(args.trigger_id)
+        if (args.ticket_id && args.model_profile) throw new Error('Existing tasks retain their original model profile')
+        const previous = store.triggers.disposition(request.id)?.decisionId
+        const existing = previous && !engine.candidate(request.id) ? store.tickets.list().find(ticket => ticket.decisionId === previous) : undefined
+        const modelPlan = args.ticket_id || existing ? undefined : await planWorkerModel(this.host.context, () => store.settings(), args.model_profile, signal)
         const ticket = store.atomic(() => {
           if (args.ticket_id && args.resource_ids?.length) throw new Error('Existing tasks retain their original repository selections')
           if (args.ticket_id) return engine.attach(args.ticket_id, request.id)
           const decision = engine.decide(request.id, { kind: 'accept', title: args.title, scope: args.title,
-            name: args.worktree_name, audit: { resource_ids: args.resource_ids ?? [] }, reason: { code: 'explicitRouted' } })
+            name: args.worktree_name, modelPlan, audit: { resource_ids: args.resource_ids ?? [] }, reason: { code: 'explicitRouted' } })
           if (!decision.ticketId) throw new Error('The request was not authorized for execution')
           return store.tickets.get(decision.ticketId)!
         })

@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { vi, type Mock } from 'vitest'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
-import type { Session } from '@deepseek-ai/dsh-session'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { Runtime } from '../../src/app/runtime.ts'
 import { Store } from '../../src/app/store.ts'
 import { SettingsSchema } from '../../src/policy.ts'
@@ -170,6 +170,7 @@ export async function startRuntime(seed?: (store: Store) => void) {
   let http!: HttpHandler
   const resolveDefault = async (id: string) => agents.has(id) ? { agent: agents.get(id) } : { error: { code: 'session/not-found' } }
   const controller = {
+    modelCatalog: vi.fn(async () => ({ default: { provider: 'test-native', model: 'default' }, groups: [], failures: [] })),
     create: vi.fn(async ({ sessionId }: { sessionId: string }) => {
       if (agents.has(sessionId)) return
       const agentCtx = new Context()
@@ -212,7 +213,7 @@ export async function startRuntime(seed?: (store: Store) => void) {
         turn++
         take(true)
       })
-      const session = { id: sessionId, snapshotEvents: () => [], requestHeader: () => undefined, append: vi.fn() }
+      const session = Session.create(SessionId(sessionId))
       let status = 'idle'
       const idle: (() => void)[] = []
       // A cancel drops the inbox unless kept, and the turn it stops ends a moment later, which DSH says.
@@ -240,7 +241,9 @@ export async function startRuntime(seed?: (store: Store) => void) {
   const webServer = { host: '127.0.0.1', port: 3082, register: (route: { handler: HttpHandler }) => { http = route.handler; return () => {} } }
   const jobs = jobRegistry(id => agents.get(id))
   const subagents = subagentRuntime(agents)
-  const services = { agents, llm: { resolveCallConfig: vi.fn(async (value: unknown) => value) }, sessionController: controller,
+  const services = { agents, llm: { resolveCallConfig: vi.fn(async (value: unknown) => value),
+    resolveModelInfo: vi.fn(async () => ({ inputModalities: ['text', 'image'] })) }, sessionController: controller,
+    tools: { get: (name: string) => name === 'modlens_read_image' ? {} : undefined },
     sessionPersistence: persistence, workspaceRegistry: { create: async (cwd: string) => ({ id: cwd }) }, permissionPresets: { set: () => {} }, subprocess, webServer,
     jobs: jobs.service, subagents: subagents.service }
   const ctx = new Context()

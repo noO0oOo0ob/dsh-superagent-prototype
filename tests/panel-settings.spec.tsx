@@ -9,6 +9,25 @@ import { usePanel, mount, remount, settle, all, find, tab, click, type, text, fi
 import { server } from './fixtures/panel-server.ts'
 
 usePanel()
+it('enables a second profile, selects it as default and checks its route before saving', async () => {
+  await mount()
+  await click(zh['tab.execution'])
+  await click(find(zh['tab.settings'], '.spa-status-head button'))
+  await click(document.querySelector<HTMLButtonElement>('button[aria-label="启用基础档位"]')!)
+  const [provider, model] = all('.spa-model input')
+  await type(provider as HTMLInputElement, 'spa-worker-provider')
+  await type(model as HTMLInputElement, 'spa-worker-model')
+  await click(find(zh['modelProfile.basic'], 'button'))
+  await click(zh.checkModelRoutes)
+  expect(text()).toContain('实际入口：spa-worker-provider / spa-worker-model')
+  expect(text()).toContain(zh.modlensEngineUnchecked)
+  await click(zh.save)
+  expect(server.settings.executor.models).toMatchObject({ default: 'basic', profiles: {
+    basic: { model: { provider: 'spa-worker-provider', model: 'spa-worker-model' } }, advanced: null,
+  } })
+  expect(document.querySelector<HTMLButtonElement>('button[aria-label="启用基础档位"]')!.closest('fieldset')!.disabled).toBe(true)
+})
+
 it('keeps a person\'s own value where another save changed the same setting, and says so', async () => {
   await mount()
   await click(zh['tab.execution'])
@@ -51,11 +70,12 @@ it('saves the Eval block on the Policy settings and the Executor with its execut
   const [workerProvider, workerModel, effort] = all('.spa-model input')
   await type(workerProvider as HTMLInputElement, 'spa-worker-provider'); await type(workerModel as HTMLInputElement,
     'spa-worker-model'); await type(effort as HTMLInputElement, 'high')
-  expect([...document.querySelectorAll('#spa-worker-model-efforts option')].map(option => option.getAttribute('value'))).toEqual(['high'])
+  expect([...document.querySelectorAll('#spa-worker-standard-efforts option')].map(option => option.getAttribute('value'))).toEqual(['high'])
   await click(zh.save)
-  expect(server.settings.executor).toEqual({ maxWorkers: 5, directory: '/srv/work',
-    prepare: 'git worktree add "$DSH_SUPER_PERSONAL_AGENT_DIR"', blockedCommands: ['gh-personal', 'gh.other'], model: { provider: 'spa-worker-provider',
-      model: 'spa-worker-model', reasoningEffort: 'high' } })
+  expect(server.settings.executor).toMatchObject({ maxWorkers: 5, directory: '/srv/work',
+    prepare: 'git worktree add "$DSH_SUPER_PERSONAL_AGENT_DIR"', blockedCommands: ['gh-personal', 'gh.other'], model: null,
+    models: { default: 'standard', profiles: { basic: null, advanced: null, standard: { model: { provider: 'spa-worker-provider',
+      model: 'spa-worker-model', reasoningEffort: 'high' } } } } })
   expect(server.requests.filter(request => request.method === 'PUT').map(request => request.path)).toEqual(['settings/eval',
     'settings/executor'])
 })

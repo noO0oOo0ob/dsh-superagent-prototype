@@ -1,4 +1,5 @@
 import { PersonalConfigSchema } from '../../src/personal/config.ts'
+import { MODEL_PROFILES, WorkerModelsSchema, workerModels, type WorkerModels } from '../../src/models.ts'
 /**
  * Typed fake management API server for panel tests. Implements every route in `src/app/api.ts` and records any
  * undeclared query parameter or body mismatch in `server.misuse`, which `usePanelServer` asserts is empty after each test.
@@ -25,6 +26,14 @@ import type { SourceKind } from '../../src/sources/kind.ts'
 import { testDeployment } from './deployment.ts'
 
 export const MEMBER = 'ou_alice'
+function checkedModels(config: WorkerModels): ApiResponse<'GET worker-models'> {
+  return { dependency: { loaded: true, engine: 'not-checked' }, profiles: MODEL_PROFILES.map(id => {
+    const spec = config.profiles[id]
+    if (!spec) return { id, state: 'disabled' }
+    const model = spec.model ?? { provider: 'host', model: 'default' }
+    return { id, state: 'ready', route: { requested: model, effective: model, vision: 'native' } }
+  }) }
+}
 const ALLOWED: Record<string, { id: string; name?: string }[]> = { feishu: [{ id: MEMBER, name: 'Alice' }], github: [{ id: 'alice' }] }
 type Actor = TriggerRow['actor']
 /** Resolve an actor display label using the fixture policy's allowed list or the source kind's unnamed fallback. */
@@ -384,6 +393,8 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   'GET policy/history': { answer: () => server.history },
   'POST policy-sync/:id': { answer: ({ params }) => ({ policy: server.settings.policy.sources[params.id] }) },
   'POST setup/check': { answer: () => ({ restarting: true }) },
+  'GET worker-models': { answer: () => checkedModels(workerModels(server.settings.executor)) },
+  'POST worker-models/check': { body: true, answer: ({ body }) => checkedModels(WorkerModelsSchema.parse(body)) },
   'GET models': { answer: () => ({ default: { provider: 'host', model: 'default' }, routableProviders: [], failures: [],
     groups: [{ id: 'spa-worker-provider', name: 'Worker provider', models: [{ id: 'spa-worker-model', name: 'Worker model',
       reasoning: { efforts: [{ id: 'high', name: 'High' }] } }] }] }) },

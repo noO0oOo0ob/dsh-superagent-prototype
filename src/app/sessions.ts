@@ -13,7 +13,10 @@ import { AgentDelivery, messageId } from './delivery.ts'
 import type { Effects } from './effects.ts'
 import type { Variable } from './execution-environment.ts'
 import { RetryHealth } from './retry-health.ts'
-import { initializeRoleModel } from './role-models.ts'
+import { hasModelSelection, initializeRoleModel } from './role-models.ts'
+import { WorkerModelPlanSchema } from '../models.ts'
+import { resolveVisionModel } from './model-routing.ts'
+import { defaultModel } from './worker-models.ts'
 import { bundledSkills } from './skill-files.ts'
 import { SKILL_PREFIX, type PromptVersion, type Prompts } from './prompts.ts'
 import type { Store } from './store.ts'
@@ -152,7 +155,13 @@ export class Sessions {
     }
     if ('error' in result) throw result.error
     const settings = this.host.store.settings()
-    await initializeRoleModel(ctx, result.agent, this.host.defaults?.(id)?.model ?? (role === 'orchestrator' ? settings.eval.model : settings.executor.model))
+    if (!hasModelSelection(result.agent)) {
+      const ticket = this.ticketOf(result.agent)
+      const plan = ticket?.modelPlan ? WorkerModelPlanSchema.parse(ticket.modelPlan) : undefined
+      let model = plan?.route.effective ?? this.host.defaults?.(id)?.model ?? (role === 'orchestrator' ? settings.eval.model : settings.executor.model)
+      if (this.host.dialogue?.(id)) model = (await resolveVisionModel(ctx, model ?? await defaultModel(ctx), undefined, this.host.lifetime)).effective
+      await initializeRoleModel(ctx, result.agent, model)
+    }
     await this.decorate(result.agent)
     ctx.permissionPresets.set(result.agent.session, 'danger-full-access')
     await ctx.sessionController.rename({ sessionId: id as SessionId, title })

@@ -23,6 +23,8 @@ import type { SetupProblem } from '../setup.ts'
 import { DshExecutor, sourceTrigger, triggerMessage, workerSessionId } from '../executor/dsh.ts'
 import { ticketCard } from './cards.ts'
 import { MasterAssessor } from './assessment.ts'
+import { inspectWorkerModels, planWorkerModel } from './worker-models.ts'
+import { workerModels, type WorkerModels } from '../models.ts'
 import { z } from 'zod'
 import { runAsWorker } from '../infra/environment.ts'
 import { RepositoryRegistry, type RepositorySelection, type PreparedRepository } from '../personal/repositories.ts'
@@ -216,6 +218,7 @@ export class Runtime extends Service implements SourceHost {
         },
         repliedTo: trigger => repliedTo({ store, sources }, trigger) })
       this.assessor = new MasterAssessor({ get engine() { return runtime.engine }, commands, get deployment() { return setup.deployment }, effects,
+        planModel: (profile, signal) => planWorkerModel(ctx, () => store.settings(), profile, signal),
         settings: () => store.settings(), paused: () => this.paused(), threadContext: trigger => sources.threadContext(trigger),
         deliver: (id, text, trigger) => this.deliverCandidate(id, text, trigger), candidateCard: candidate => candidateCard(links, candidate) })
       const outbox = this.outbox = new Outbox({ store, effects, sources, commands, paused: () => this.paused(),
@@ -436,7 +439,8 @@ export class Runtime extends Service implements SourceHost {
       get deployment() { return setup.deployment },
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, get githubProblem() { return setup.githubProblem },
       configured: () => setup.configured(), links: () => runtime.links(), ticketEnvironment: ticket => runtime.ticketEnvironment(ticket),
-      checkSetup: () => { setup.check() }, requestPass: () => { passes.request() }, models: () => this.ctx.sessionController.modelCatalog() }
+      checkSetup: () => { setup.check() }, requestPass: () => { passes.request() }, models: () => this.ctx.sessionController.modelCatalog(),
+      workerModels: (config?: WorkerModels) => inspectWorkerModels(this.ctx, config ?? workerModels(store.settings().executor), this.lifetime) }
   }
   /** Idempotent stop; concurrent or repeated calls share the same shutdown promise. */
   stop(): Promise<void> { return this.stopping ??= this.shutdown() }

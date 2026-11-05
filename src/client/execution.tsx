@@ -7,7 +7,9 @@ import { DisclosureRow, Icon, InfoTip, Input, Pill } from './controls.tsx'
 import { SaveBar } from './draft.tsx'
 import { usePanel } from './provider.tsx'
 import { TicketLine } from './rows.tsx'
-import { ConfigHistory, Field, Fields, ModelField, numberOf, useBlockDraft, useSettings } from './settings-kit.tsx'
+import { ConfigHistory, Field, Fields, numberOf, useBlockDraft, useSettings } from './settings-kit.tsx'
+import { workerModels } from '../models.ts'
+import { WorkerModelsField } from './worker-models.tsx'
 import { localized } from './text.ts'
 import { ConfirmButton, Hint, LabelValue, LoadMore, LoadState, Section, StatusHead } from './widgets.tsx'
 
@@ -94,8 +96,7 @@ export function ExecutionSettings() {
       <Fields disabled={draft.busy}>
         <div className="spa-form spa-block">
           <h2 className="spa-block-title">{t('term.executor')}<InfoTip text={t('executorIntro')} /></h2>
-          <Section title={t('executorModel')} hint={t('executorModelHint')}><ModelField id="spa-worker-model" value={value.model}
-            onChange={model => edit({ model })} /></Section>
+          <WorkerModelsField value={workerModels(value)} onChange={models => edit({ models })} />
           <Field label={t('maxWorkers')} hint={t('maxWorkersHint')}>
             <Input type="number" min={LIMITS.maxWorkers.min} max={LIMITS.maxWorkers.max} required value={value.maxWorkers}
               onChange={event => edit({ maxWorkers: event.target.value })} />

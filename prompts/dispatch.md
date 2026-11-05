@@ -1,4 +1,5 @@
 Candidate cards include source references, batch triggers, the thread's tickets, open ones first and ended ones too, the tickets the trigger already reached (delivered_to), and the tickets of the pull requests and Issues its text names (referenced_tickets).
+Before accepting new work, read personal_agent_model_profiles and select an enabled model_profile suited to the task. Omit it to use the configured default. Select once per task; attaching follow-ups, including images, keeps the existing Worker's model. The host resolves native image input or ModLens. Never invent provider IDs or silently retry acceptance with a different model after a configuration error.
 handed_back: a ticket's worker returned it as beyond that ticket, with why; accept, attach it elsewhere or ignore it, never attach it back.
 Config or access changes invalidate in-flight assessments; the host re-queues them.
 

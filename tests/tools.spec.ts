@@ -202,7 +202,7 @@ it('decides a candidate\'s batch with its card\'s trigger: a second accept keeps
   const ticketId = results[0]!.ticket!.ticket_id
   expect(results).toEqual([
     expect.objectContaining({ trigger_id: first.id, decision: 'accept' }),
-    expect.objectContaining({ trigger_id: second.id, decision: 'accept', reason: `Already accepted as ${ticketId}; title and acknowledgement unchanged` }),
+    expect.objectContaining({ trigger_id: second.id, decision: 'accept', reason: `Already accepted as ${ticketId}; model, title and acknowledgement unchanged` }),
     { trigger_id: second.id, kind: 'ignore', refused: `Decided in this call with ${first.id}, whose Decision took its batch` },
   ])
   expect(h.runtime.store.tickets.get(ticketId)!.title).toBe('Retitle')

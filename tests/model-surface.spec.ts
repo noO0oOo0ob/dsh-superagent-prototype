@@ -37,7 +37,8 @@ interface Skill { name: string; description: string; content: string }
  * Maximum combined character count of system prompt and tool definitions per role (~5% above baseline).
  * Lower this limit when shrinking model-facing text; raise it only intentionally and explain why in the commit message.
  */
-const BUDGET: Record<Role, number> = { orchestrator: 68_000, worker: 44_000 }
+// Profile discovery and creation-time selection add a bounded schema; the provider catalogue stays behind a tool read.
+const BUDGET: Record<Role, number> = { orchestrator: 70_000, worker: 44_000 }
 const PROMPTS = 'prompts/, skills/', TOOLS = 'src/app/tools/', SESSIONS = 'src/app/sessions.ts'
 const NOTICES = 'src/app/notices.ts', LINKS = 'src/app/links.ts', ASSESSMENT = 'src/app/assessment.ts'
 const EXECUTOR = 'src/executor/dsh.ts', ERRORS = 'src/core/errors.ts'
@@ -130,9 +131,11 @@ async function start() {
   const resolveAgent = async (id: string) => agents.has(id) ? { agent: agents.get(id) } : { error: { code: 'session/not-found' } }
   const ctx = new Context()
   const history = { read: async () => ({ events: [] }), [Symbol.asyncDispose]: async () => {} }
-  const services = { agents, llm: { resolveCallConfig: async (value: unknown) => value },
+  const services = { agents, llm: { resolveCallConfig: async (value: unknown) => value, resolveModelInfo: async () => ({ inputModalities: ['text', 'image'] }) },
+    tools: { get: (name: string) => name === 'modlens_read_image' ? {} : undefined },
     workspaceRegistry: { create: async (cwd: string) => ({ id: cwd }) },
-    sessionController: { create, resolveAgent, selectModel: async () => {}, rename: async () => {}, inspect: async () => ({ events: [] }) },
+    sessionController: { create, resolveAgent, selectModel: async () => {}, rename: async () => {}, inspect: async () => ({ events: [] }),
+      modelCatalog: async () => ({ default: { provider: 'native', model: 'test' }, groups: [], failures: [] }) },
     sessionPersistence: { flush: async () => {}, open: async () => history }, permissionPresets: { set: () => {} }, subprocess,
     webServer: { host: '127.0.0.1', port: 3082, register: () => () => {} } }
   for (const [name, service] of Object.entries(services)) ctx.reflect.provide(name, service)

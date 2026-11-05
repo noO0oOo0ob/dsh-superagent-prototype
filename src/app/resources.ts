@@ -1,5 +1,6 @@
 /** Serves paginated context resources to personal_agent_read so large bodies stay out of model prompts until requested. */
 import type { SessionId } from '@deepseek-ai/dsh-session'
+import { workerModels } from '../models.ts'
 import { UserError, key, latestReport, reached, runningAssignment, threadKey, type Ticket, type Trigger } from '../core/index.ts'
 import { ticketContexts } from '../core/context.ts'
 import { batchOf, inputMessage, triggerMessage, workerSessionId } from '../executor/dsh.ts'
@@ -228,7 +229,7 @@ const ROUTES: readonly Route[] = [
   }],
   ['models', async read => {
     const host = main(read), catalog = await host.context.sessionController.modelCatalog(), settings = host.store.settings()
-    const roles = { orchestrator: settings.eval.model, worker: settings.executor.model }
+    const roles = { orchestrator: settings.eval.model, worker: settings.executor.model, workerProfiles: workerModels(settings.executor) }
     return { default: catalog.default, roles, failures: catalog.failures,
       providers: catalog.groups.map(group => ({ id: group.id, name: group.name, count: group.models.length, read: `models/${group.id}` })) }
   }],
