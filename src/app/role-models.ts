@@ -5,9 +5,9 @@ import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { RoleModel } from '../policy.ts'
 
 /** Resolve a configured route through the live provider; catalog membership is not a restriction. */
-export async function resolveRoleModel(ctx: Context, model: RoleModel): Promise<ModelSelection> {
+export async function resolveRoleModel(ctx: Context, model: RoleModel, signal?: AbortSignal): Promise<ModelSelection> {
   const value = await ctx.llm.resolveCallConfig({ provider: model.provider, model: model.model,
-    ...(model.reasoningEffort ? { reasoningEffort: ReasoningEffortId(model.reasoningEffort) } : {}) })
+    ...(model.reasoningEffort ? { reasoningEffort: ReasoningEffortId(model.reasoningEffort) } : {}) }, signal)
   return { provider: value.provider, model: value.model, ...(value.reasoningEffort ? { reasoningEffort: value.reasoningEffort } : {}) }
 }
 

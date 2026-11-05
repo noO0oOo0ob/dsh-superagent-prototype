@@ -102,6 +102,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: 3.18.5-alpha.1
         version: 3.18.5-alpha.1
+      '@liustack/modlens':
+        specifier: 3.27.2
+        version: 3.27.2
       '@types/jsdom':
         specifier: 28.0.3
         version: 28.0.3
@@ -991,6 +994,11 @@ packages:
   '@larksuiteoapi/node-sdk@1.73.0':
     resolution: {integrity: sha1-FYT9qiWk1i9KYPzbxnjiap3ZPWk=, tarball: http://r.npm.sankuai.com/@larksuiteoapi/node-sdk/download/@larksuiteoapi/node-sdk-1.73.0.tgz}
 
+  '@liustack/modlens@3.27.2':
+    resolution: {integrity: sha512-Xz8BkrLgBFyTlDiRcxv+sf4V0W0xsHFPaCcXV3GpJOWBgqCb2CrgJwrA8Tfd1JoLqS0LInrILEMky/AM+0j9gA==, tarball: https://registry.npmjs.org/@liustack/modlens/-/modlens-3.27.2.tgz}
+    engines: {node: '>=22.19'}
+    hasBin: true
+
   '@oxc-project/types@0.148.0':
     resolution: {integrity: sha1-gR0Yii4a81eERhuKBJDhOj12g3w=, tarball: http://r.npm.sankuai.com/@oxc-project/types/download/@oxc-project/types-0.148.0.tgz}
 
@@ -1398,6 +1406,10 @@ packages:
   combined-stream@1.0.8:
     resolution: {integrity: sha1-w9RaizT9cwYxoRCoolIGgrMdWn8=, tarball: http://r.npm.sankuai.com/combined-stream/download/combined-stream-1.0.8.tgz}
     engines: {node: '>= 0.8'}
+
+  commander@13.1.0:
+    resolution: {integrity: sha1-d2Fn22jHjzjczh+bjXuLmkiKv0Y=, tarball: http://r.npm.sankuai.com/commander/download/commander-13.1.0.tgz}
+    engines: {node: '>=18'}
 
   compressible@2.0.18:
     resolution: {integrity: sha1-r1PMprBw1MPAdQ+9dyhqbXzEb7o=, tarball: http://r.npm.sankuai.com/compressible/download/compressible-2.0.18.tgz}
@@ -3130,6 +3142,11 @@ snapshots:
       - supports-color
       - utf-8-validate
 
+  '@liustack/modlens@3.27.2':
+    dependencies:
+      commander: 13.1.0
+      undici: 8.11.2
+
   '@oxc-project/types@0.148.0': {}
 
   '@protobufjs/aspromise@1.1.2': {}
@@ -3433,6 +3450,8 @@ snapshots:
   combined-stream@1.0.8:
     dependencies:
       delayed-stream: 1.0.0
+
+  commander@13.1.0: {}
 
   compressible@2.0.18:
     dependencies:
