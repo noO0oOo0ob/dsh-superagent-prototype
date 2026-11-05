@@ -11,6 +11,7 @@ import { OverviewPage } from './overview.tsx'
 import { PanelProvider, usePanel, usePanelData } from './provider.tsx'
 import { HOME, TABS, initialLocation, lastSettingsGroup, remember, routeLabel, settingsRoute, type Location, type Route,
   type Tab } from './route.ts'
+import { MessagingPage } from './messaging.tsx'
 import { SettingsPage } from './settings.tsx'
 import { SourceStatus } from './source.tsx'
 import { actorName, errorText, reasonLabel, valueLabel, type T, readableMarkers } from './text.ts'
@@ -154,11 +155,12 @@ function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab
         paused={!!state?.paused} />
       case 'execution': return route.id !== undefined ? <TicketPage key={route.id} id={route.id} />
         : state ? <ExecutionStatus filter={route.query?.filter ?? 'open'} state={state} reload={reload} /> : waiting
+      case 'messaging': return <MessagingPage view={route.query?.view ?? 'accounts'} />
       case 'settings': return state ? <SettingsPage key={state.masterId} group={route.query.group} query={route.query} state={state}
         deploymentForm={deploymentForm} /> : waiting
     }
   })()
-  return <div className="spa-page">
+  return <div className="spa-page" data-layout={route.page === 'messaging' ? 'messaging' : undefined}>
     <div className="spa-column">
       <Header masterId={state?.masterId} />
       {error && state && <p className="spa-error" role="status">{error.message}</p>}

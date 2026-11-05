@@ -290,7 +290,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 
 | Path | Responsibility |
 | --- | --- |
-| `src/client/messaging.tsx` | Native Feishu account settings and per-part delivery recovery UI |
+| `src/client/messaging.tsx` | Independent message-center route, copied account settings and per-part delivery recovery UI |
 | `src/client/native-ui.mjs` | Namespaced copied Feishu UI exports |
 | `src/client/native-ui.d.mts` | Typed declarations for copied UI components |
 | `src/connectors/feishu-proxy.mjs` | Platform WebSocket proxy configuration |

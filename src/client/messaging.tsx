@@ -1,46 +1,76 @@
 /** Native account onboarding and durable per-part delivery recovery. */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { usePanel } from './provider.tsx'
 import { usePoll } from './api.ts'
-import { Button, Input } from './controls.tsx'
+import { Button, Input, SegmentedTabs } from './controls.tsx'
 import { LoadState, Section, Hint } from './widgets.tsx'
 import { deliveryState } from '../messaging/delivery-state.ts'
 import type { DeliveryRecord } from '../messaging/delivery.ts'
-import { FeishuSettingsTab, FeishuGroupSettingsPage, FeishuVoiceSettingsPage, FeishuSlashPanelSettingsPage,
+import { FeishuSettingsTab, FeishuGroupSettingsPage, FeishuSlashPanelSettingsPage,
   FeishuConversationDirectorySettingsPage, AccessPolicySettingsPage, BotSettingsContext, installImStyles,
-  installFeishuStyles, setImTranslator, en, zh, type NativeRpc, type BotAccount } from './native-ui.mjs'
+  MessagingShell, BotSettingsTabs, installFeishuStyles, setImTranslator, en, zh, type NativeRpc, type BotAccount, type AccountSettingsUpdate } from './native-ui.mjs'
 
-const tabs = ['group', 'access', 'directory', 'commands', 'voice'] as const
+const tabs = ['group', 'access', 'directory', 'commands'] as const
 type Tab = typeof tabs[number]
-/** Account operations stay inside the Personal Agent management API. */
-export function NativeMessaging() {
-  const { t, call } = usePanel()
-  const [account, setAccount] = useState<BotAccount>(), [tab, setTab] = useState<Tab>('group')
+/** Independent account and delivery views retain the panel's route history. */
+export function MessagingPage({ view }: { view: 'accounts' | 'deliveries' }) {
+  const { t, navigate } = usePanel()
   const locale = t('lang')
   setImTranslator(key => key === '$locale' ? locale : (locale === 'en' ? en : zh)[key] ?? key)
   useEffect(() => { const removeIm = installImStyles(), removeFeishu = installFeishuStyles(); return () => { removeFeishu(); removeIm() } }, [])
+  return <div className="spa-messaging">
+    <SegmentedTabs label={t('messaging.title')} value={view}
+      onChange={value => navigate({ page: 'messaging', query: { view: value } }, true)}
+      items={(['accounts', 'deliveries'] as const).map(value => ({ value, label: t(value === 'accounts' ? 'messaging.accounts' : 'messaging.deliveries'), id: `spa-messaging-${value}`, panelId: 'spa-messaging-content' }))} />
+    <div className="spa-messaging-content" id="spa-messaging-content" role="tabpanel" aria-labelledby={`spa-messaging-${view}`}>
+      {view === 'accounts' ? <MessagingShell label={t('messaging.accounts')} navigationLabel={t('messaging.channels')} channelLabel={t('messaging.feishu')}>
+        <NativeMessaging />
+      </MessagingShell> : <div className="spa-messaging-deliveries" tabIndex={0}><MessageDeliveries /></div>}
+    </div>
+  </div>
+}
+
+/** Account operations stay inside the Personal Agent management API. */
+function NativeMessaging() {
+  const { t, call } = usePanel()
+  const [account, setAccount] = useState<BotAccount>(), [tab, setTab] = useState<Tab>('group')
+  const [accountUpdate, setAccountUpdate] = useState<AccountSettingsUpdate>()
+  const root = useRef<HTMLDivElement>(null), back = useRef<HTMLButtonElement>(null)
+  const returnFocus = useRef<HTMLElement | null>(null), scrollTop = useRef(0)
   const rpcCall: NativeRpc = useCallback((endpoint, payload, signal) => call('POST personal/feishu', { body: { endpoint, payload }, signal }), [call])
-  const openBotSettings = useCallback((value: BotAccount) => { setAccount(value); setTab('group') }, [])
-  return <Section title={t('messaging.title')}>
-    <Hint>{t('messaging.intro')}</Hint>
-    <Hint>{t('messaging.formats')}</Hint>
-    <BotSettingsContext.Provider value={{ openBotSettings }}>
-      {account ? <div className="spa-messaging-settings">
-        <Button variant="outline" onClick={() => setAccount(undefined)}>{t('messaging.back')}</Button>
+  const openBotSettings = useCallback((value: BotAccount) => {
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    scrollTop.current = root.current?.parentElement?.scrollTop ?? 0
+    setAccount(value); setTab('group')
+  }, [])
+  const saved = (settings: AccountSettingsUpdate['settings']) => {
+    if (!account) return
+    setAccount(current => current && ({ ...current, ...settings }))
+    setAccountUpdate({ botId: account.botId, settings })
+  }
+  useLayoutEffect(() => {
+    const scroller = root.current?.parentElement
+    if (scroller) scroller.scrollTop = account ? 0 : scrollTop.current
+    if (account) back.current?.focus({ preventScroll: true })
+    else returnFocus.current?.focus({ preventScroll: true })
+  }, [account?.botId])
+  return <BotSettingsContext.Provider value={{ openBotSettings }}>
+    <div ref={root} className="spa-messaging-settings">
+      <div hidden={!!account}><FeishuSettingsTab rpcCall={rpcCall} accountUpdate={accountUpdate} /></div>
+      {account && <>
+        <Button ref={back} variant="outline" onClick={() => setAccount(undefined)}>{t('messaging.back')}</Button>
         <h3>{account.botName ?? account.botId}</h3>
-        <div className="spa-messaging-tabs" role="tablist" aria-label={t('messaging.settings')}>
-          {tabs.map(value => <Button key={value} role="tab" aria-selected={tab === value} onClick={() => setTab(value)}>{t(`messaging.tab.${value}`)}</Button>)}
-        </div>
-        <div role="tabpanel" key={`${account.botId}:${tab}`}>
+        <BotSettingsTabs tabs={tabs.map(id => ({ id, label: t(`messaging.tab.${id}`) }))} activeTabId={tab}
+          onChange={id => { const next = tabs.find(value => value === id); if (next) setTab(next) }} />
+        <div role="tabpanel" id={`spa-im-bot-settings-${tab}-panel`} aria-labelledby={`spa-im-bot-settings-${tab}-tab`} key={`${account.botId}:${tab}`}>
           {tab === 'group' && <FeishuGroupSettingsPage account={account} rpcCall={rpcCall} />}
-          {tab === 'access' && <AccessPolicySettingsPage channel="feishu" account={account} rpcCall={rpcCall} onSaved={policy => setAccount(current => current && ({ ...current, accessPolicy: policy }))} />}
+          {tab === 'access' && <AccessPolicySettingsPage channel="feishu" account={account} rpcCall={rpcCall} onSaved={accessPolicy => saved({ accessPolicy })} />}
           {tab === 'directory' && <FeishuConversationDirectorySettingsPage account={account} rpcCall={rpcCall} />}
-          {tab === 'commands' && <FeishuSlashPanelSettingsPage account={account} rpcCall={rpcCall} onSaved={panel => setAccount(current => current && ({ ...current, slashPanel: panel }))} />}
-          {tab === 'voice' && <><Hint>{t('messaging.voicePending')}</Hint><fieldset disabled><FeishuVoiceSettingsPage account={account} rpcCall={rpcCall} /></fieldset></>}
+          {tab === 'commands' && <FeishuSlashPanelSettingsPage account={account} rpcCall={rpcCall} onSaved={slashPanel => saved({ slashPanel })} />}
         </div>
-      </div> : <FeishuSettingsTab rpcCall={rpcCall} />}
-    </BotSettingsContext.Provider>
-  </Section>
+      </>}
+    </div>
+  </BotSettingsContext.Provider>
 }
 
 /** Successful parts remain immutable when a user resolves an uncertain send. */

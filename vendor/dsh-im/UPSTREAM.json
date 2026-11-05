@@ -222,7 +222,9 @@
     "test/channels/feishu/voice.test.mjs": "6baea7c7f78e24c1c25996fa0d657108cdd52ad7fd142cf03703cfd3a9cea3e2",
     "test/support/filesystem.mjs": "00da83f222779dd51f98d0a3956718e57fbb6f664187447d0bb64b8c195460dc",
     "plugin-src/client/access-policy-settings.js": "93186eec8ec75793bf6dfac3678c496cc17a287464264725ba4e062e605c6c9a",
-    "plugin-src/client/styles.js": "8a14b16d109a2ad03ce149c8b1f1abc8ce855a3325852ff91e49e623ac974961"
+    "plugin-src/client/styles.js": "8a14b16d109a2ad03ce149c8b1f1abc8ce855a3325852ff91e49e623ac974961",
+    "plugin-src/client/index.js": "cb1a8d6504d2cc28d3288e5fbb5bfb684da8088945250de1267cfe657ba99d16",
+    "plugin-src/client/bot-settings-tabs.js": "3d7599e59856a504a8d5e8f1ecabc6cbec6ff9df1b091ce9935ccdb053c11639"
   },
   "localChanges": [
     {
@@ -247,13 +249,13 @@
     },
     {
       "path": "plugin-src/client/channels/feishu/group-settings.js",
-      "sha256": "9f47332ced8f0cd672c5d7621be0889460015facd7433f70af6682be605ecc4a",
-      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+      "sha256": "3162a2c393699b7b9fa1020a0db507a88769af8c790e69e95812c9d470af0526",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings. Describe native topic replies without promising an independent Personal Agent conversation."
     },
     {
       "path": "plugin-src/client/channels/feishu/index.js",
-      "sha256": "4418f45f3a9975b35f9b1335dbae15c60d1cc16c9b224d3b838439883d4453dd",
-      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+      "sha256": "7f3197c8b7e599b0e3441d767c3f42ee002dff2ef50df560d250d4ec43480e10",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings. Synchronize saved detail settings into the retained bot list; invalidate older status polls while preserving list expansion."
     },
     {
       "path": "plugin-src/client/channels/feishu/slash-panel-settings.js",
@@ -297,8 +299,8 @@
     },
     {
       "path": "plugin-src/client/i18n.js",
-      "sha256": "e7e591afe999b82fae0db9a79900b3468b633ad71156f8af585c4e70dcfb969f",
-      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+      "sha256": "622554f0d9633bb3aa301ec099f0c536d58f7e76c0a43892ecbb195c3e0ca58c",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings. Translate the native topic reply explanation for stable group conversations."
     },
     {
       "path": "plugin-src/client/model-setting.js",
@@ -341,9 +343,19 @@
       "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
     },
     {
+      "path": "plugin-src/client/index.js",
+      "sha256": "5d57a6027073f50986eaea4346fac4bb2da404abcda4f4ffee4339c0070455fd",
+      "reason": "Embed the pinned page shell and keyboard-accessible settings tabs in Personal Agent; hide unsupported providers and bound scrolling to the available panel height."
+    },
+    {
+      "path": "plugin-src/client/bot-settings-tabs.js",
+      "sha256": "fbe706babc2a4c787614440387ab13311603bdfbd9fee2f14998f91beb5b5315",
+      "reason": "Embed the pinned page shell and keyboard-accessible settings tabs in Personal Agent; hide unsupported providers and bound scrolling to the available panel height."
+    },
+    {
       "path": "plugin-src/client/styles.js",
-      "sha256": "ef856518748d2605897d6b6528ec1aa25d91aad35cd03cc0d5a867ad415b5023",
-      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings."
+      "sha256": "fc768c7bc27e38ac8b41b96e7c5886ccddab6fa59e7f2660da8c3a9aefa7cf05",
+      "reason": "Embed the pinned page shell and keyboard-accessible settings tabs in Personal Agent; hide unsupported providers and bound scrolling to the available panel height."
     }
   ]
 }

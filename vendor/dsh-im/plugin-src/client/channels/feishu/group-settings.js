@@ -199,7 +199,7 @@ export function MentionTopicReplyEditor({ value = true, disabled = false, onSave
   h('option', { value: 'off' }, '关闭（在会话主窗口回复）'),
   h('option', { value: 'on' }, '开启（自动开启独立飞书话题）')),
   h('p', { className: 'spa-im-feishuGroupHelp' },
-    '开启后，在群聊或私聊里 @机器人 提问，机器人会在那条消息下新建一个飞书话题并在话题内回答；该话题是一条独立会话，话题里的后续消息都属于同一个会话。只发一个 @机器人（打开菜单）不会新建话题，没有 @机器人 的消息也留在原来的会话里。'),
+    '开启后，群内 @提问的回复显示在飞书话题中。话题只影响消息展示；同一机器人在该群仍共享对话上下文，使用 /new 开启新对话。'),
   error ? h('p', {
     className: 'spa-im-feishuGroupError',
     role: 'alert',

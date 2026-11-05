@@ -838,6 +838,20 @@ const CSS = String.raw`
 .spa-im-deliverySyncFields .spa-im-globalTtlInput { width: 100%; min-width: 0; }
 .spa-im-deliverySyncFeedback { margin: 10px 0 0; }
 @container (max-width: 460px) { .spa-im-deliverySyncField { grid-template-columns: minmax(0, 1fr); } }
+/* Embedded in Personal Agent's height-constrained top-level tab. */
+.spa-im-page[data-embedded="true"] { max-width: none; flex: 1; min-height: 0; padding: 0; display: flex; flex-direction: column; }
+.spa-im-page[data-embedded="true"] .spa-im-layout { flex: 1; min-height: 0; grid-template-columns: 174px 1px minmax(0, 1fr); gap: 24px; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+.spa-im-page[data-embedded="true"] .spa-im-divider { display: block; }
+.spa-im-page[data-embedded="true"] .spa-im-rail { grid-template-columns: minmax(0, 1fr); overflow: auto; min-height: 0; align-content: start; }
+.spa-im-page[data-embedded="true"] .spa-im-panel { overflow: auto; min-height: 0; scrollbar-gutter: stable; padding: 0 8px 24px 0; }
+.spa-im-page[data-embedded="true"] .spa-im-channelCopy strong { font-weight: 500; }
+@container (max-width: 640px) {
+  .spa-im-page[data-embedded="true"] .spa-im-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 12px; }
+  .spa-im-page[data-embedded="true"] .spa-im-rail { display: flex; overflow: auto; }
+  .spa-im-page[data-embedded="true"] .spa-im-channel { width: auto; }
+  .spa-im-page[data-embedded="true"] .spa-im-divider { display: none; }
+}
+
 `;
 
 export function installImStyles() {

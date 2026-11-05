@@ -2,7 +2,7 @@
  * Context-free UI primitives styled with `--dsw-alias-*` tokens.
  * Mirrors DSH ui-primitives markup and keyboard behavior without coupling to its internal package API.
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type KeyboardEvent,
+import { forwardRef, useCallback, useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type KeyboardEvent,
   type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -53,11 +53,11 @@ export function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
 
 type ButtonProps = { variant?: 'primary' | 'ghost' | 'outline'; size?: 'md' | 'sm'; icon?: ReactNode; className?: string }
   & ButtonHTMLAttributes<HTMLButtonElement>
-export function Button({ variant = 'ghost', size = 'md', icon, className, children, type = 'button', ...rest }: ButtonProps) {
-  return <button type={type} className={cx('spa-btn', `spa-btn-${variant}`, `spa-btn-${size}`, className)} {...rest}>
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({ variant = 'ghost', size = 'md', icon, className, children, type = 'button', ...rest }, ref) {
+  return <button ref={ref} type={type} className={cx('spa-btn', `spa-btn-${variant}`, `spa-btn-${size}`, className)} {...rest}>
     {icon !== undefined && <span className="spa-btn-icon">{icon}</span>}{children}
   </button>
-}
+})
 
 export type TagTone = 'outline' | 'neutral' | 'quiet' | 'success' | 'info' | 'warning' | 'danger'
 export function Tag({ tone = 'outline', title, children }: { tone?: TagTone; title?: string; children: ReactNode }) {

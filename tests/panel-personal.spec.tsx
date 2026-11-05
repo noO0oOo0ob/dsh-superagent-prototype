@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 /** Personal configuration drafts and explicit recovery actions through the management page. */
+import { act } from 'react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import type { ApiResponse } from '../src/app/api.ts'
 import { PersonalConfigSchema } from '../src/personal/config.ts'
 import { ScheduleSpecSchema } from '../src/personal/schedules.ts'
 import { en, zh } from '../src/client/locales.ts'
-import { all, at, click, field, mount, text, type, usePanel } from './fixtures/panel.tsx'
+import { all, at, click, field, mount, remount, text, type, usePanel } from './fixtures/panel.tsx'
 
 usePanel()
 type View = ApiResponse<'GET personal'>
@@ -217,6 +218,7 @@ it('retains the form when a refresh fails after an action', async () => {
 })
 
 it('binds native Feishu in its own page and opens account settings without the original plugin', async () => {
+  at({ page: 'messaging' })
   await mount()
   expect(text()).toContain('扫码接入机器人')
   await click('手动接入')
@@ -251,6 +253,7 @@ it('shows mixed result parts and reconciles only the selected failed file', asyn
   parts = [{ version: 1, id: 'delivery-rich', signature: 'sig', source: 'native', thread: 'chat', at: atTime, updatedAt: atTime, resolutions: [],
     parts: [{ id: 'text', block: { type: 'text', text: 'Report ready', format: 'plain' }, state: 'sent', attempts: 1, providerMessageIds: ['om_1'] },
       { id: 'file', block: { type: 'file', artifactId: 'report' }, state: 'failed', attempts: 1, providerMessageIds: [], error: 'permission-required' }] }]
+  at({ page: 'messaging', query: { view: 'deliveries' } })
   await mount()
   expect(text()).toContain(zh['messaging.state.partial'])
   const retry = all('button').find(item => item.textContent === zh['messaging.retry']) as HTMLButtonElement
@@ -264,8 +267,61 @@ it('shows mixed result parts and reconciles only the selected failed file', asyn
 it('keeps every unresolved delivery visible after more than thirty records', async () => {
   parts = Array.from({ length: 35 }, (_, i) => ({ version: 1, id: `receipt-${i}`, signature: 'sig', source: 'native', thread: 'chat', at: atTime, updatedAt: atTime, resolutions: [],
     parts: [{ id: `part-${i}`, block: { type: 'text', text: `Unresolved ${i}`, format: 'plain' }, state: 'unknown', attempts: 1, providerMessageIds: [] }] }));
+  at({ page: 'messaging', query: { view: 'deliveries' } });
   await mount();
   expect(document.querySelectorAll('.spa-message-record')).toHaveLength(35);
   expect(text()).toContain('Unresolved 0');
   expect(text()).toContain('Unresolved 34');
 });
+
+
+it('opens account management from the main navigation and hides unsupported channels and voice', async () => {
+  await mount()
+  expect(text()).not.toContain('扫码接入机器人')
+  await click(zh['tab.messaging'])
+  expect(text()).toContain('扫码接入机器人')
+  expect(document.querySelector('[aria-label="' + zh['messaging.channels'] + '"]')?.textContent).toContain('飞书')
+  for (const unsupported of ['微信', 'Slack', 'Telegram', '语音']) expect(text()).not.toContain(unsupported)
+  await click(zh['messaging.deliveries'])
+  expect(text()).toContain(zh['messaging.empty'])
+  await click(zh['messaging.accounts'])
+  expect(text()).toContain('扫码接入机器人')
+})
+
+
+it('keeps account settings, return focus and scroll isolated for two Feishu bots', async () => {
+  const policy = { direct: { mode: 'open', open: { defaultCanExecuteCommands: true, commandPermissionOverrides: [] }, allowlist: { users: [] } }, group: { mode: 'open', open: { defaultCanExecuteCommands: true, commandPermissionOverrides: [] }, allowlist: { users: [] } } }
+  nativeBots = ['Research', 'Travel'].map((name, i) => ({ botId: `bot_${i}`, bot: { name }, connected: true, state: 'connected', workspace: `/tmp/${name}`, accessPolicy: policy }))
+  at({ page: 'messaging' })
+  await mount()
+  const pane = document.getElementById('spa-im-panel-feishu')!
+  for (const i of [1, 0]) {
+    const card = document.querySelector(`[data-bot-id="bot_${i}"]`)!
+    await click(card.querySelector<HTMLElement>('[aria-label="展开该账号的设置"]')!)
+    const more = card.querySelector<HTMLElement>('[aria-label="更多机器人设置"]')!
+    more.focus(); pane.scrollTop = 150 + i
+    await click(more)
+    expect(document.activeElement?.textContent).toBe(zh['messaging.back'])
+    expect(pane.scrollTop).toBe(0)
+    const group = document.getElementById('spa-im-bot-settings-group-tab')!
+    group.focus()
+    await act(async () => { group.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })) })
+    expect(document.activeElement?.id).toBe('spa-im-bot-settings-access-tab')
+    await type(field<HTMLSelectElement>('私聊 访问模式'), 'allowlist')
+    await click('保存访问设置')
+    expect(requests.filter(item => item.body.endpoint === 'bot.access-policy.set').at(-1)?.body.payload).toMatchObject({ botId: `bot_${i}` })
+    await click(zh['messaging.back'])
+    expect(document.activeElement).toBe(more)
+    expect(pane.scrollTop).toBe(150 + i)
+    expect(card.querySelector('[aria-label="收起该账号的设置"]')).not.toBeNull()
+    await click(more)
+    await click(zh['messaging.tab.access'])
+    expect(field<HTMLSelectElement>('私聊 访问模式').value).toBe('allowlist')
+    await click(zh['messaging.back'])
+  }
+  expect(nativeBots.map(bot => bot.workspace)).toEqual(['/tmp/Research', '/tmp/Travel'])
+  await click(zh['messaging.deliveries'])
+  await remount()
+  expect(document.querySelector('#spa-messaging-deliveries')?.getAttribute('aria-selected')).toBe('true')
+  expect(text()).toContain(zh['messaging.empty'])
+})

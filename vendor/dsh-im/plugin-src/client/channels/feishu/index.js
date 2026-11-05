@@ -820,7 +820,7 @@ export function mergeFeishuSnapshotState(
   };
 }
 
-export function FeishuSettingsTab({ rpcCall }) {
+export function FeishuSettingsTab({ rpcCall, accountUpdate }) {
   const [operationError, setOperationError] = React.useState(null);
   const [model, setModel] = React.useState({
     phase: "loading",
@@ -853,6 +853,15 @@ export function FeishuSettingsTab({ rpcCall }) {
   const mountedRef = React.useRef(true);
   const workspaceFence = useWorkspaceSnapshotFence();
   const scheduleAnimationFrame = useAnimationFrameScheduler();
+
+  // Detail editors share the retained account list; invalidate older in-flight polls after a save.
+  React.useLayoutEffect(() => {
+    if (!accountUpdate) return;
+    workspaceFence.beginMutation();
+    setModel((current) => ({ ...current, bots: current.bots.map((bot) => bot.botId === accountUpdate.botId
+      ? { ...bot, ...accountUpdate.settings } : bot) }));
+    workspaceFence.endMutation();
+  }, [accountUpdate, workspaceFence]);
 
   React.useEffect(() => {
     mountedRef.current = true;

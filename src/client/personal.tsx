@@ -1,5 +1,4 @@
 /** Personal settings, source-account diagnostics, and independent delivery recovery controls. */
-import { NativeMessaging, MessageDeliveries } from './messaging.tsx'
 import { useState } from 'react'
 import type { ApiResponse } from '../app/api.ts'
 import { usePoll } from './api.ts'
@@ -32,13 +31,12 @@ function accountFields(value: unknown) {
 
 /** Keeps the last successful state visible when a background refresh fails. */
 export function PersonalPage() {
-  const { call } = usePanel(), { restarts } = usePanelData()
+  const { call, t, navigate } = usePanel(), { restarts } = usePanelData()
   const { data, error, reload } = usePoll(() => call('GET personal'), [call, restarts])
   if (!data) return <LoadState loading error={error} />
   return <>
     {error && <LoadState loading={false} error={error} />}
-    <NativeMessaging />
-    <MessageDeliveries />
+    <Button variant="outline" onClick={() => navigate({ page: 'messaging' })}>{t('messaging.open')}</Button>
     <PersonalConfig data={data} reload={reload} />
     <Connections data={data} reload={reload} />
     <Schedules data={data} reload={reload} />

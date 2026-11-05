@@ -386,3 +386,15 @@ a.spa-btn, a.spa-btn:hover { text-decoration: none; }
 .spa-message-record { padding: 12px 0; border-bottom: 1px solid var(--dsw-alias-border-l2); }
 .spa-message-part { padding: 10px 0; overflow-wrap: anywhere; }
 .spa-message-preview { white-space: pre-wrap; max-height: 180px; overflow: auto; }
+
+/* The message center owns the remaining panel height; account and delivery panes scroll independently. */
+.spa-page[data-layout='messaging'] { overflow: hidden; padding-bottom: 16px; }
+.spa-page[data-layout='messaging'] > .spa-column { height: 100%; max-width: 1200px; min-height: 0; padding-bottom: 0; gap: 16px; }
+.spa-page[data-layout='messaging'] .spa-head, .spa-page[data-layout='messaging'] .spa-tabs { flex-shrink: 0; }
+.spa-page[data-layout='messaging'] .spa-main { flex: 1; min-height: 0; }
+.spa-messaging { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 16px; }
+.spa-messaging-content { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.spa-messaging-deliveries { overflow: auto; flex: 1; min-height: 0; scrollbar-gutter: stable; padding: 0 8px 24px 0; }
+@container (max-width: 640px) {
+  .spa-page[data-layout='messaging'] > .spa-column { gap: 12px; }
+}

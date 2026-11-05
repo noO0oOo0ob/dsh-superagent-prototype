@@ -6,17 +6,20 @@ import { SETUP_PROBLEMS } from '../setup.ts'
 import { HEALTH_TEXT } from '../sources/host.ts'
 
 const TEXT = {
-  "messaging.title": ["消息中心 · 飞书 / Lark", "Message center · Feishu / Lark"],
+  "messaging.title": ["消息中心", "Message center"],
+  "messaging.open": ["管理消息渠道与投递", "Manage channels and deliveries"],
+  "messaging.accounts": ["渠道与机器人", "Channels and bots"],
+  "messaging.channels": ["消息渠道", "Messaging channels"],
+  "messaging.feishu": ["飞书 / Lark", "Feishu / Lark"],
+  "tab.messaging": ["消息中心", "Message center"],
   "messaging.intro": ["在这里扫码或手动接入账号。私聊保留连续对话，群聊按群归档，任务独立执行。", "Connect an account by QR code or credentials. Direct and group conversations keep their history; tasks execute independently."],
   "messaging.formats": ["支持文字、图片与文件混合投递；语音、视频格式已预留。", "Mixed text, images and files are supported; audio and video formats are reserved."],
-  "messaging.voicePending": ["语音转写和合成尚未启用，以下设置暂不参与执行", "Speech transcription and synthesis are not active; these settings are reserved"],
   "messaging.back": ["返回账号列表", "Back to accounts"],
   "messaging.settings": ["机器人设置", "Bot settings"],
   "messaging.tab.group": ["群聊", "Groups"],
   "messaging.tab.access": ["访问权限", "Access"],
   "messaging.tab.directory": ["会话目录", "Conversation directories"],
   "messaging.tab.commands": ["命令菜单", "Commands"],
-  "messaging.tab.voice": ["语音", "Voice"],
   "messaging.deliveries": ["消息投递记录", "Message deliveries"],
   "messaging.empty": ["暂无投递记录", "No deliveries yet"],
   "messaging.state.sent": ["已完整送达", "Delivered"],

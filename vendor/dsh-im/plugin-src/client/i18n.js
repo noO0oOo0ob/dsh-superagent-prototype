@@ -430,7 +430,7 @@ const EN = Object.freeze({
   '以话题方式回复设置保存失败，请重试。': 'Could not save the topic reply setting. Try again.',
   '关闭（在会话主窗口回复）': 'Off (reply in the chat feed)',
   '开启（自动开启独立飞书话题）': 'On (auto-open a dedicated Feishu topic)',
-  '开启后，在群聊或私聊里 @机器人 提问，机器人会在那条消息下新建一个飞书话题并在话题内回答；该话题是一条独立会话，话题里的后续消息都属于同一个会话。只发一个 @机器人（打开菜单）不会新建话题，没有 @机器人 的消息也留在原来的会话里。': 'When enabled, mentioning the bot in a group or a private chat opens a dedicated Feishu topic under that message and the answer stays inside it. That topic is an independent conversation in dsh, and later messages in the topic belong to the same conversation. A bare "@bot" (which opens the menu) opens no topic, and messages without a mention stay in the chat\'s own conversation.',
+  '开启后，群内 @提问的回复显示在飞书话题中。话题只影响消息展示；同一机器人在该群仍共享对话上下文，使用 /new 开启新对话。': 'When enabled, replies to group mentions appear in a Feishu topic. Topics only change where messages are displayed; the bot keeps shared conversation context in the group. Use /new to start a new conversation.',
   '分步直推': 'Step push',
   '指令面板': 'Command panel',
   '个失败。': 'failed.',
