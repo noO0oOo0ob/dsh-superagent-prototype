@@ -2,15 +2,8 @@
 import { z } from 'zod'
 import { IM_WORDS, wordCount } from '../../infra/text.ts'
 import { resourceGrammar } from '../resources.ts'
-
-export interface Tool<S extends z.ZodType = z.ZodType> {
-  name: string
-  description: string
-  schema: S
-  execute: (args: z.infer<S>, signal: AbortSignal) => Promise<unknown>
-}
-export type RegisterTool = <S extends z.ZodType>(name: string, description: string, schema: S, execute: Tool<S>['execute']) => void
-export const tool = <S extends z.ZodType>(definition: Tool<S>): Tool => definition as unknown as Tool
+import { tool, type Tool } from './definition.ts'
+export { tool, type Tool, type RegisterTool } from './definition.ts'
 
 /** Human-facing acknowledgement text, constrained to `IM_WORDS` regardless of which channel it is posted to. */
 export const AcknowledgementSchema = z.string().trim().min(1)

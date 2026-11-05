@@ -40,7 +40,7 @@ let runtime: Runtime
 const viewsOf = (value: Runtime) => ({ store: value.store, sources: value.sources, links: value.links() })
 const overviewOf = (value: Runtime) => overview(viewsOf(value), value.health, policyVersion(value.store.settings()), executorLoad(value.store, value.executor.activeCount()), value.setupProblem ?? value.feishuProblem)
 let directory: string
-let controller: { create: ReturnType<typeof vi.fn>; selectModel: ReturnType<typeof vi.fn>; resolveAgent: ReturnType<typeof vi.fn>; rename: ReturnType<typeof vi.fn>; prompt: ReturnType<typeof vi.fn>; inspect: ReturnType<typeof vi.fn> }
+let controller: { create: ReturnType<typeof vi.fn>; selectModel: ReturnType<typeof vi.fn>; resolveAgent: ReturnType<typeof vi.fn>; rename: ReturnType<typeof vi.fn>; prompt: ReturnType<typeof vi.fn>; inspect: ReturnType<typeof vi.fn>; modelCatalog: ReturnType<typeof vi.fn> }
 type RegisteredTool = { name: string; output: { render: (args: unknown, result: unknown) => unknown }; execute: (args: unknown, execution: { signal: AbortSignal }) => Promise<unknown> }
 let tools: Map<string, Map<string, RegisteredTool>>
 type Section = { name: string; text: (context: { signal?: AbortSignal }) => string; interpolate?: boolean }
@@ -56,7 +56,8 @@ async function api(method: string, path: string): Promise<{ status: number; body
   await http(req, { writeHead: (code: number) => { status = code }, end: (data: string) => { text = data } })
   return { status, body: JSON.parse(text) }
 }
-let agents: Map<string, { id: string; status: string; inbox: { nextTurn: UserMessage[]; nextStep: UserMessage[] }; cancel: ReturnType<typeof vi.fn>; inject: ReturnType<typeof vi.fn> }>
+let agents: Map<string, { id: string; status: string; inbox: { nextTurn: UserMessage[]; nextStep: UserMessage[] }; cancel: ReturnType<typeof vi.fn>; inject: ReturnType<typeof vi.fn>;
+  session: { snapshotEvents(): { type: string; data: unknown }[] } }>
 const runTool = async (sessionId: string, name: string, args: unknown) => {
   const tool = tools.get(sessionId)?.get(name)
   if (!tool) throw new Error(`Tool ${name} is not registered for ${sessionId}`)
@@ -161,6 +162,7 @@ beforeEach(async () => {
   restricts = new Map()
   deliveries = vi.fn()
   controller = {
+    modelCatalog: vi.fn(async () => ({ default: { provider: 'test-native', model: 'default' }, groups: [], failures: [] })),
     create: vi.fn(async ({ sessionId, agentPreset }) => {
       if (agents.has(sessionId)) return
       const agentCtx = new Context()
@@ -182,7 +184,13 @@ beforeEach(async () => {
         }),
         guard: vi.fn((check: Guard) => { guards.set(sessionId, check); return () => {} }) })
       agentCtx.reflect.provide('skills', { register: () => () => {} })
-      agentCtx.reflect.provide('systemPrompt', { section: (spec: Section) => { sections.set(sessionId, spec); return () => {} } })
+      const parts = new Map<string, { name: string; text: Section['text'] | string; order: number }>()
+      agentCtx.reflect.provide('systemPrompt', { section: (spec: { name: string; text: Section['text'] | string; order: number }) => {
+        parts.set(spec.name, spec)
+        sections.set(sessionId, { name: 'combined-test-sections', interpolate: false, text: context => [...parts.values()]
+          .sort((a, b) => a.order - b.order).map(part => typeof part.text === 'string' ? part.text : part.text(context)).join('\n') })
+        return () => { parts.delete(spec.name) }
+      } })
       const inbox = { nextTurn: [] as UserMessage[], nextStep: [] as UserMessage[],
         // A pending message taken out, as DSH's inbox does by its id.
         remove: (id: string) => [inbox.nextTurn, inbox.nextStep].some(list => {
@@ -204,7 +212,8 @@ beforeEach(async () => {
     inspect: vi.fn(async () => ({ events: [] })),
   }
   jobs = jobRegistry()
-  services = { agents, llm: { resolveCallConfig: vi.fn(async value => value) }, sessionController: controller, sessionPersistence: { flush: vi.fn(async () => {}), open: vi.fn(async () => ({ read: async () => ({ events: [] }), [Symbol.asyncDispose]: async () => {} })) }, workspaceRegistry: { create: async (cwd: string) => ({ id: cwd }) }, permissionPresets: { set: () => {} }, subprocess, webServer: { host: '127.0.0.1', port: 3082, register: (route: { handler: HttpHandler }) => { http = route.handler; return () => {} } }, jobs: jobs.service }
+  services = { agents, llm: { resolveCallConfig: vi.fn(async value => value), resolveModelInfo: vi.fn(async () => ({ inputModalities: ['text', 'image'] })) },
+    tools: { get: (name: string) => name === 'modlens_read_image' ? {} : undefined }, sessionController: controller, sessionPersistence: { flush: vi.fn(async () => {}), open: vi.fn(async () => ({ read: async () => ({ events: [] }), [Symbol.asyncDispose]: async () => {} })) }, workspaceRegistry: { create: async (cwd: string) => ({ id: cwd }) }, permissionPresets: { set: () => {} }, subprocess, webServer: { host: '127.0.0.1', port: 3082, register: (route: { handler: HttpHandler }) => { http = route.handler; return () => {} } }, jobs: jobs.service }
   for (const [name, service] of Object.entries(services)) ctx.reflect.provide(name, service)
   for (const cli of [AGENT(), OTHER(), BOT()]) writeFileSync(cli, '#!/bin/sh\n', { mode: 0o755 })
   const store = new Store(join(directory, 'orchestrator.sqlite')); seed(store); store.close()
@@ -519,6 +528,19 @@ it('keeps Issue Triggers stored before Issues arrived through notifications read
   expect(read).toMatchObject({ trigger_id: stored.id, source: 'github-issue', text: 'Bug\n\ndetails' })
   const thread = (await api('GET', 'threads/github:5')).body
   expect(thread).toMatchObject({ timeline: [expect.objectContaining({ id: stored.id, source: 'github-issue' })] })
+})
+
+it('restores a task model from disk when the Worker is recreated after defaults change', async () => {
+  const { ticket, sessionId } = await acceptedTicket()
+  const settings = runtime.store.settings()
+  runtime.store.saveSettings({ ...settings, executor: { ...settings.executor, model: { provider: 'new-default', model: 'expensive' } } })
+  await runtime.stop()
+  agents.delete(sessionId)
+  await (await restart()).ready
+  await runtime.idle()
+  expect(runtime.store.tickets.get(ticket.id)!.modelPlan).toEqual(ticket.modelPlan)
+  const worker = agents.get(sessionId)!
+  expect(worker.session.snapshotEvents()).toContainEqual(expect.objectContaining({ type: 'model/selection', data: ticket.modelPlan!.route.effective }))
 })
 
 it('relaunches running assignments after a restart with a recovery note', async () => {
@@ -1718,8 +1740,12 @@ it('gives a subagent of a worker only the worker\'s work tools, and none once th
   await (runtime as unknown as { ctx: Context }).ctx.parallel('agent/created', { agent: child } as never)
   expect(restricts.get('child-1')).toEqual([{ allow: ['read', 'read_image', 'grep', 'bash', 'job_output', 'job_list', 'job_kill', 'web_search', 'skill'] }])
   expect(guards.get('child-1')!()).toBeUndefined()
+  expect(tools.get('child-1')?.has('personal_agent_model_profiles')).toBe(true)
+  expect(tools.get('child-1')?.has('subagent')).toBe(true)
+  expect(sections.get('child-1')!.text({})).toContain('inherit your current provider')
   runtime.engine.stopTicket(ticket.id)
   expect(guards.get('child-1')!()).toBe('Ticket ended; new work needs a new authorized ticket')
+  await expect(runTool('child-1', 'subagent', { description: 'No new work', prompt: 'Do another task' })).rejects.toThrow('task ended')
   // Another Session's subagent is left as it is.
   await (controller.create as (options: { sessionId: string }) => Promise<void>)({ sessionId: 'child-2' })
   const other = agents.get('child-2')! as unknown as { session: { header: { parentSession?: string } } }
@@ -1739,6 +1765,8 @@ it('gives a subagent of a worker\'s subagent the same work tools and guard', asy
     await created.parallel('agent/created', { agent } as never)
   }
   expect(restricts.get('grandchild-1')).toEqual([{ allow: ['read', 'read_image', 'grep', 'bash', 'job_output', 'job_list', 'job_kill', 'web_search', 'skill'] }])
+  expect(tools.get('grandchild-1')?.has('personal_agent_model_profiles')).toBe(true)
+  expect(tools.get('grandchild-1')?.has('subagent')).toBe(true)
   runtime.engine.stopTicket(ticket.id)
   expect(guards.get('grandchild-1')!()).toBe('Ticket ended; new work needs a new authorized ticket')
 })

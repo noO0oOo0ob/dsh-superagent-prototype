@@ -33,4 +33,22 @@ New task acceptance now requires ModLens to be loaded even when the selected pro
 
 Old executor settings are read as the Standard profile without rewriting stored settings. The legacy `executor.model` is retained for pre-profile Tickets. Tickets that already have a DSH model selection keep it, and older Tickets without a profile continue through the legacy initialization path. No historical messages or task inputs are replayed as new work. `Ticket.modelPlan` is an additive field in the existing JSON record; absent means legacy behavior, and present records are validated before new Session initialization. Existing SQL tables and released DSH Session event definitions are unchanged.
 
+## Child agents
+
+Profile-aware Workers and their descendants receive a task-scoped `subagent` tool. Its default inherits the immediate parent's current effective provider, model and reasoning effort, including an already-selected ModLens route. It reads the active request configuration rather than the model that happened to be the DSH default when the Agent object was constructed. Starting a child still creates an independent conversation; using the same model does not guarantee shared prefix-cache hits.
+
+An explicit `model_profile` selects from the profile definitions saved when the Ticket was accepted. A new child resolves that profile once through the same native/ModLens resolver, while a resumed child keeps its model. Raw provider/model/effort overrides are excluded from the tool schema. Switching to a profile without a reasoning effort clears the parent's route-specific effort. `personal_agent_model_profiles` shows the saved choices; it does not expose unrelated global models.
+
+The adapter delegates lifecycle, depth limits, parent notifications, cancellation and resource cleanup to `ctx.subagents.startActivation` using the native `spawn` provider. It does not depend on the version-specific model-selection switch of DSH's bundled subagent tool. A durable DSH child-model allowlist on the Session or its ancestors remains an additional restriction on explicit selection. Without that additional list, the task's user-configured profiles are the allowed choices. Ordinary inheritance retains DSH's existing behavior. Stopping the task during preflight prevents publication of a new child.
+
+Fixed system instructions describe inheritance, profile selection and image-read limitations. Profile details are read through tools rather than rewritten into the system prompt on every turn. Existing pre-profile tasks retain their old tool composition.
+
+## Acceptance checks
+
+- Select Basic for a new task and verify its saved effective route in the task page and Worker Session. Change the default to Advanced, append a message and restart the runtime; the existing selection must remain unchanged.
+- Start with text, then send an image for the same task. Verify the same Worker handles the follow-up. A native image model reads the attachment directly; a text model's ModLens route converts it to evidence, including attachment images returned by tools.
+- Delegate without a profile and verify the immediate parent's provider/model/effort. Explicitly choose another configured profile and verify its independent child Session. Confirm an unconfigured tier and a route forbidden by a DSH allowlist are rejected.
+- Disable ModLens or its wrapper and verify affected new work reports a configuration failure without accepting a task, sending its acknowledgement or switching to a different model. Repair the configuration and retry the original candidate.
+- Configure the real ModLens vision engine and perform a Feishu image round trip. Automated tests use synthetic vision evidence and do not authenticate a real engine or send messages to a real IM account.
+
 See [ModLens setup](https://github.com/liustack/modlens/blob/main/docs/harness-setup.md) for engine configuration and supported provider discovery.

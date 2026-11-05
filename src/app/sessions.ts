@@ -17,6 +17,8 @@ import { hasModelSelection, initializeRoleModel } from './role-models.ts'
 import { WorkerModelPlanSchema } from '../models.ts'
 import { resolveVisionModel } from './model-routing.ts'
 import { defaultModel } from './worker-models.ts'
+import { modelDelegationTools, WORKER_MODEL_INSTRUCTIONS } from './subagent-models.ts'
+import { toolParameters } from './tools/definition.ts'
 import { bundledSkills } from './skill-files.ts'
 import { SKILL_PREFIX, type PromptVersion, type Prompts } from './prompts.ts'
 import type { Store } from './store.ts'
@@ -224,7 +226,7 @@ export class Sessions {
   /** Returns a tool registrar for `agent` that renders tool output as JSON text and attaches `output.image` as an image when present. */
   private registerTool(agent: Agent, binding: SessionBinding): RegisterTool {
     return (name, description, schema, execute) => {
-      binding.disposers.push(agent.ctx.tools.register({ name, description, parameters: z.toJSONSchema(schema),
+      binding.disposers.push(agent.ctx.tools.register({ name, description, parameters: toolParameters(schema),
         output: { schema: { type: 'object', additionalProperties: true }, render: (_args, value) => {
           const text = { type: 'text' as const, text: JSON.stringify(value) }
           const image = value && typeof value === 'object' && 'image' in value ? (value as { image: never }).image : undefined
@@ -288,6 +290,7 @@ export class Sessions {
     } else {
       // An Executor Session keeps the profile's work tools it has, which DSH requires to be known; its own tools are not masked.
       binding.disposers.push(...this.workOnly(agent, ticket!.id))
+      this.bindModelDelegation(agent, binding, ticket!)
     }
   }
   /**
@@ -312,7 +315,8 @@ export class Sessions {
   private workOnly(agent: Agent, ticketId: string): (() => void)[] {
     const store = this.host.store
     const parent = scopeParentOf(agent)
-    const allow = WORK_TOOLS.filter(name => agent.ctx.tools.get(name, parent))
+    const profiled = !!store.tickets.get(ticketId)?.modelPlan
+    const allow = WORK_TOOLS.filter(name => !(profiled && (name === 'subagent' || name === 'list_subagent_models')) && agent.ctx.tools.get(name, parent))
     return [agent.ctx.tools.restrict({ allow }), agent.ctx.tools.guard(() => {
       const current = store.tickets.get(ticketId)
       return !current || !liveTicket(current) ? 'Ticket ended; new work needs a new authorized ticket' : undefined
@@ -331,7 +335,20 @@ export class Sessions {
     }
     const ticketId = parent === undefined ? undefined : ticketOfSession(parent)
     if (ticketId === undefined || !this.host.store.tickets.get(ticketId)) return
-    this.bindings.set(agent, { disposers: this.workOnly(agent, ticketId), subagent: true })
+    const binding: SessionBinding = { disposers: this.workOnly(agent, ticketId), subagent: true }
+    this.bindings.set(agent, binding)
+    this.bindModelDelegation(agent, binding, this.host.store.tickets.get(ticketId)!)
+  }
+  /** Profile rules also apply to grandchildren, while the actual child model comes from its immediate parent. */
+  private bindModelDelegation(agent: Agent, binding: SessionBinding, ticket: Ticket): void {
+    if (!ticket.modelPlan) return
+    const plan = WorkerModelPlanSchema.parse(ticket.modelPlan)
+    const register = this.registerTool(agent, binding)
+    for (const entry of modelDelegationTools({ context: this.ctx, agent, plan, preset: WORKER_PRESET, assertLive: () => {
+      const current = this.host.store.tickets.get(ticket.id)
+      if (this.host.lifetime.aborted || this.host.closing() || !current || !liveTicket(current)) throw new Error('The task ended or the runtime is stopping; no new subagent can start')
+    } })) register(entry.name, entry.description, entry.schema, entry.execute)
+    binding.disposers.push(agent.ctx.systemPrompt.section({ name: 'personal-agent-model-policy', order: 9998, interpolate: false, text: WORKER_MODEL_INSTRUCTIONS }))
   }
   /** Register the skills of a prompt version in the agent's skill scope, in place of an earlier version's. */
   private bindSkills(binding: SessionBinding, version: PromptVersion): void {

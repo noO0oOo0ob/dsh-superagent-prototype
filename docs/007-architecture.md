@@ -232,7 +232,7 @@ Validation inherits an omitted base from the saved override, drops removed parts
 
 ### Sessions
 
-`Sessions` (`src/app/sessions.ts`) manages DeepSeek Harness Sessions for both roles. `ensure` creates a Session with its role's model. `install` follows agent events and registers prompts, skills and tools for managed Sessions.
+`Sessions` (`src/app/sessions.ts`) manages DeepSeek Harness Sessions for both roles. New task acceptance records one Basic, Standard or Advanced profile and its resolved native/ModLens route on the Ticket before acknowledgement or dispatch. `ensure` seeds that route only when the Worker has no existing model selection; legacy Tickets retain role defaults. Profile-aware Workers and descendants receive a scoped delegation tool that inherits the immediate parent's effective model unless an explicit captured profile is selected. `install` follows agent events and registers prompts, skills and tools for managed Sessions.
 
 `prompt` delivers once per request id. `relay` and `notify` enqueue main-Session messages handled by the `relay` and `notice` effects. `src/app/notices.ts` defines their content; `delivery` checks whether a message arrived.
 
@@ -323,6 +323,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/deployment.ts` | The plugin `Config` and `Machine`; `resolveDeployment` and `resolveFeishuBot` read the repository and the accounts from the Source settings, each CLI run as Executor shells run it; `SETUP_FIELDS` lists the Source fields setup reads. The code names no person, account or organization |
 | `src/setup.ts` | Setup problems: `SetupError`, with a code, the place that fixes it and the English text the log, the main Session and the panel share |
 | `src/policy.ts` | The Policy: the settings schemas by block, the Policy version, the gate and Mandate revalidation |
+| `src/models.ts` | Three model profiles, resolved vision routes and durable task selection schemas |
 | `src/admission.ts` | The admission table's values, each cell's options and defaults, shared with the panel |
 | `src/limits.ts` | The limits of the values a person sets, which the settings schemas check and the panel's fields offer |
 | `src/kv.ts` | `KV`: every family of `kv` records with its key, its value's type and its owner, and the `Key` and `Family` types the Store and `SourceContext.state` take |
@@ -366,13 +367,17 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/delivery.ts` | `AgentDelivery`: delivers a message to a DeepSeek Harness agent once per request id, also across a restored Session |
 | `src/app/retry-health.ts` | `RetryHealth`: which Sessions wait on a model budget retry, for the `models` health entry |
 | `src/app/role-models.ts` | Resolves the Eval and Executor models, and seeds a new Session with its role's model |
+| `src/app/model-routing.ts` | Declared image capability checks and verified native/ModLens route selection |
+| `src/app/worker-models.ts` | New-task profile capture, model preflight and settings readiness checks |
+| `src/app/subagent-models.ts` | Immediate-parent inheritance, captured profile selection and DSH subagent runtime adaptation |
 | `src/app/assessment.ts` | The MasterAssessor, the assessment schema and the window `personal_agent_eval` answers |
 | `src/app/execution-environment.ts` | The execution environment: its variables, a Ticket's values, the directory root and the lines of the prompt section, which `src/app/prompts.ts` fills into its template |
 | `src/app/source-context.ts` | `sourceContextOf`: each Source kind's `SourceContext` |
 | `src/app/links.ts` | `sourceLink`, the page of a Trigger's message, and `candidateCard` |
 | `src/app/cards.ts` | Compact cards of Triggers, Tickets, Threads and Decisions for models, the closed set of ticket card states `TICKET_STATES`, and `textPage` |
 | `src/app/resources.ts` | `RESOURCES` and `readResource`: what `personal_agent_read` reads, for each role |
-| `src/app/tools/tool.ts` | The `Tool` type, `readTool`, the `personal_agent_read` of both roles, and `AcknowledgementSchema` |
+| `src/app/tools/tool.ts` | `readTool`, the `personal_agent_read` of both roles, and `AcknowledgementSchema` |
+| `src/app/tools/definition.ts` | Typed tool handlers paired with argument parsers, independent of application composition |
 | `src/app/tools/main.ts` | The main Session's tools |
 | `src/app/tools/executor.ts` | An Executor Session's tools |
 | `src/app/http.ts` | The `/super-personal-agent/api` routes: the same-origin check, request limits and one status per kind of failure |
@@ -419,6 +424,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/client/thread.tsx`, `ticket.tsx` | The record pages: a Thread with its timeline, and a Ticket with its authorization, Inputs and Assignments |
 | `src/client/settings.tsx` | The Settings tab: the group navigation and the group on screen |
 | `src/client/settings-kit.tsx` | The building blocks of settings blocks: the settings the stage groups share, `useBlockDraft`, the fields, among them a Source kind's, and the history of saves |
+| `src/client/worker-models.tsx` | Three model profile controls, default selection and route readiness feedback |
 | `src/client/prompts.tsx` | The Prompts settings: the page owns the view it read and its editor the draft, and the Edit, Full prompt and History tabs render from them; a built-in part's editor shows a changed default and keeps or drops the override |
 | `src/client/prompt-config.ts` | The prompt configuration by section, by the team sections, skill names, built-in parts (`part/<key>`, with `withOverride`) and part headings the prompt views give, and the line diff of the full prompt, as pure functions |
 | `src/client/deployment.tsx` | The Deployment settings, also shown in DeepSeek Harness's Plugin Manager |
@@ -487,6 +493,9 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/health.spec.ts` | One health entry per part, each cleared by its own next success |
 | `tests/delivery.spec.ts` | `AgentDelivery` |
 | `tests/retry-health.spec.ts`, `tests/role-models.spec.ts` | Model budget retries, and the models of the two roles |
+| `tests/model-routing.spec.ts`, `tests/worker-models.spec.ts` | Native/ModLens capability resolution, task creation, persistence, duplicate handling and legacy selections |
+| `tests/subagent-models.spec.ts` | Child inheritance, captured profile overrides, host allowlists and task cancellation during preflight |
+| `tests/modlens-compat.spec.mjs` | Installed ModLens adapter with a synthetic vision engine and isolated evidence cache |
 | `tests/runtime.spec.ts` | The whole application on a simulated DeepSeek Harness host, through tools and HTTP |
 | `tests/tools.spec.ts` | The Sessions' tools: what `personal_agent_read` reads for each role, and the shapes and checks of the other main Session tools |
 | `tests/runtime-concurrency.spec.ts` | Work that overlaps: Triggers during a pass, Tickets that change during deliveries and launches |

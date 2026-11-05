@@ -37,8 +37,8 @@ interface Skill { name: string; description: string; content: string }
  * Maximum combined character count of system prompt and tool definitions per role (~5% above baseline).
  * Lower this limit when shrinking model-facing text; raise it only intentionally and explain why in the commit message.
  */
-// Profile discovery and creation-time selection add a bounded schema; the provider catalogue stays behind a tool read.
-const BUDGET: Record<Role, number> = { orchestrator: 70_000, worker: 44_000 }
+// Profile selection and the owned delegation tool add bounded schemas; model catalogues stay behind tool reads.
+const BUDGET: Record<Role, number> = { orchestrator: 70_000, worker: 46_000 }
 const PROMPTS = 'prompts/, skills/', TOOLS = 'src/app/tools/', SESSIONS = 'src/app/sessions.ts'
 const NOTICES = 'src/app/notices.ts', LINKS = 'src/app/links.ts', ASSESSMENT = 'src/app/assessment.ts'
 const EXECUTOR = 'src/executor/dsh.ts', ERRORS = 'src/core/errors.ts'
@@ -109,7 +109,13 @@ async function start() {
     const register = (tool: Tool) => { own.set(tool.name, tool); return () => own.delete(tool.name) }
     agentCtx.reflect.provide('tools', { register, get: () => undefined, restrict: () => () => {}, guard: () => () => {} })
     agentCtx.reflect.provide('skills', { register: (skill: Skill) => { registered.push(skill); return () => {} } })
-    const section = (spec: { text: Section }) => { sections.set(sessionId, spec.text); return () => {} }
+    const parts = new Map<string, { text: Section | string; order: number }>()
+    const section = (spec: { name: string; text: Section | string; order: number }) => {
+      parts.set(spec.name, spec)
+      sections.set(sessionId, context => [...parts.values()].sort((a, b) => a.order - b.order)
+        .map(part => typeof part.text === 'string' ? part.text : part.text(context)).join('\n'))
+      return () => { parts.delete(spec.name) }
+    }
     agentCtx.reflect.provide('systemPrompt', { section })
     const inbox = { nextTurn: [] as UserMessage[], nextStep: [] as UserMessage[],
       // A pending message taken out, as DSH's inbox does by its id.
@@ -356,9 +362,9 @@ function failures(): Map<string, string> {
 }
 
 it('collects both roles\' tools, prompts, skills and inputs', () => {
-  expect([...toolsOf('worker').keys()].sort()).toEqual(['personal_agent_ack', 'personal_agent_artifact', 'personal_agent_inbound', 'personal_agent_read', 'personal_agent_report',
+  expect([...toolsOf('worker').keys()].sort()).toEqual(['personal_agent_ack', 'personal_agent_artifact', 'personal_agent_inbound', 'personal_agent_model_profiles', 'personal_agent_read', 'personal_agent_report',
     'personal_agent_thread_follow',
-    'personal_agent_thread_unrelated', 'personal_agent_trigger_handback'])
+    'personal_agent_thread_unrelated', 'personal_agent_trigger_handback', 'subagent'])
   expect([...toolsOf('orchestrator').keys()]).toEqual(expect.arrayContaining(['personal_agent_route', 'personal_agent_eval_decide', 'personal_agent_reply']))
   // The one routing tool takes the place of four.
   for (const name of ['personal_agent_ticket_accept', 'personal_agent_ticket_attach', 'personal_agent_ticket_stop', 'personal_agent_trigger_ignore']) {
