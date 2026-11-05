@@ -1,3 +1,8 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { Identities } from '../src/personal/identities.ts'
+import { Store } from '../src/app/store.ts'
 import { expect, it } from 'vitest'
 import { z } from 'zod'
 import { registerHttp } from '../src/app/http.ts'
@@ -95,4 +100,25 @@ it('answers a prompt save that lost a race with 409, and a settings body over 12
   expect(await call('PUT', 'settings/executor', { value, revision: 0 })).toEqual({ status: 400,
     body: { error: `Request exceeds ${128 * 1024} bytes` } })
   expect(saves).toEqual([])
+})
+
+it('publishes only the previewed identity revision and returns draft or validation conflicts', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'spa-identity-api-')), store = new Store(join(root, 'state.sqlite'))
+  try {
+    const identities = new Identities(store, join(root, 'drafts'), () => 44_000)
+    const call = serve({ identities, machine: { promptMaxChars: { get: () => 44_000 } } })
+    const files = { 'agent.yaml': 'id: helper\nname: Helper\nparent: common\n', 'AGENTS.md': 'Help with research', 'SOUL.md': 'Brief' }
+    const preview = await call('POST', 'personal/identities/preview', files)
+    expect(preview.status).toBe(200)
+    const body = { files, baseRevision: 0, previewDigest: preview.body.digest }
+    expect(await call('PUT', 'personal/identities/other', body)).toMatchObject({ status: 400 })
+    expect(await call('PUT', 'personal/identities/helper', body)).toMatchObject({ status: 200, body: { revision: 1 } })
+    expect(await call('PUT', 'personal/identities/helper', body)).toMatchObject({ status: 409 })
+    expect(await call('GET', 'personal/identities/helper?revision=1')).toMatchObject({ status: 200, body: { files } })
+    expect(await call('GET', 'personal/identities')).toMatchObject({ status: 200, body: { activation: 'catalog-only' } })
+    expect(await call('POST', 'personal/identities/helper/export')).toMatchObject({ status: 200 })
+    expect(await call('POST', 'personal/identities/helper/import')).toMatchObject({ status: 200, body: { baseRevision: 1, files } })
+    expect(await call('POST', 'personal/identities/preview', { ...files, 'agent.yaml': 'id: [\n' })).toMatchObject({ status: 400 })
+    expect(await call('POST', 'personal/identities/preview', { ...files, 'AGENTS.md': 'x'.repeat(44_001) })).toMatchObject({ status: 400 })
+  } finally { store.close(); rmSync(root, { recursive: true, force: true }) }
 })

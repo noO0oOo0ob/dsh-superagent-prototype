@@ -1,0 +1,93 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`resolves structured child overrides and inherited text into a reproducible preview 1`] = `
+{
+  "definition": {
+    "capabilities": [
+      "read",
+      "shell",
+    ],
+    "id": "child",
+    "model": null,
+    "name": "child",
+    "parent": "base",
+  },
+  "digest": "<content hash>",
+  "effective": {
+    "capabilities": [
+      "read",
+    ],
+    "model": null,
+    "preset": "research",
+  },
+  "files": {
+    "AGENTS.md": "Duties for child",
+    "SOUL.md": "Style for child",
+    "agent.yaml": "id: child
+name: child
+parent: base
+model: null
+capabilities: [read, shell]
+",
+  },
+  "id": "child",
+  "revision": 1,
+  "sources": [
+    {
+      "files": {
+        "AGENTS.md": "",
+        "SOUL.md": "",
+        "agent.yaml": "id: common
+name: Common
+",
+      },
+      "id": "common",
+      "revision": 1,
+    },
+    {
+      "files": {
+        "AGENTS.md": "Duties for base",
+        "SOUL.md": "Style for base",
+        "agent.yaml": "id: base
+name: base
+parent: common
+model: {provider: sample, model: example}
+preset: research
+capabilities: [read, web]
+",
+      },
+      "id": "base",
+      "revision": 1,
+    },
+    {
+      "files": {
+        "AGENTS.md": "Duties for child",
+        "SOUL.md": "Style for child",
+        "agent.yaml": "id: child
+name: child
+parent: base
+model: null
+capabilities: [read, shell]
+",
+      },
+      "id": "child",
+      "revision": 1,
+    },
+  ],
+  "text": "## base@1 / AGENTS.md
+
+Duties for base
+
+## base@1 / SOUL.md
+
+Style for base
+
+## child@1 / AGENTS.md
+
+Duties for child
+
+## child@1 / SOUL.md
+
+Style for child",
+}
+`;

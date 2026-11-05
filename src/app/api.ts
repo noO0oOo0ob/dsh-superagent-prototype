@@ -1,5 +1,6 @@
 /** Type-only management API contract between the web panel and host routes, imported by the panel without bundling host code. */
 import type { ModelCatalog } from '@deepseek-ai/dsh-api-session-controller/types'
+import type { Identities, IdentityFiles, IdentityPreview, IdentityVersion } from '../personal/identities.ts'
 import type { PromptConfig, Prompts } from './prompts.ts'
 import type { PromptsView, StateView, TicketPageView } from './http.ts'
 import type { HistoryView } from './settings-history.ts'
@@ -29,6 +30,12 @@ export interface Api {
   'POST personal/feishu': { body: { endpoint: string; payload: unknown }; response: unknown }
   'GET personal/messages': { response: import('../messaging/delivery.ts').DeliveryRecord[] }
   'POST personal/messages/:id': { body: { partId: string; action: 'confirm_sent' | 'retry'; note: string }; response: { recorded: true } }
+  'GET personal/identities': { response: ReturnType<Identities['list']> }
+  'GET personal/identities/:id': { query?: { revision?: number }; response: IdentityVersion }
+  'POST personal/identities/preview': { body: IdentityFiles; response: IdentityPreview }
+  'PUT personal/identities/:id': { body: { files: IdentityFiles; baseRevision: number; previewDigest: string }; response: IdentityVersion }
+  'POST personal/identities/:id/export': { response: { directory: string } }
+  'POST personal/identities/:id/import': { response: { files: IdentityFiles; baseRevision: number } }
   'GET personal/groups': { response: { groups: import('../messaging/group-targets.ts').GroupPolicyView[]; decisions: import('../messaging/group-targets.ts').TargetDecision[] } }
   'PUT personal/groups/:id': { body: { revision: number; connectorId: string | null }; response: import('../messaging/group-targets.ts').GroupPolicy }
   'GET personal/providers': { response: import('../connectors/protocol.ts').ProviderDefinition[] }

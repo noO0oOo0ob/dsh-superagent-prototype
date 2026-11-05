@@ -37,6 +37,7 @@ Read the numbered documents in order; each builds only on the ones before it.
 - [Connectors](docs/014-connectors.md)
 - [Personal setup and acceptance](docs/015-personal-setup.md)
 - [Native messaging and publication rules](docs/native-messaging.md): ordered text, image and file results with immutable snapshots and per-part delivery receipts
+- [Identity catalog](docs/identity-catalog.md): editable identity files, inherited previews and saved versions; runtime activation is pending host protection
 - [Group targeting upgrade](docs/group-targeting-upgrade.md): explicit mentions, verified replies and one default per group
 - [Worker models and ModLens](docs/model-routing.md): required image adapter, provider capabilities and stable Session model selection
 - [008 Cookbook](docs/008-cookbook.md): adding a Source

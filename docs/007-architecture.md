@@ -316,6 +316,8 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/connectors/protocol.ts` | Validated native IM event and checked transport fields |
 | `src/personal/artifacts.ts` | Bounded UTF-8 deliverable reads confined to a task workspace |
 | `src/personal/config.ts` | Versioned Personal settings and concurrent-edit detection |
+| `src/personal/identities.ts` | Immutable identity publications, inherited previews and explicit local draft exchange |
+| `src/client/identities.tsx` | Identity catalog editor, preview and version publication |
 | `src/personal/hooks.ts` | Immutable task/result/delivery facts and independently retried JSON files |
 | `src/personal/repositories.ts` | Git and directory resources with task-owned workspace preparation |
 | `src/personal/routing.ts` | Explicit principal bindings, directional grants and routing audit |
@@ -454,6 +456,8 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/native-feishu.spec.mjs` | Native QR/manual account lifecycle and platform media delivery |
 | `tests/executor-resources.spec.ts` | Resource preparation cancellation, wake validation and last-moment routing revocation |
 | `tests/artifacts.spec.ts` | Personal feature lifecycle and isolation checks |
+| `tests/identities.spec.ts` | Identity versions, inheritance, conflicts, draft files and preview snapshot |
+| `tests/panel-identities.spec.tsx` | Identity editing, preview publication and persistent UI drafts |
 | `tests/group-targets.spec.ts` | Bot mentions, verified replies, group defaults, revocation and restart deduplication |
 | `tests/connectors.spec.ts` | Personal feature lifecycle and isolation checks |
 | `tests/hooks.spec.ts` | Personal feature lifecycle and isolation checks |

@@ -3,6 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
+import { IdentityConflict, IdentityInputError, IdentityFilesSchema, type Identities } from '../personal/identities.ts'
 import { GroupConflict } from '../messaging/group-targets.ts'
 import { THREAD_FILTERS, TICKET_FILTERS, type Api, type ApiResponse, type RouteParams } from './api.ts'
 import { sourceSkills } from './context.ts'
@@ -55,6 +56,7 @@ export interface HttpHost {
   readonly machine: Machine
   readonly masterId: string
   readonly results?: Results
+  readonly identities?: Identities
   readonly personal?: PersonalSettings
   readonly connectors?: Connectors
   readonly nativeFeishu?: NativeFeishu
@@ -119,9 +121,10 @@ function failure(error: unknown): [number, Record<string, unknown>] {
     return [400, { error: `Invalid settings: ${issues.map(issue => issue.path).join(', ')}`, issues }]
   }
   if (error instanceof SetupError) return [400, { error: error.message, setup: error.problem }]
+  if (error instanceof IdentityInputError) return [400, { error: error.message }]
   if (error instanceof RouteError) return [error.status, { error: error.message }]
   if (error instanceof UserError) return [error.missing ? 404 : 400, { error: error.message, code: error.code, values: error.values }]
-  if (error instanceof GroupConflict || error instanceof ScheduleConflict || error instanceof PersonalConflict || error instanceof SettingsConflict || error instanceof PromptConflict) return [409, { error: error.message }]
+  if (error instanceof IdentityConflict || error instanceof GroupConflict || error instanceof ScheduleConflict || error instanceof PersonalConflict || error instanceof SettingsConflict || error instanceof PromptConflict) return [409, { error: error.message }]
   return [500, { error: error instanceof Error ? error.message : String(error) }]
 }
 
@@ -213,6 +216,22 @@ function routes(runtime: HttpHost): Routes {
       runtime.effects?.enqueue('reply', params.id, {})
       return { recorded: true }
     },
+    'GET personal/identities': () => identityCatalog(runtime).list(),
+    'GET personal/identities/:id': ({ params, query }) => {
+      const { revision } = z.object({ revision: z.coerce.number().int().positive().optional() }).strict().parse(query)
+      const value = identityCatalog(runtime).get(params.id, revision)
+      if (!value) throw new RouteError(404, 'Identity not found')
+      return value
+    },
+    'POST personal/identities/preview': async ({ body }) => identityCatalog(runtime).preview(IdentityFilesSchema.parse(await body(identityBodyLimit(runtime)))),
+    'PUT personal/identities/:id': async ({ params, body }) => {
+      const value = z.object({ files: IdentityFilesSchema, baseRevision: z.number().int().nonnegative(), previewDigest: z.string().length(64) }).strict().parse(await body(identityBodyLimit(runtime)))
+      const catalog = identityCatalog(runtime)
+      if (catalog.preview(value.files).id !== params.id) throw new RouteError(400, 'Identity ID does not match the edited identity')
+      return catalog.publish(value.files, value.baseRevision, value.previewDigest)
+    },
+    'POST personal/identities/:id/export': async ({ params }) => ({ directory: await identityCatalog(runtime).exportDraft(params.id) }),
+    'POST personal/identities/:id/import': ({ params }) => identityCatalog(runtime).importDraft(params.id),
     'GET personal/groups': () => ({ groups: runtime.connectors?.targeting.view() ?? [], decisions: runtime.connectors?.targeting.decisions() ?? [] }),
     'PUT personal/groups/:id': async ({ params, body }) => {
       if (!runtime.connectors) throw new RouteError(404, 'Connectors are unavailable')
@@ -330,6 +349,11 @@ function routes(runtime: HttpHost): Routes {
 function decoded(segment: string): string {
   try { return decodeURIComponent(segment) } catch { throw new RouteError(400, 'A path segment has a malformed escape') }
 }
+function identityCatalog(runtime: HttpHost): Identities {
+  if (!runtime.identities) throw new RouteError(404, 'Identity catalog is unavailable')
+  return runtime.identities
+}
+const identityBodyLimit = (runtime: HttpHost) => runtime.machine.promptMaxChars.get() * 6 + 4096
 function match(table: Routes, method: string, segments: string[]) {
   for (const [route, run] of Object.entries(table)) {
     const [verb, path] = route.split(' ') as [string, string]

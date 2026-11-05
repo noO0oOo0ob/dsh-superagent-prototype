@@ -71,6 +71,7 @@ import { Schedules } from '../personal/schedules.ts'
 import { personalTools } from './personal-tools.ts'
 import { scheduledPolicy } from './personal-policy.ts'
 import { Routing } from '../personal/routing.ts'
+import { Identities } from '../personal/identities.ts'
 import { PersonalSettings } from '../personal/config.ts'
 
 // Source plugins interact with dsh-super-personal-agent exclusively through the `SourceHost` service interface.
@@ -111,6 +112,7 @@ export class Runtime extends Service implements SourceHost {
   readonly vault: Vault
   readonly repositories: RepositoryRegistry
   readonly routing: Routing
+  readonly identities: Identities
   readonly personal: PersonalSettings
   readonly connectors: Connectors
   nativeFeishu?: NativeFeishu
@@ -140,6 +142,7 @@ export class Runtime extends Service implements SourceHost {
       const report = (error: unknown) => { ctx.logger.warn('dsh-super-personal-agent: %s', String(error)) }
       const store = opened = this.store = new Store(join(machine.stateDir, 'orchestrator.sqlite'), report)
       this.personal = new PersonalSettings(store)
+      this.identities = new Identities(store, join(machine.stateDir, 'identity-drafts'), () => machine.promptMaxChars.get())
       this.messageDelivery = new MessageDelivery(store)
       this.conversations = new Conversations(store, this.messageDelivery)
       this.messageActions = new MessageActions(store, this.conversations, this.messageDelivery, trigger =>
@@ -437,7 +440,7 @@ export class Runtime extends Service implements SourceHost {
     const runtime = this
     const { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, setup, passes } = this
     return { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, results: this.results,
-      personal: this.personal, connectors: this.connectors, get nativeFeishu() { return runtime.nativeFeishu }, messageDelivery: this.messageDelivery, vault: this.vault, routing: this.routing, schedules: this.schedules, hooks: this.hooks, effects: this.effects,
+      personal: this.personal, identities: this.identities, connectors: this.connectors, get nativeFeishu() { return runtime.nativeFeishu }, messageDelivery: this.messageDelivery, vault: this.vault, routing: this.routing, schedules: this.schedules, hooks: this.hooks, effects: this.effects,
       get deployment() { return setup.deployment },
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, get githubProblem() { return setup.githubProblem },
       configured: () => setup.configured(), links: () => runtime.links(), ticketEnvironment: ticket => runtime.ticketEnvironment(ticket),
