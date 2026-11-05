@@ -31,3 +31,35 @@ The first implementation should protect writes and owner actions together. Confi
 5. Restart restores the same ceiling and identity binding. Revocation is checked at the next operation, without changing an in-flight personality snapshot.
 
 Until reviewed, changes remain inside the Personal Agent fork. No DSH host source, system permissions or live account access rules are modified. Stages that depend on an owner-only mutation or private-memory guarantee remain unactivated; the catalog UI states that boundary explicitly.
+
+## Interface review recommendation
+
+This review uses adjacent DSH source revision `ce7073d512` and the fork at `d4fcc67`. The fork resolves DSH dependency version `0.2.1-alpha.2`; source-interface conclusions are not a claim that an installed DSH NEXT release already provides the proposed additions. Real DSH NEXT validation loaded the catalog, preview and group-settings page after a Host restart; no policy-bypass write or real IM test send was performed.
+
+Extend existing services before adding a separate permission framework:
+
+| Existing surface | Reuse | Missing obligation |
+| --- | --- | --- |
+| `SandboxPolicyService.resolve(request)` | One resolution path for Session mode, workspace and extra writable roots | A managed execution ceiling must still apply after a requested escalation or preset change. Protected-path denies must win over broad workspace or extra-root grants. |
+| `SandboxExecutionPolicy` and confinement providers | Explicit resolved policy and `full`/`partial` enforcement reporting | The current vocabulary expressly excludes network and process visibility and does not describe read-denied paths. Report each required protection separately; do not infer private-data isolation from file-write enforcement. |
+| Filesystem, bash, terminal and child execution providers | Existing operation ownership, denial errors and cancellation | Every managed execution route must enforce the same ceiling or reject the execution before it starts. External providers without enforcement evidence cannot inherit an unverified guarantee. |
+| Approval service and desktop authentication | Durable asked/decided events, cancellation, authenticated UI transport | `ApprovalService.request()` requires an open model turn and returns an outcome from composed answerers. It does not identify a human owner or bind an exact persistent configuration diff. Reuse the UI transport, but add payload-bound owner decisions independent of model-turn approval. |
+| Session events/projections | Durable reconstruction and model-visible context logs | Persist a managed policy reference and effective revision through restore, fork, spawn and background execution. Missing policy authority must stop protected activation rather than use deployment defaults. |
+
+The proposed operations below are review targets, not APIs that exist today:
+
+- `managedPolicy.bind(session, policyRef)` is available only to the trusted owner/plugin composition. It records an immutable policy reference before the first operation and returns explicit enforcement status. A child receives the parent's ceiling intersected with its own constraints. Unbind, expansion and replacement require the owner path; a model field cannot supply the authority.
+- The existing `sandboxPolicy.resolve()` produces the ordinary requested mode plus the enforced managed constraints. Every executor checks support before executing. A provider that bypasses confinement for `danger-full-access` must still reject a managed request that requires confinement. Tool-name filtering remains useful but cannot replace this check.
+- `ownerActions.request()` accepts the operation, exact payload digest, base revisions and expiry; the trusted desktop UI shows that exact payload. `ownerActions.consume()` atomically consumes one approval with the mutation. A changed payload, replay, stale base, model-origin decision or unavailable trusted answerer fails without changing the catalog. Idle settings edits must work without inventing a model turn.
+- `managedPolicy.inspect(session)` exposes requested permissions, effective restrictions, enforcement support and an actionable unavailable reason. Do not return a single “safe” boolean that merges write confinement, read isolation and confirmed owner authority.
+
+Protected control state includes the authority database, policy references, published versions and confirmation state. Direct shell/filesystem access, child providers, credential access and model-controlled desktop/API paths must be considered together. If the current OS provider cannot protect the required control resources, the managed execution must use a restricted provider or stay unavailable; private-memory confidentiality needs a separate read/process-isolation acceptance gate. A plugin-specific HTTP nonce without protecting its authority and credentials is insufficient.
+
+## Proposed implementation order after review
+
+1. Add the managed-ceiling fields and explicit provider support reporting to DSH; update filesystem, shell, terminal and child consumers together. Test persistence and rejected escalation before activating them in the Personal Agent fork.
+2. Reuse authenticated desktop transport for owner decisions, bind exact payloads/base revisions, and verify that model-accessible paths cannot forge or directly mutate those decisions. Public-policy writes and catalog activation remain unavailable until both steps pass.
+3. Replace the fork's unconditional full-access selection only for explicitly migrated managed Sessions. Existing Sessions are marked as requiring migration, never silently advertised as protected. Stop or drain old shell jobs before switching enforcement; new checks cannot retroactively constrain an already running process.
+4. Enable stage 5 identity bindings and stage 6 proposals against that support. Gate stage 7 private memory on read/process isolation; retain the existing result-export behavior independently. Stage 8 follows its own scheduling and permission checks.
+
+No host implementation is authorized by this document. The review decision is whether to adopt these guarantees and the minimal host extension points before implementation; it is not a request to weaken existing DSH authentication or to treat a role prompt as enforcement.
