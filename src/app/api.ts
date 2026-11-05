@@ -29,6 +29,8 @@ export interface Api {
   'POST personal/feishu': { body: { endpoint: string; payload: unknown }; response: unknown }
   'GET personal/messages': { response: import('../messaging/delivery.ts').DeliveryRecord[] }
   'POST personal/messages/:id': { body: { partId: string; action: 'confirm_sent' | 'retry'; note: string }; response: { recorded: true } }
+  'GET personal/groups': { response: { groups: import('../messaging/group-targets.ts').GroupPolicyView[]; decisions: import('../messaging/group-targets.ts').TargetDecision[] } }
+  'PUT personal/groups/:id': { body: { revision: number; connectorId: string | null }; response: import('../messaging/group-targets.ts').GroupPolicy }
   'GET personal/providers': { response: import('../connectors/protocol.ts').ProviderDefinition[] }
   'POST personal/providers/:id': { body: { endpoint: string; payload: unknown }; response: unknown }
   'GET personal/bots': { response: { bots: unknown[] } }

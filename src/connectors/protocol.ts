@@ -12,8 +12,11 @@ export const ImEventSchema = z.object({ version: z.literal(1), channel: z.string
   actor: z.object({ kind: z.literal('user'), id: z.string().min(1) }).passthrough(),
   conversation: z.object({ kind: z.enum(['group', 'dm']), id: z.string().min(1) }).passthrough(),
   mentions: z.array(z.object({ id: z.string(), key: z.string() }).passthrough()).default([]),
+  groupScope: z.object({ tenantId: identifier, groupId: identifier }).strict().optional(),
   mentionedAccount: z.boolean(), at: z.iso.datetime({ offset: true }), text: z.string().min(1).max(128_000), reply: ReplyRouteSchema,
 }).passthrough().superRefine((event, ctx) => {
+  if (event.groupScope && (event.conversation.kind !== 'group' || event.groupScope.groupId !== event.conversation.id))
+    ctx.addIssue({ code: 'custom', message: 'Group scope must identify the captured group' })
   if (event.messageId !== event.reply.messageId || event.actor.id !== event.reply.actorId || event.conversation.id !== event.reply.conversationId)
     ctx.addIssue({ code: 'custom', message: 'The reply route must identify the original message, actor and conversation' })
 })
@@ -38,6 +41,10 @@ export const FEISHU_PROVIDER: ProviderDefinition = { id: 'feishu', channels: ['f
 /** Legacy accounts belong to Feishu without changing their durable Connector or message identities. */
 export function providerIdOf(account: { provider?: string }): string { return account.provider ?? 'feishu' }
 export interface ConnectorService {
+  /** Recheck the adapter's current account ACL after asynchronous intake work. */
+  allowsInbound?(event: ImEvent): boolean
+  /** Verify the parent sender with this account's platform credentials, without cross-account ID guesses. */
+  replyOwner?(botId: string, route: ImReplyRoute, options: { expectedFingerprint: string; signal?: AbortSignal }): Promise<'self' | 'other' | 'user' | 'unknown'>
   /** Owner-only management operations; never registered as model tools. */
   manage?(endpoint: string, payload: unknown, signal?: AbortSignal): Promise<unknown>
   prepareDialogue?(botId: string, conversationKey: string, expectedFingerprint: string): Promise<string>

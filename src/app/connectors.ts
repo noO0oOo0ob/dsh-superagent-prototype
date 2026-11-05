@@ -1,5 +1,6 @@
 /** Connector lifecycle, account-scoped intake and durable external send reconciliation. */
 import { z } from 'zod'
+import { GroupTargets } from '../messaging/group-targets.ts'
 import { key, type Trigger, type OutboundMessage } from '../core/index.ts'
 import { family } from '../kv.ts'
 import { ImBotSchema, ImEventSchema, ReplyRouteSchema, IM_PRE_SEND_FAILURES, imErrorCode, providerIdOf, FEISHU_PROVIDER, type ProviderDefinition, type ConnectorService, type ImEvent } from '../connectors/protocol.ts'
@@ -51,7 +52,8 @@ export class Connectors {
   private readonly states = new Map<string, { state: string; detail: string }>()
   private readonly acquisitions = new Set<Promise<void>>()
   private closed = false
-  constructor(private readonly host: ConnectorHost) {}
+  readonly targeting: GroupTargets
+  constructor(private readonly host: ConnectorHost) { this.targeting = new GroupTargets(host.store, () => host.personal.view().config.connectors) }
   /** Compatibility entry for the existing Feishu adapter; additional providers use register(). */
   bind(service: ConnectorService): () => void { return this.register(FEISHU_PROVIDER, service) }
   /** Replace only this provider; a stale disposer cannot remove its successor or another provider. */
@@ -231,8 +233,20 @@ export class Connectors {
           if (event.botId !== config.botId || event.fingerprint !== config.fingerprint || event.channel !== bot.channel || event.provider !== undefined && event.provider !== providerIdOf(config)) throw new Error('Untrusted source account')
           const conversation = config.conversations.find(item => item.id === event.conversation.id && item.kind === event.conversation.kind)
           if (config.intake === 'restricted' && (!conversation || !config.allowedSenders.includes(event.actor.id))) return { accepted: true }
-          const trigger = this.trigger(config, event)
-          await this.host.receive(trigger)
+          const authorize = () => {
+            signal.throwIfAborted(); context.signal.throwIfAborted()
+            if (signature(this.config(config.id)) !== sig || this.serviceFor(config) !== service) throw unavailable('account-changed')
+            if (service.allowsInbound && !service.allowsInbound(event)) throw unavailable('source-denied')
+          }
+          const intakeSignal = AbortSignal.any([signal, context.signal])
+          const replyOwner: ConnectorService['replyOwner'] = service.replyOwner && ((id, route, options) =>
+            cancellable(service.replyOwner!(id, route, { ...options, signal: intakeSignal }), intakeSignal))
+          await this.targeting.accept(config, event, replyOwner, authorize, async reason => {
+            const trigger = this.trigger(config, event)
+            trigger.meta.targetReason = reason
+            trigger.addressed = reason === 'explicit-mention' ? 'mention' : 'direct'
+            await this.host.receive(trigger)
+          })
           return { accepted: true }
         } }).then(acquired => { dispose = acquired; if (signal.aborted) release() })
       await cancellable(acquiring, signal)
@@ -250,7 +264,7 @@ export class Connectors {
     const root = event.reply.threadId ?? event.reply.rootId ?? event.messageId
     const thread = key('im-conversation-v1', ...(providerIdOf(config) === 'feishu' ? [] : [providerIdOf(config)]), event.channel, config.fingerprint, event.conversation.kind, event.conversation.id)
     return { id, source, actor: { source, id: event.actor.id }, human: true,
-      ...(event.conversation.kind === 'dm' ? { addressed: 'direct' as const } : event.mentionedAccount ? { addressed: 'mention' as const } : event.respondToAll === true || event.reply.parentId ? { addressed: 'direct' as const } : {}),
+      ...(event.conversation.kind === 'dm' ? { addressed: 'direct' as const } : event.mentionedAccount ? { addressed: 'mention' as const } : {}),
       threads: [{ source, id: thread }], at: event.at, text: event.text,
       channel: { source, thread, address: { provider: providerIdOf(config), connectorId: config.id, botId: config.botId, fingerprint: config.fingerprint,
         triggerId: id, conversationKind: event.conversation.kind, route: JSON.stringify(event.reply) } },

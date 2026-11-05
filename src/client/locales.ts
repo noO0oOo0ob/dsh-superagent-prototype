@@ -6,6 +6,25 @@ import { SETUP_PROBLEMS } from '../setup.ts'
 import { HEALTH_TEXT } from '../sources/host.ts'
 
 const TEXT = {
+  "messaging.groups.title": ["群默认机器人", "Group default bots"],
+  "messaging.groups.help": ["先在群内 @机器人，群信息会在这里出现。未设置默认时，仅处理明确指向机器人的消息。", "Mention a bot in the group to register its scope here. Without a default, only messages targeting a bot are handled."],
+  "messaging.groups.empty": ["当前账号尚无已验证的群信息", "No verified groups for this account yet"],
+  "messaging.groups.default": ["默认机器人", "Default bot"],
+  "messaging.groups.none": ["不设置默认机器人", "No default bot"],
+  "messaging.groups.saved": ["群默认机器人已更新", "Group default bot updated"],
+  "messaging.groups.stale": ["原默认账号已变化，需要重新选择", "The previous default account changed. Select a current account."],
+  "messaging.groups.decisions": ["最近的入站分流记录", "Recent inbound decisions"],
+  "messaging.groups.accepted": ["已接收", "Accepted"],
+  "messaging.groups.rejected": ["未触发", "Not triggered"],
+  "messaging.target.direct-message": ["私聊", "Direct message"],
+  "messaging.target.explicit-mention": ["明确 @当前机器人", "Explicit bot mention"],
+  "messaging.target.other-or-unverified-mention": ["指向其他对象或无法验证的 @", "Another or unverified mention"],
+  "messaging.target.verified-reply": ["回复当前机器人的消息", "Verified reply to this bot"],
+  "messaging.target.reply-to-other-bot": ["回复其他机器人", "Reply to another bot"],
+  "messaging.target.reply-unverified": ["无法验证被回复消息的归属", "Reply ownership could not be verified"],
+  "messaging.target.group-default": ["按群默认机器人配置处理", "Group default policy"],
+  "messaging.target.no-group-default": ["没有明确指向，且未设置群默认机器人", "No explicit target or group default"],
+
   "messaging.title": ["消息中心", "Message center"],
   "messaging.open": ["管理消息渠道与投递", "Manage channels and deliveries"],
   "messaging.accounts": ["渠道与机器人", "Channels and bots"],

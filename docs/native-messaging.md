@@ -25,6 +25,14 @@ Capabilities describe onboarding, content types, reply targets, history, actions
 
 Legacy accounts without a provider resolve to Feishu. Their Connector, Trigger, Thread and delivery identities stay unchanged. An explicit provider migration does not replay messages; native account synchronization removes only that provider's stale accounts. Enabled duplicate account fingerprints within one provider are rejected.
 
+## Group targeting
+
+Each account persists its target decision before acknowledging a message. An explicit mention wins; otherwise a parent message is fetched with the receiving account's credentials and its sender is checked against that application's ID. An arbitrary `parentId` does not grant a reply. Bot-origin events are ignored. Unknown mention IDs and unverifiable replies do not fall back to another bot. A user mention that cannot be distinguished from another bot therefore requires an explicit mention of the intended bot.
+
+The bot's Groups settings shows observed provider/channel/tenant/group scopes and one optional default account per scope. A scope is accepted only from the provider's authenticated event metadata, never from group names or matching text. Without a verified tenant scope, default selection is unavailable; explicit mentions and verified replies still work. A removed, disabled or rebound default never transfers its traffic to another account. Existing account-wide “all group messages” settings no longer select targets; the copied UI retains permission repair and native topic display controls.
+
+The first callback freezes the group message’s default account across all receiving accounts, so changing the default before another bot’s delayed callback cannot trigger a second handler. Rejected events stay rejected after default changes or restart. Accepted events whose intake failed remain pending for the same account; duplicate callbacks share the operation. The model cannot select a different destination. The Groups page displays recent decisions, including unverified targeting. Live two-bot verification of tenant/chat ID scope and round trips remains separate from the offline adapter tests.
+
 ## Stages
 
 1. [x] Pin and copy upstream Feishu/shared/UI source and focused tests.

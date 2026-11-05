@@ -56,7 +56,10 @@ export function normalizeNativeMessage(raw, config) {
   if (!text.trim()) return null;
   const event = normalizeExternalText({ ...raw, message: { ...raw.message, message_type: 'text', content: JSON.stringify({ text }) } },
     { botId: config.id, appId: config.appId, botOpenId: config.botOpenId, fingerprint: fingerprint(config) });
-  return event ? { ...event, channel: config.domain === 'lark' ? 'lark' : 'feishu', messageType: raw.message.message_type, resources } : null;
+  const tenantId = raw.tenant_key ?? raw.header?.tenant_key ?? raw.sender?.tenant_key;
+  const groupScope = event?.conversation.kind === 'group' && typeof tenantId === 'string' && tenantId.length > 0 && tenantId.length <= 512
+    ? { tenantId, groupId: event.conversation.id } : undefined;
+  return event ? { ...event, ...(groupScope ? { groupScope } : {}), channel: config.domain === 'lark' ? 'lark' : 'feishu', messageType: raw.message.message_type, resources } : null;
 }
 
 /** Construct an independently stored account controller and its Personal Agent adapter. */
@@ -111,12 +114,8 @@ export async function createNativeFeishu({ context, stateDir, lifetime, logger =
           if (!current || fingerprint(current) !== fingerprint(config)) throw failure('account-changed');
           const event = normalizeNativeMessage(raw, current);
           if (!event) return { accepted: true };
-          const owner = current.ownerOpenIds.includes(event.actor.id);
-          const allowed = evaluateAccessPolicy(workspaces.accessPolicyFor(botId), { conversationType: event.conversation.kind === 'dm' ? 'direct' : 'group',
-            senderIds: [event.actor.id], isCommand: /^\s*\//.test(event.text) });
-          if (!owner && !allowed.allowed) return { accepted: true };
-          if (event.conversation.kind === 'group' && current.groupResponseMode !== 'all' && !event.mentionedAccount && !event.reply.parentId) return { accepted: true };
-          return consumers.accept(botId, { ...event, respondToAll: current.groupResponseMode === 'all', settings: botSettings(botId) }, signal);
+          if (!service.allowsInbound(event)) return { accepted: true };
+          return consumers.accept(botId, { ...event, settings: botSettings(botId) }, signal);
         },
       });
       runtimes.set(botId, runtime);
@@ -131,6 +130,13 @@ export async function createNativeFeishu({ context, stateDir, lifetime, logger =
   const supervisor = new ConnectionSupervisor({ controller: { status: () => controller.status(), initialize: async () => { const result = await controller.initialize(); await syncAccounts(); return result; } }, harness, logger });
   const service = {
     contractVersion: 1, inboundVersion: 1,
+    allowsInbound(event) {
+      const current = configStore.getBot(event.botId);
+      if (closed || lifetime.aborted || !current || fingerprint(current) !== event.fingerprint) return false;
+      return current.ownerOpenIds.includes(event.actor.id) || evaluateAccessPolicy(workspaces.accessPolicyFor(event.botId), {
+        conversationType: event.conversation.kind === 'dm' ? 'direct' : 'group', senderIds: [event.actor.id], isCommand: /^\s*\//.test(event.text),
+      }).allowed;
+    },
     listBots: async () => accounts().map(item => ({ botId: item.id, channel: item.channel })),
     describeBot: async id => ({ ...await core.describeDeliveryAccount(id), channel: configStore.getBot(id)?.domain === 'lark' ? 'lark' : 'feishu' }),
     consumeInbound: async (id, options) => {
@@ -138,6 +144,16 @@ export async function createNativeFeishu({ context, stateDir, lifetime, logger =
       if (account.account.fingerprint !== options.expectedFingerprint) throw failure('account-changed');
       return consumers.register(id, { fingerprint: options.expectedFingerprint, onEvent: options.onEvent, signal: options.signal });
     },
+    replyOwner: (id, route, options) => core.withNativeRoute(id, route, async ({ client }) => {
+      if (!route.parentId) return 'unknown';
+      const response = await client.im.v1.message.get({ path: { message_id: route.parentId } });
+      options.signal?.throwIfAborted();
+      const parent = response?.data?.items?.find(item => item.message_id === route.parentId);
+      if (response?.code || !parent || parent.deleted || parent.chat_id !== route.conversationId) return 'unknown';
+      if (parent.sender?.sender_type === 'user') return 'user';
+      if (parent.sender?.sender_type !== 'app' || parent.sender?.id_type !== 'app_id') return 'unknown';
+      return parent.sender.id === configStore.getBot(id)?.appId ? 'self' : 'other';
+    }, { ...options, readOnly: true }),
     replyChecked: async (id, route, text, options) => {
       await handle.sendPart(id, route, { type: 'text', text, format: options.format ?? 'plain' },
         { ...options, id: uuid(JSON.stringify([id, route, text])), uploaded() {} });

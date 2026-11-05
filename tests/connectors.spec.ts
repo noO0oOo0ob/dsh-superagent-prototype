@@ -484,3 +484,29 @@ describe('provider isolation', () => {
     expect(refreshed[1]).toMatchObject({ id: 'native-bot-1', provider: 'feishu', channel: 'feishu' })
   })
 })
+
+it('rechecks native access policy after waiting for reply ownership', async () => {
+  const h = host(), owner = Promise.withResolvers<'self'>()
+  let allowed = true
+  h.fake.service.allowsInbound = () => allowed
+  h.fake.service.replyOwner = () => owner.promise
+  await h.start()
+  const incoming = event({ mentioned: false })
+  incoming.reply.parentId = 'parent'
+  const accepting = h.deliver(incoming), rejected = expect(accepting).rejects.toThrow('source-denied')
+  allowed = false; owner.resolve('self'); await rejected
+  expect(h.receive).not.toHaveBeenCalled()
+})
+
+it('releases a stalled reply check on event cancellation so redelivery can continue', async () => {
+  const h = host(), parent = Promise.withResolvers<'self'>(), attempt = new AbortController()
+  h.fake.service.replyOwner = vi.fn().mockReturnValueOnce(parent.promise).mockResolvedValue('self')
+  await h.start()
+  const incoming = event({ mentioned: false }); incoming.reply.parentId = 'parent'
+  const pending = h.fake.consumers.get('bot-1')!.onEvent(incoming, { signal: attempt.signal })
+  const rejected = expect(pending).rejects.toThrow()
+  attempt.abort(); await rejected
+  await h.deliver(incoming)
+  expect(h.receive).toHaveBeenCalledOnce()
+  parent.reject(new Error('late provider failure'))
+})

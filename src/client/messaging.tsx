@@ -4,6 +4,7 @@ import { usePanel } from './provider.tsx'
 import { usePoll } from './api.ts'
 import { Button, Input, SegmentedTabs } from './controls.tsx'
 import { LoadState, Section, Hint } from './widgets.tsx'
+import { GroupPolicies } from './group-policies.tsx'
 import { deliveryState } from '../messaging/delivery-state.ts'
 import type { DeliveryRecord } from '../messaging/delivery.ts'
 import { FeishuSettingsTab, FeishuGroupSettingsPage, FeishuSlashPanelSettingsPage,
@@ -63,7 +64,7 @@ function NativeMessaging() {
         <BotSettingsTabs tabs={tabs.map(id => ({ id, label: t(`messaging.tab.${id}`) }))} activeTabId={tab}
           onChange={id => { const next = tabs.find(value => value === id); if (next) setTab(next) }} />
         <div role="tabpanel" id={`spa-im-bot-settings-${tab}-panel`} aria-labelledby={`spa-im-bot-settings-${tab}-tab`} key={`${account.botId}:${tab}`}>
-          {tab === 'group' && <FeishuGroupSettingsPage account={account} rpcCall={rpcCall} />}
+          {tab === 'group' && <><GroupPolicies botId={account.botId} /><FeishuGroupSettingsPage account={account} rpcCall={rpcCall} managedTargeting /></>}
           {tab === 'access' && <AccessPolicySettingsPage channel="feishu" account={account} rpcCall={rpcCall} onSaved={accessPolicy => saved({ accessPolicy })} />}
           {tab === 'directory' && <FeishuConversationDirectorySettingsPage account={account} rpcCall={rpcCall} />}
           {tab === 'commands' && <FeishuSlashPanelSettingsPage account={account} rpcCall={rpcCall} onSaved={slashPanel => saved({ slashPanel })} />}

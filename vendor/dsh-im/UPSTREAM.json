@@ -249,8 +249,8 @@
     },
     {
       "path": "plugin-src/client/channels/feishu/group-settings.js",
-      "sha256": "3162a2c393699b7b9fa1020a0db507a88769af8c790e69e95812c9d470af0526",
-      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings. Describe native topic replies without promising an independent Personal Agent conversation."
+      "sha256": "781d0f0b32e4c6bda3b57e63185ddd9774d358bbc003e0f93486e382af6174b5",
+      "reason": "Keep group message authorization and topic display while Personal Agent owns explicit targeting and per-group defaults."
     },
     {
       "path": "plugin-src/client/channels/feishu/index.js",
@@ -299,8 +299,8 @@
     },
     {
       "path": "plugin-src/client/i18n.js",
-      "sha256": "622554f0d9633bb3aa301ec099f0c536d58f7e76c0a43892ecbb195c3e0ca58c",
-      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings. Translate the native topic reply explanation for stable group conversations."
+      "sha256": "5354bb0a8b9c188f0342c50f9951284eda87c4327a47f88ae028c6ad5d6f5faf",
+      "reason": "Keep group message authorization and topic display while Personal Agent owns explicit targeting and per-group defaults."
     },
     {
       "path": "plugin-src/client/model-setting.js",
@@ -329,8 +329,8 @@
     },
     {
       "path": "src/channels/feishu/multi-bot-controller.mjs",
-      "sha256": "eadbb80956bec1ff69f0175d579b865142fd4dafa83478e2b7c35b0d7ba917f4",
-      "reason": "Adapt native callbacks, checked media transport and supported command manifest without activating the old Session bridge."
+      "sha256": "137fdb29040fd19a5d6fa2fd37437b68fe4b252ca95eff79036d4acf5a4d26ec",
+      "reason": "Release read-only native routing transitions on cancellation while observing late SDK responses; preserve send outcome handling."
     },
     {
       "path": "src/channels/feishu/slash-command-panel.mjs",

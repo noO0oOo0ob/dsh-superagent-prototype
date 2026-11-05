@@ -84,6 +84,7 @@ export function GroupResponseModeEditor({
   permissionGranted = false,
   disabled = false,
   authorizationDisabled = false,
+  managedTargeting = false,
   onSave,
   onAuthorize,
 }) {
@@ -111,7 +112,7 @@ export function GroupResponseModeEditor({
     setAuthorizing(true);
     setError(null);
     try {
-      await onAuthorize?.({ preserveResponseMode: current !== 'all' });
+      await onAuthorize?.({ preserveResponseMode: managedTargeting || current !== 'all' });
     } catch (cause) {
       setError(cause?.message ?? '群消息权限授权失败，请重试。');
     } finally {
@@ -124,12 +125,12 @@ export function GroupResponseModeEditor({
     'aria-labelledby': 'spa-im-feishu-group-response-title',
   },
   h('div', { className: 'spa-im-feishuGroupControlHeader' },
-    h('h3', { id: 'spa-im-feishu-group-response-title' }, '群聊响应方式'),
+    h('h3', { id: 'spa-im-feishu-group-response-title' }, managedTargeting ? '群消息接收权限' : '群聊响应方式'),
     saving || authorizing
       ? h('span', { className: 'spa-im-feishuGroupControlStatus', role: 'status' },
           saving ? '保存中…' : '正在准备授权…')
       : null),
-  h('select', {
+  managedTargeting ? null : h('select', {
     className: 'spa-im-feishuGroupSelect',
     value: current,
     disabled: disabled || saving,
@@ -139,14 +140,14 @@ export function GroupResponseModeEditor({
   h('option', { value: 'mention' }, '仅在 @机器人时响应（推荐）'),
   h('option', { value: 'all' }, '响应所有群消息')),
   h('p', { className: 'spa-im-feishuGroupHelp' },
-    current === 'mention'
+    managedTargeting ? '消息中心统一管理群响应。明确 @ 或回复机器人时优先；没有明确指向时，仅群默认机器人响应。' : current === 'mention'
       ? permissionGranted
         ? '私聊始终响应；群聊仅处理明确 @当前机器人的消息。群消息权限已开通，再次切换无需授权。'
         : '私聊始终响应；群聊仅处理明确 @当前机器人的消息。也可单独授权采集群消息，保持仅 @ 时回复。'
       : permissionGranted
         ? '已开通“获取群组中所有消息”权限（im:message.group_msg）；机器人会处理群聊中的所有可见消息。'
         : '尚未确认“获取群组中所有消息”权限，请完成飞书授权。'),
-  (current === 'all' || !permissionGranted)
+  (managedTargeting || current === 'all' || !permissionGranted)
     ? h('div', { className: 'spa-im-feishuGroupPermissionAction' },
         h(SettingsButton, {
           disabled: disabled || authorizationDisabled || saving || authorizing,
@@ -301,7 +302,7 @@ function PermissionFlow({ provision, now, busy, botName, onRetry, onCancel, onCl
       h(SettingsButton, { onClick: onCancel, disabled: busy }, '取消授权'))));
 }
 
-export function FeishuGroupSettingsPage({ account, rpcCall }) {
+export function FeishuGroupSettingsPage({ account, rpcCall, managedTargeting = false }) {
   const [settings, setSettings] = React.useState(() => groupSettingsFrom(account));
   const [refreshing, setRefreshing] = React.useState(false);
   const [refreshError, setRefreshError] = React.useState(null);
@@ -546,6 +547,7 @@ export function FeishuGroupSettingsPage({ account, rpcCall }) {
   }, refreshError.message) : null,
   h('div', { className: 'spa-im-feishuGroupControls' },
     h(GroupResponseModeEditor, {
+      managedTargeting,
       value: settings.groupResponseMode,
       permissionGranted: settings.groupMessagePermissionGranted,
       disabled,

@@ -408,6 +408,8 @@ const EN = Object.freeze({
   'WhatsApp账号': 'WhatsApp account',
   '微信设置': 'WeChat settings',
   '飞书机器人设置': 'Feishu bot settings',
+  '群消息接收权限': 'Group message permissions',
+  '消息中心统一管理群响应。明确 @ 或回复机器人时优先；没有明确指向时，仅群默认机器人响应。': 'The message center manages group targeting. Explicit mentions and verified replies take priority; otherwise only the group default bot responds.',
   '群聊响应方式': 'Group response mode',
   '仅在 @机器人时响应（推荐）': 'Only respond when @mentioned (recommended)',
   '响应所有群消息': 'Respond to all group messages',

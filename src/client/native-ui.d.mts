@@ -5,7 +5,7 @@ export interface BotAccount { botId: string; botName?: string; [key: string]: un
 export interface AccountSettingsUpdate { botId: string; settings: { accessPolicy?: unknown; slashPanel?: unknown } }
 interface SettingsProps { account: BotAccount; rpcCall: NativeRpc; onSaved?(value: unknown): void }
 export const FeishuSettingsTab: ComponentType<{ rpcCall: NativeRpc; accountUpdate?: AccountSettingsUpdate | undefined }>
-export const FeishuGroupSettingsPage: ComponentType<SettingsProps>
+export const FeishuGroupSettingsPage: ComponentType<SettingsProps & { managedTargeting?: boolean }>
 export const FeishuSlashPanelSettingsPage: ComponentType<SettingsProps>
 export const FeishuConversationDirectorySettingsPage: ComponentType<SettingsProps>
 export const AccessPolicySettingsPage: ComponentType<SettingsProps & { channel: string }>

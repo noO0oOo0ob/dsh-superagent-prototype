@@ -30,6 +30,21 @@ import {
   normalizeSlashPanelConfig,
 } from './slash-command-panel.mjs';
 
+/** Observe late SDK outcomes while cancelling a read-only account transition. */
+function waitForRead(operation, signal) {
+  signal?.throwIfAborted();
+  if (!signal) return operation();
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener('abort', abort, { once: true });
+    Promise.resolve().then(() => { signal.throwIfAborted(); return operation(); }).then(
+      value => { signal.removeEventListener('abort', abort); resolve(value); },
+      error => { signal.removeEventListener('abort', abort); reject(error); },
+    );
+    if (signal.aborted) abort();
+  });
+}
+
 const ACTIVE_REGISTRATION_STATES = new Set([
   'starting', 'qr_ready', 'polling', 'slow_down', 'domain_switched',
 ]);
@@ -673,9 +688,10 @@ export class MultiBotDshFeishuController {
     });
   }
 
-  async withNativeRoute(botId, route, operation, { expectedFingerprint, signal } = {}) {
+  async withNativeRoute(botId, route, operation, { expectedFingerprint, signal, readOnly = false } = {}) {
     this.#assertOpen();
-    return this.#withBotTransition(botId, async () => {
+    return this.#withBotTransition(botId, () => {
+      const run = async () => {
       this.#assertOpen();
       const config = this.#requireBot(botId);
       const account = await this.#deliveryAccount(config);
@@ -685,6 +701,9 @@ export class MultiBotDshFeishuController {
       const runtime = this.#runtimes.get(botId);
       if (!runtime || !isConnected(connectionStatus(runtime))) throw Object.assign(new Error('bot-not-connected'), { code: 'bot-not-connected' });
       return runtime.withNativeRoute(route, operation, { signal });
+      };
+      // Only reads may release the queue before the SDK settles; sends must retain their outcome handling.
+      return readOnly ? waitForRead(run, signal) : run();
     });
   }
 

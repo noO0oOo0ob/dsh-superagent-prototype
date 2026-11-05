@@ -16,6 +16,7 @@ let bots: unknown[]
 let events: ApiResponse<'GET personal/hooks'>
 let nativeBots: Record<string, unknown>[]
 let parts: ApiResponse<'GET personal/messages'>
+let groupView: ApiResponse<'GET personal/groups'>
 let error: string | undefined
 const atTime = '2026-11-04T06:00:00Z'
 const response = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } })
@@ -24,7 +25,7 @@ const schedule = (): View['schedules'][number] => ({ version: 1, revision: 1, st
 
 beforeEach(() => {
   current = { revision: 0, config: PersonalConfigSchema.parse({}), connectors: {}, deliveries: [], vault: [], routeDecisions: [], schedules: [], runs: [], hooks: [] }
-  requests = []; bots = []; events = []; nativeBots = []; parts = []; error = undefined
+  groupView = { groups: [], decisions: [] }; requests = []; bots = []; events = []; nativeBots = []; parts = []; error = undefined
   const fallback = globalThis.fetch
   vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input).replace('/super-personal-agent/api/', ''), method = init?.method ?? 'GET'
@@ -47,6 +48,13 @@ beforeEach(() => {
         nativeBots = nativeBots.map(bot => bot.botId === payload.botId ? { ...bot, [name]: payload.policy ?? payload.slashPanel } : bot)
       }
       return response({ ok: true, value: { bots: nativeBots, totals: { configured: nativeBots.length, connected: nativeBots.length } } })
+    }
+    if (path === 'personal/groups') return response(groupView)
+    if (path.startsWith('personal/groups/')) {
+      const group = groupView.groups.find(group => path.endsWith(group.id))!
+      if (body.revision !== group.revision) return response({ error: 'Group revision conflict' }, 409)
+      group.defaultAccount = group.accounts.find(account => account.connectorId === body.connectorId) ?? null
+      group.defaultAvailable = !!group.defaultAccount; group.revision++; return response(group)
     }
     if (path === 'personal/messages') return response(parts)
     if (path.startsWith('personal/messages/')) return response({ recorded: true })
@@ -324,4 +332,22 @@ it('keeps account settings, return focus and scroll isolated for two Feishu bots
   await remount()
   expect(document.querySelector('#spa-messaging-deliveries')?.getAttribute('aria-selected')).toBe('true')
   expect(text()).toContain(zh['messaging.empty'])
+})
+
+it('sets a verified group default in the original bot settings without a competing all-message switch', async () => {
+  nativeBots = [{ botId: 'bot_0', bot: { name: 'Research' }, connected: true, state: 'connected', workspace: '/tmp/Research' }]
+  groupView.groups = [{ version: 1, id: 'group', provider: 'feishu', channel: 'feishu', tenantId: 'tenant', groupId: 'chat', revision: 3,
+    defaultAccount: null, defaultAvailable: false, accounts: [{ available: true, connectorId: 'one', botId: 'bot_0', fingerprint: 'a'.repeat(64) }, { available: true, connectorId: 'two', botId: 'bot_1', fingerprint: 'b'.repeat(64) }] }]
+  at({ page: 'messaging' }); await mount()
+  await click(document.querySelector<HTMLElement>('[aria-label="展开该账号的设置"]')!)
+  await click(document.querySelector<HTMLElement>('[aria-label="更多机器人设置"]')!)
+  expect(document.querySelector('[aria-label="群聊响应方式"]')).toBeNull()
+  expect(text()).toContain('群消息接收权限')
+  const label = `${zh['messaging.groups.default']} · chat`
+  await type(field<HTMLSelectElement>(label), 'two')
+  expect(requests.find(item => item.path === 'personal/groups/group')?.body).toEqual({ revision: 3, connectorId: 'two' })
+  expect(field<HTMLSelectElement>(label).value).toBe('two')
+  await click(zh['messaging.back'])
+  await click(document.querySelector<HTMLElement>('[aria-label="更多机器人设置"]')!)
+  expect(field<HTMLSelectElement>(label).value).toBe('two')
 })

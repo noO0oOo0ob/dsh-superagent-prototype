@@ -277,3 +277,36 @@ it('rechecks command permission and account identity for card callbacks', async 
   expect(h.native.allowsCommand(account.id, account.fingerprint, 'ou_user', 'dm')).toBe(false);
   expect(h.native.allowsCommand(account.id, 'old-account', 'ou_user', 'group')).toBe(false);
 });
+
+it('verifies a parent sender with the current app instead of assuming every parent belongs to it', async () => {
+  const h = await fixture(), account = await h.bind();
+  const source = { message_id: 'om_1', chat_id: 'oc_chat', parent_id: 'parent', sender: { sender_type: 'user', id_type: 'open_id', id: 'ou_user' } };
+  let parent = { message_id: 'parent', chat_id: 'oc_chat', sender: { sender_type: 'app', id_type: 'app_id', id: 'cli_other' } };
+  h.get.mockImplementation(async request => ({ code: 0, data: { items: [request.path.message_id === 'om_1' ? source : parent] } }));
+  const original = { ...route, parentId: 'parent' }, options = { expectedFingerprint: account.fingerprint, signal: h.lifetime.signal };
+  await expect(h.native.service.replyOwner(account.id, original, options)).resolves.toBe('other');
+  parent = { ...parent, sender: { sender_type: 'app', id_type: 'app_id', id: 'cli_test' } };
+  await expect(h.native.service.replyOwner(account.id, original, options)).resolves.toBe('self');
+  parent = { ...parent, chat_id: 'another' };
+  await expect(h.native.service.replyOwner(account.id, original, options)).resolves.toBe('unknown');
+  const incoming = raw({ text: 'hello group' }, 'text', { chat_type: 'group' });
+  expect(normalizeNativeMessage({ ...incoming, tenant_key: 'tenant' }, config).groupScope).toEqual({ tenantId: 'tenant', groupId: 'oc_chat' });
+  expect(normalizeNativeMessage(incoming, config).groupScope).toBeUndefined();
+});
+
+it.each(['original', 'parent'])('releases the native account queue when the %s message lookup is cancelled', async stage => {
+  const h = await fixture(), account = await h.bind(), pending = Promise.withResolvers(), signal = new AbortController();
+  const source = { message_id: 'om_1', chat_id: 'oc_chat', parent_id: 'parent', sender: { sender_type: 'user', id_type: 'open_id', id: 'ou_user' } };
+  const parent = { message_id: 'parent', chat_id: 'oc_chat', sender: { sender_type: 'app', id_type: 'app_id', id: 'cli_test' } };
+  const blocked = stage === 'original' ? 'om_1' : 'parent';
+  h.get.mockImplementation(request => request.path.message_id === blocked ? pending.promise : Promise.resolve({ code: 0, data: { items: [source] } }));
+  const original = { ...route, parentId: 'parent' };
+  const checking = h.native.service.replyOwner(account.id, original, { expectedFingerprint: account.fingerprint, signal: signal.signal });
+  const rejected = expect(checking).rejects.toThrow();
+  await vi.waitFor(() => expect(h.get.mock.calls.some(([request]) => request.path.message_id === blocked)).toBe(true));
+  signal.abort(); await rejected;
+  h.get.mockImplementation(async request => ({ code: 0, data: { items: [request.path.message_id === 'om_1' ? source : parent] } }));
+  await expect(h.native.service.replyOwner(account.id, original, { expectedFingerprint: account.fingerprint, signal: h.lifetime.signal })).resolves.toBe('self');
+  pending.reject(new Error('late SDK rejection'));
+  await expect(h.native.rpc('bot.delete', { botId: account.id, confirm: true })).resolves.toMatchObject({ ok: true });
+});

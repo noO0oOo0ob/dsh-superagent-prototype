@@ -290,6 +290,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 
 | Path | Responsibility |
 | --- | --- |
+| `src/client/group-policies.tsx` | Observed group defaults and account-scoped targeting audit |
 | `src/client/messaging.tsx` | Independent message-center route, copied account settings and per-part delivery recovery UI |
 | `src/client/native-ui.mjs` | Namespaced copied Feishu UI exports |
 | `src/client/native-ui.d.mts` | Typed declarations for copied UI components |
@@ -306,6 +307,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/messaging/delivery.ts` | Immutable per-part receipts and explicit recovery |
 | `src/messaging/dialogue.ts` | Restricted conversation router and logged metadata projection |
 | `src/messaging/files.ts` | Immutable binary artifact snapshots |
+| `src/messaging/group-targets.ts` | Durable per-account target decisions and verified group defaults |
 | `src/messaging/inbound.ts` | Source-scoped inbound resource downloads |
 | `src/app/connectors.ts` | Checked native account intake, account lifecycle and durable send reconciliation |
 | `src/app/personal-policy.ts` | Revalidation of scheduled execution against its original human authority |
@@ -452,6 +454,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/native-feishu.spec.mjs` | Native QR/manual account lifecycle and platform media delivery |
 | `tests/executor-resources.spec.ts` | Resource preparation cancellation, wake validation and last-moment routing revocation |
 | `tests/artifacts.spec.ts` | Personal feature lifecycle and isolation checks |
+| `tests/group-targets.spec.ts` | Bot mentions, verified replies, group defaults, revocation and restart deduplication |
 | `tests/connectors.spec.ts` | Personal feature lifecycle and isolation checks |
 | `tests/hooks.spec.ts` | Personal feature lifecycle and isolation checks |
 | `tests/panel-deployment.spec.tsx` | Personal feature lifecycle and isolation checks |

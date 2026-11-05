@@ -383,6 +383,10 @@ a.spa-btn, a.spa-btn:hover { text-decoration: none; }
 
 .spa-messaging-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
 .spa-messaging-settings { min-width: 0; }
+.spa-group-policy { min-width: 0; margin-block: var(--dsw-spacing-4, 16px); }
+.spa-group-policy label { display: grid; gap: var(--dsw-spacing-2, 8px); }
+.spa-group-policy select { width: 100%; min-width: 0; }
+.spa-group-policy p { overflow-wrap: anywhere; }
 .spa-message-record { padding: 12px 0; border-bottom: 1px solid var(--dsw-alias-border-l2); }
 .spa-message-part { padding: 10px 0; overflow-wrap: anywhere; }
 .spa-message-preview { white-space: pre-wrap; max-height: 180px; overflow: auto; }

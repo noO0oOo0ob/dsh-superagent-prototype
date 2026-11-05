@@ -3,6 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
+import { GroupConflict } from '../messaging/group-targets.ts'
 import { THREAD_FILTERS, TICKET_FILTERS, type Api, type ApiResponse, type RouteParams } from './api.ts'
 import { sourceSkills } from './context.ts'
 import type { ModelCatalog } from '@deepseek-ai/dsh-api-session-controller/types'
@@ -120,7 +121,7 @@ function failure(error: unknown): [number, Record<string, unknown>] {
   if (error instanceof SetupError) return [400, { error: error.message, setup: error.problem }]
   if (error instanceof RouteError) return [error.status, { error: error.message }]
   if (error instanceof UserError) return [error.missing ? 404 : 400, { error: error.message, code: error.code, values: error.values }]
-  if (error instanceof ScheduleConflict || error instanceof PersonalConflict || error instanceof SettingsConflict || error instanceof PromptConflict) return [409, { error: error.message }]
+  if (error instanceof GroupConflict || error instanceof ScheduleConflict || error instanceof PersonalConflict || error instanceof SettingsConflict || error instanceof PromptConflict) return [409, { error: error.message }]
   return [500, { error: error instanceof Error ? error.message : String(error) }]
 }
 
@@ -211,6 +212,12 @@ function routes(runtime: HttpHost): Routes {
       runtime.messageDelivery.reconcile(params.id, input.partId, input.action, input.note)
       runtime.effects?.enqueue('reply', params.id, {})
       return { recorded: true }
+    },
+    'GET personal/groups': () => ({ groups: runtime.connectors?.targeting.view() ?? [], decisions: runtime.connectors?.targeting.decisions() ?? [] }),
+    'PUT personal/groups/:id': async ({ params, body }) => {
+      if (!runtime.connectors) throw new RouteError(404, 'Connectors are unavailable')
+      const input = z.object({ revision: z.number().int().nonnegative(), connectorId: z.string().min(1).nullable() }).strict().parse(await body())
+      return runtime.connectors.targeting.setDefault(params.id, input.revision, input.connectorId)
     },
     'GET personal/providers': () => runtime.connectors?.definitions() ?? [],
     'POST personal/providers/:id': async ({ params, body }) => {
