@@ -30,3 +30,10 @@ export function promptFile(name: string): string {
   const paragraphs = packaged('prompts', `${name}.md`).text.trim().split(/\n(?:[ \t]*\n)+/)
   return paragraphs.map(paragraph => paragraph.split('\n').map(line => line.trim()).join(' ')).join('\n')
 }
+
+/** Packaged expert authoring workflow and its self-contained demo resources. */
+export const expertCreator = (() => {
+  const { path, text } = packaged('skills', 'create-expert', 'SKILL.md')
+  const end = text.indexOf('\n---', 4)
+  return { path, content: text.slice(end + 4).trim(), description: 'Create or adapt expert packages with AGENTS, SOUL, routing descriptions, Skills and MCP configuration; includes a travel demo.' }
+})()

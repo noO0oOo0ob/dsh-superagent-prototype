@@ -1,5 +1,8 @@
 /** Type-only management API contract between the web panel and host routes, imported by the panel without bundling host code. */
 import type { ModelCatalog } from '@deepseek-ai/dsh-api-session-controller/types'
+import type { ExpertEntry } from '../experts/catalog.ts'
+import type { PackageInput } from '../experts/package.ts'
+import type { ExpertSnapshot } from '../experts/model.ts'
 import type { Identities, IdentityFiles, IdentityPreview, IdentityVersion } from '../personal/identities.ts'
 import type { PromptConfig, Prompts } from './prompts.ts'
 import type { PromptsView, StateView, TicketPageView } from './http.ts'
@@ -30,6 +33,10 @@ export interface Api {
   'POST personal/feishu': { body: { endpoint: string; payload: unknown }; response: unknown }
   'GET personal/messages': { response: import('../messaging/delivery.ts').DeliveryRecord[] }
   'POST personal/messages/:id': { body: { partId: string; action: 'confirm_sent' | 'retry'; note: string }; response: { recorded: true } }
+  'GET personal/experts': { response: ExpertEntry[] }
+  'POST personal/experts/preview': { body: PackageInput; response: ExpertSnapshot }
+  'POST personal/experts': { body: { source: PackageInput; digest: string; revision: number }; response: ExpertEntry }
+  'PUT personal/experts/:id': { body: { revision: number; enabled: boolean }; response: ExpertEntry }
   'GET personal/identities': { response: ReturnType<Identities['list']> }
   'GET personal/identities/:id': { query?: { revision?: number }; response: IdentityVersion }
   'POST personal/identities/preview': { body: IdentityFiles; response: IdentityPreview }

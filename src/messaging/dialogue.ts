@@ -1,6 +1,7 @@
 /** Conversation-local router prompts and tools; task execution stays in separate Workers. */
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { z } from 'zod'
+import { EXPERT_ROUTING } from '../experts/model.ts'
 import { mainTools, type MainToolsHost } from '../app/tools/main.ts'
 import { tool, type Tool } from '../app/tools/tool.ts'
 import type { Store } from '../app/store.ts'
@@ -19,7 +20,8 @@ export function dialogueSettings(trigger?: Trigger): { workspace?: string; model
   return { ...(value.workspace ? { workspace: value.workspace } : {}), ...(value.model ? { model: value.model } : {}),
     ...(value.agentPreset ? { preset: value.agentPreset } : {}) }
 }
-export const DIALOGUE_PROMPT = `You are the conversation router of super-personal-Agent. This Session belongs to one IM account and conversation. Keep a continuous conversation here. Main retains the overall history; task Workers run independently.
+export const DIALOGUE_PROMPT = `${EXPERT_ROUTING}
+You are the conversation router of super-personal-Agent. This Session belongs to one IM account and conversation. Keep a continuous conversation here. Main retains the overall history; task Workers run independently.
 Before accepting new work, read personal_agent_model_profiles and select an enabled model_profile by task complexity, or omit it to use the default. Attach follow-ups to their existing task without changing its model. Images do not justify a new task or model switch; the host handles native image input and ModLens.
 For each candidate, call personal_agent_route: respond for ordinary questions, discussion or brainstorming; accept for a new task requiring execution/research/files; attach only when the person is continuing a specific listed task; stop only on an explicit request from that task's owner. Never create a task just for a greeting. Ask a short clarification with respond if task selection is ambiguous.
 Every user-visible reply must use personal_agent_route kind respond or task publication. Plain final prose is not sent to IM. A respond decision settles the candidate batch. Use the source language and answer naturally. Do not expose local routing IDs unless the person asks for task references. Do not promise a file was sent until its delivery is recorded. For long work accept with a short acknowledgement, then end your turn; Workers report independently. Do not wait or poll.
@@ -50,7 +52,7 @@ export function dialogueTools(host: MainToolsHost, store: Store, conversations: 
     return trigger
   }
   const scoped: MainToolsHost = { ...host, authorizeRoute: (triggerId, ticketId, kind) => { guard(triggerId, ticketId, ['attach', 'stop'].includes(kind)) } }
-  return [...mainTools(scoped, agent).filter(item => item.name === 'personal_agent_model_profiles').map(item => ({ ...item,
+  return [...mainTools(scoped, agent).filter(item => ['personal_agent_model_profiles', 'personal_agent_experts'].includes(item.name)).map(item => ({ ...item,
     execute: async (input: unknown, signal: AbortSignal) => {
       if (!conversations.forSession(agent.id)) throw new Error('Conversation was reset')
       return item.execute(input, signal)

@@ -14,6 +14,8 @@ import type { Sessions } from '../sessions.ts'
 import type { Settings } from '../settings.ts'
 import type { Store } from '../store.ts'
 import { AcknowledgementSchema, readTool, tool, type Tool } from './tool.ts'
+import { ExpertSelectionSchema } from '../../experts/model.ts'
+import type { Experts } from '../../experts/catalog.ts'
 import { ModelProfileIdSchema } from '../../models.ts'
 import { ModelRoutingError } from '../model-routing.ts'
 import { planWorkerModel, profileChoices } from '../worker-models.ts'
@@ -22,6 +24,7 @@ const RoutingNoteSchema = z.string().trim()
   .refine(text => wordCount(text) <= NOTE_WORDS, `Routing note must not exceed ${NOTE_WORDS} words (Chinese uses word segmentation). Shorten it; do not split it across deliveries.`)
   .describe(`Optional routing background or explicit human constraint, at most ${NOTE_WORDS} words. Never add implementation instructions or replace the original source.`)
 export interface MainToolsHost {
+  readonly experts?: Pick<Experts, 'choices' | 'select'>
   readonly context: Context
   readonly engine: Pick<EngineForMainSession, 'candidate' | 'decide' | 'attach' | 'reply' | 'requestStatus' | 'note'> & EngineForPeople
   readonly store: Pick<Store, 'tickets' | 'triggers' | 'threads' | 'atomic' | 'replyStatus' | 'settings'>
@@ -51,6 +54,7 @@ const fromDecision = (decision: Decision) => ({ decision: decision.kind, reason:
  * runs (`FIELDS`), so an item that lacks one, or whose value breaks a limit, is refused alone.
  */
 const RouteItemSchema = z.object({
+  expert: ExpertSelectionSchema.nullish().describe('accept only: optional expert from personal_agent_experts. Omit/null when no clear match. Copy id and digest; explain why the task matches. Never change an existing task expert.'),
   model_profile: ModelProfileIdSchema.optional().describe('accept only: choose an enabled profile from personal_agent_model_profiles; omission uses the configured default. Existing tasks retain their model.'),
   resource_ids: z.array(z.string().min(1)).max(32).optional().describe('accept: explicit configured repository IDs; empty means no repository. Never guess resource IDs.'),
   kind: z.enum(['accept', 'attach', 'respond', 'ignore', 'stop']),
@@ -66,7 +70,7 @@ const RouteItemSchema = z.object({
 }).strict()
 type RouteItem = z.infer<typeof RouteItemSchema>
 type Kind = RouteItem['kind']
-type Field = Exclude<keyof RouteItem, 'kind' | 'trigger_id' | 'resource_ids' | 'silence_requested' | 'model_profile'>
+type Field = Exclude<keyof RouteItem, 'kind' | 'trigger_id' | 'resource_ids' | 'silence_requested' | 'model_profile' | 'expert'>
 /** Each field's check, the kinds whose items read it and those that need it; an item of another kind leaves it unread. */
 const FIELDS: Record<Field, { check: z.ZodType; reads: readonly Kind[]; needs: readonly Kind[] }> = {
   text: { check: z.string().trim().min(1).max(20000), reads: ['respond'], needs: ['respond'] },
@@ -79,6 +83,7 @@ const FIELDS: Record<Field, { check: z.ZodType; reads: readonly Kind[]; needs: r
 }
 /** Why an item cannot run: a field its kind needs is missing, or one it reads breaks its limit. */
 function invalid(item: RouteItem): string | undefined {
+  if (item.expert != null && item.kind !== 'accept') return 'expert is only allowed for a new accepted task'
   if (item.model_profile !== undefined && item.kind !== 'accept') return 'model_profile is only allowed when accepting a new task; existing tasks retain their model'
   for (const [field, { check, reads, needs }] of Object.entries(FIELDS) as [Field, typeof FIELDS[Field]][]) {
     const value = item[field]
@@ -109,10 +114,14 @@ async function route(host: MainToolsHost, item: RouteItem, decided: ReadonlyMap<
       const before = host.store.triggers.disposition(item.trigger_id)?.decisionId
       const existing = before && !host.engine.candidate(item.trigger_id) ? host.store.tickets.list().find(ticket => ticket.decisionId === before) : undefined
       if (existing) return { decision: 'accept', reason: `Already accepted as ${existing.id}; model, title and acknowledgement unchanged`, ticketId: existing.id }
-      const modelPlan = await planWorkerModel(host.context, () => host.store.settings(), item.model_profile, signal)
+      if (item.expert && !host.experts) throw new Error('Expert catalog unavailable')
+      const requested = host.experts?.select(item.expert)
+      const profile = item.model_profile ?? (requested?.snapshot.modelProfile ? ModelProfileIdSchema.parse(requested.snapshot.modelProfile) : undefined)
+      const modelPlan = await planWorkerModel(host.context, () => host.store.settings(), profile, signal)
       host.authorizeRoute?.(item.trigger_id, undefined, item.kind)
+      const expert = host.experts?.select(item.expert)
       const decision = host.engine.decide(item.trigger_id, { kind: 'accept', title: item.title!, scope: item.title!, reason: { code: 'explicitRouted' },
-        modelPlan, audit: { resource_ids: item.resource_ids ?? [] }, acknowledgement: item.acknowledgement!, name: item.worktree_name!, ...note })
+        ...(expert ? { expert } : {}), modelPlan, audit: { resource_ids: item.resource_ids ?? [] }, acknowledgement: item.acknowledgement!, name: item.worktree_name!, ...note })
       // A Decision that created no ticket is the item's refusal; one that existed before keeps what it was accepted with.
       if (decision.kind !== 'accept' || !decision.ticketId) return { refused: `Ticket was not created: ${reasonText(decision.reason)}` }
       if (decision.id === before) {
@@ -195,6 +204,8 @@ function routeTool(host: MainToolsHost): Tool {
 export function mainTools(host: MainToolsHost, agent: Agent): Tool[] {
   const resources: MainResourceHost = { ...host.resources, sessions: host.sessions, settings: host.settings }
   return [
+    tool({ name: 'personal_agent_experts', description: 'Read available expert packages before new work. Match the task meaning, examples and exclusions. No match: omit expert or use null. Ordinary conversation needs no Worker; follow-ups keep the existing Ticket expert.',
+      schema: z.object({}).strict(), execute: async () => ({ general: 'Omit expert or pass null', experts: host.experts?.choices() ?? [] }) }),
     tool({ name: 'personal_agent_model_profiles', description: 'Read enabled Worker model profiles before accepting a new task. Follow-ups keep the existing task model.',
       schema: z.object({}).strict(), execute: async () => profileChoices(host.store.settings()) }),
     readTool('Read one page of a resource the resource parameter lists, such as the ticket list or a ticket. Follow next_offset, and next_resource where a page names one.',

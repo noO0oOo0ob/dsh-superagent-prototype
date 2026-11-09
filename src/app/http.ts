@@ -3,6 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
+import { ExpertConflict, ExpertImportSchema, type Experts } from '../experts/catalog.ts'
 import { IdentityConflict, IdentityInputError, IdentityFilesSchema, type Identities } from '../personal/identities.ts'
 import { GroupConflict } from '../messaging/group-targets.ts'
 import { THREAD_FILTERS, TICKET_FILTERS, type Api, type ApiResponse, type RouteParams } from './api.ts'
@@ -56,6 +57,7 @@ export interface HttpHost {
   readonly machine: Machine
   readonly masterId: string
   readonly results?: Results
+  readonly experts?: Experts
   readonly identities?: Identities
   readonly personal?: PersonalSettings
   readonly connectors?: Connectors
@@ -124,7 +126,7 @@ function failure(error: unknown): [number, Record<string, unknown>] {
   if (error instanceof IdentityInputError) return [400, { error: error.message }]
   if (error instanceof RouteError) return [error.status, { error: error.message }]
   if (error instanceof UserError) return [error.missing ? 404 : 400, { error: error.message, code: error.code, values: error.values }]
-  if (error instanceof IdentityConflict || error instanceof GroupConflict || error instanceof ScheduleConflict || error instanceof PersonalConflict || error instanceof SettingsConflict || error instanceof PromptConflict) return [409, { error: error.message }]
+  if (error instanceof ExpertConflict || error instanceof IdentityConflict || error instanceof GroupConflict || error instanceof ScheduleConflict || error instanceof PersonalConflict || error instanceof SettingsConflict || error instanceof PromptConflict) return [409, { error: error.message }]
   return [500, { error: error instanceof Error ? error.message : String(error) }]
 }
 
@@ -215,6 +217,16 @@ function routes(runtime: HttpHost): Routes {
       runtime.messageDelivery.reconcile(params.id, input.partId, input.action, input.note)
       runtime.effects?.enqueue('reply', params.id, {})
       return { recorded: true }
+    },
+    'GET personal/experts': () => expertCatalog(runtime).list(),
+    'POST personal/experts/preview': async ({ body }) => expertCatalog(runtime).preview(ExpertImportSchema.parse(await body(identityBodyLimit(runtime)))),
+    'POST personal/experts': async ({ body }) => {
+      const input = z.object({ source: ExpertImportSchema, digest: z.string(), revision: z.number().int().nonnegative() }).strict().parse(await body(identityBodyLimit(runtime)))
+      return expertCatalog(runtime).save(input.source, input.digest, input.revision)
+    },
+    'PUT personal/experts/:id': async ({ params, body }) => {
+      const input = z.object({ revision: z.number().int().positive(), enabled: z.boolean() }).strict().parse(await body())
+      return expertCatalog(runtime).enable(params.id, input.revision, input.enabled)
     },
     'GET personal/identities': () => identityCatalog(runtime).list(),
     'GET personal/identities/:id': ({ params, query }) => {
@@ -348,6 +360,10 @@ function routes(runtime: HttpHost): Routes {
 }
 function decoded(segment: string): string {
   try { return decodeURIComponent(segment) } catch { throw new RouteError(400, 'A path segment has a malformed escape') }
+}
+function expertCatalog(runtime: HttpHost): Experts {
+  if (!runtime.experts) throw new RouteError(404, 'Expert catalog unavailable')
+  return runtime.experts
 }
 function identityCatalog(runtime: HttpHost): Identities {
   if (!runtime.identities) throw new RouteError(404, 'Identity catalog is unavailable')

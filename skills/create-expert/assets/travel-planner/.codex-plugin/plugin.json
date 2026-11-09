@@ -1,0 +1,6 @@
+{
+  "name": "travel-planner",
+  "version": "1.0.0",
+  "description": "Plan realistic multi-day trips, transport and budgets.",
+  "skills": "./skills/"
+}

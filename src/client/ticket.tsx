@@ -141,6 +141,7 @@ export function TicketPage({ id }: { id: string }) {
       <LabelValue label={t('ticketUpdatedLabel')} value={when(data.updatedAt, t('lang'))} />
     </div>
     {ended && <Hint>{ended}</Hint>}
+    {data.expert && <Hint>{t('experts.task', { id: data.expert.id, version: data.expert.version, digest: data.expert.digest.slice(0, 12), reason: data.expert.reason })}</Hint>}
     {data.modelPlan && <Hint>{t('initialWorkerModel', { profile: t(`modelProfile.${data.modelPlan.profile}`),
       route: `${data.modelPlan.route.effective.provider} / ${data.modelPlan.route.effective.model}` })}</Hint>}
     {data.attention && <div className="spa-banner"><span className="spa-banner-label">{t('attentionPrefix')}</span><MarkdownLite

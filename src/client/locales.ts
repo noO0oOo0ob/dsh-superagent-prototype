@@ -6,6 +6,25 @@ import { SETUP_PROBLEMS } from '../setup.ts'
 import { HEALTH_TEXT } from '../sources/host.ts'
 
 const TEXT = {
+  'experts.task': ['专家：{id} · {version} · {digest}；选择原因：{reason}', 'Expert: {id} · {version} · {digest}; selected because: {reason}'],
+  'settingsGroup.experts': ['专家包', 'Expert packages'],
+  'personal.config.expertImports': ['专家包导入限制', 'Expert import limits'],
+  'personal.help.expertImports': ['限制单个包的字节数和文件数；提示词使用部署中的字符预算。', 'Limit package bytes and file count; instructions use the deployment prompt budget.'],
+  'experts.help': ['添加本地 Claude Code、Codex 或通用插件目录。预览 AGENTS 和 SOUL 后保存并启用。无匹配任务使用通用 Worker，已接受任务保留原快照。', 'Add a local Claude Code, Codex or portable plugin directory. Preview AGENTS and SOUL, save, then enable. Unmatched tasks use a general Worker; accepted tasks retain their snapshot.'],
+  'experts.directory': ['专家包绝对目录', 'Absolute package directory'],
+  'experts.format': ['来源格式', 'Source format'],
+  'experts.auto': ['自动识别', 'Detect automatically'],
+  'experts.preview': ['预览', 'Preview'],
+  'experts.save': ['保存快照（暂不启用）', 'Save snapshot (disabled)'],
+  'experts.enable': ['启用', 'Enable'],
+  'experts.disable': ['停用', 'Disable'],
+  'experts.edit': ['加载并编辑', 'Load and edit'],
+  'experts.issues': ['兼容问题（解决后可启用）', 'Compatibility issues (resolve before enabling)'],
+  'experts.defaults': ['使用默认模板的指令', 'Instructions using default templates'],
+  'experts.agents': ['AGENTS · 职责与方法', 'AGENTS · Responsibilities and methods'],
+  'experts.soul': ['SOUL · 人格与互动', 'SOUL · Personality and interaction'],
+  'experts.empty': ['尚未导入专家包；当前使用通用 Worker。', 'No expert packages imported; Workers use general instructions.'],
+
   "settingsGroup.identities": ["身份配置", "Identities"],
   "identity.catalogOnly": ["这里管理身份配置版本。保存版本不会改变现有 Main、IM 会话或 Worker。", "Manage identity versions here. Saving a version does not change Main, IM conversations or Workers."],
   "identity.activationUnavailable": ["尚未接入运行时：公共策略的强制写保护需要 DSH 支持，当前不能将这些配置视为已生效的权限。", "Runtime activation is unavailable. Enforced public-policy protection needs DSH support; these settings are not active permissions."],

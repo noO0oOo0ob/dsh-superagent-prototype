@@ -412,3 +412,9 @@ a.spa-btn, a.spa-btn:hover { text-decoration: none; }
 .spa-identity-editor fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 .spa-identity-file { width: 100%; max-width: 100%; resize: vertical; font-family: var(--ds-font-family-code, Menlo, monospace); }
 .spa-identity-preview { max-height: 45vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+
+.spa-experts { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.spa-experts label { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.spa-expert-card { border: 1px solid var(--dsw-alias-border); border-radius: 8px; padding: 16px; overflow-wrap: anywhere; }
+.spa-expert-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.spa-expert-text { min-height: 180px; max-height: 50vh; resize: vertical; overflow: auto; white-space: pre-wrap; }

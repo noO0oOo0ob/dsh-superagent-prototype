@@ -35,6 +35,7 @@ export const ConnectorConfigSchema = z.object({
 })
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>
 export const PersonalConfigSchema = z.object({
+  expertImports: z.object({ maxBytes: z.number().int().positive().default(8_000_000), maxFiles: z.number().int().positive().default(1000), mcpTimeoutMs: z.number().int().positive().default(60000) }).strict().default(() => ({ maxBytes: 8_000_000, maxFiles: 1000, mcpTimeoutMs: 60000 })),
   artifacts: ArtifactConfigSchema.default(() => ArtifactConfigSchema.parse({})),
   scheduler: SchedulerOptionsSchema.default(() => SchedulerOptionsSchema.parse({})),
   hooks: HookConfigSchema.default(() => HookConfigSchema.parse({})),

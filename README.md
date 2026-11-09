@@ -59,3 +59,5 @@ This project builds on and reuses code from these open-source projects:
 - **[dsh-im](https://github.com/xmanrui/dsh-im)**, by xmanrui and contributors: selected Feishu/Lark connector, shared messaging and management UI modules, copied and adapted into this plugin. The source revision and local adaptations are recorded in [the upstream manifest](vendor/dsh-im/UPSTREAM.json); its [MIT license](vendor/dsh-im/LICENSE) and [upstream third-party notices](vendor/dsh-im/THIRD_PARTY_NOTICES.md) are preserved.
 
 Thank you to the maintainers and contributors of both projects for sharing their engineering work, architecture and implementations. Their work makes this Personal Agent fork possible. We also thank [JHOpenDev/dsh-superagent-inbox](https://github.com/JHOpenDev/dsh-superagent-inbox) for the local inbox adapter this project adapts.
+
+Expert packages: see [the package guide](docs/expert-packages.md) for optional task specialization, AGENTS/SOUL loading and the bundled creation Skill.

@@ -1,3 +1,8 @@
+import { apply as applyMcp } from '@deepseek-ai/dsh-mcp-client'
+import { mcpConfig } from '../experts/mcp.ts'
+import { EXPERT_ROUTING, GENERAL_AGENTS, GENERAL_SOUL } from '../experts/model.ts'
+import type { Experts } from '../experts/catalog.ts'
+import { join as joinExpertPath } from 'node:path'
 /** Lifecycle, prompt/tool/skill decoration, message delivery, and budget retry tracking for orchestrator and worker DSH sessions. */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -19,7 +24,7 @@ import { resolveVisionModel } from './model-routing.ts'
 import { defaultModel } from './worker-models.ts'
 import { modelDelegationTools, WORKER_MODEL_INSTRUCTIONS } from './subagent-models.ts'
 import { toolParameters } from './tools/definition.ts'
-import { bundledSkills } from './skill-files.ts'
+import { bundledSkills, expertCreator } from './skill-files.ts'
 import { SKILL_PREFIX, type PromptVersion, type Prompts } from './prompts.ts'
 import type { Store } from './store.ts'
 import type { RoleModel } from '../policy.ts'
@@ -31,6 +36,8 @@ export interface SessionsHost {
   /** DSH Cordis context: sessions, agents, persistence, and their events. */
   readonly context: Context
   readonly store: Pick<Store, 'tickets' | 'settings' | 'get' | 'set' | 'keys'>
+  readonly experts?: Pick<Experts, 'materialize'>
+  expertMcpTimeout?(): number
   readonly prompts: Pick<Prompts, 'current' | 'version' | 'compose' | 'skills'>
   readonly effects: Pick<Effects, 'enqueue' | 'handle' | 'idle' | 'pending'>
   /** The `models` health entry, which reports managed sessions waiting on a model-budget retry. */
@@ -268,18 +275,40 @@ export class Sessions {
       const version = this.promptFor(agent, context.signal !== undefined)
       const current = ticket && host.store.tickets.get(ticket.id)
       const composed = host.prompts.compose(version.config, master ? 'orchestrator' : 'worker', current ? host.environment(current) : undefined)
-      return `[dsh-super-personal-agent prompt revision ${version.revision}]\n${composed}\n${current ? mandateInstructions(current.mandate) : ''}`
+      const expertRoot = current?.expert ? host.experts?.materialize(current.expert) : undefined
+      const persona = master ? EXPERT_ROUTING : `\n[Expert AGENTS]\n${current?.expert?.snapshot.agents ?? GENERAL_AGENTS}\n[Expert SOUL]\n${current?.expert?.snapshot.soul ?? GENERAL_SOUL}\n${current?.expert?.snapshot.skills.filter(skill => skill.preload).map(skill => `[Preloaded skill ${skill.name}; resource directory: ${expertRoot ? joinExpertPath(expertRoot, skill.directory) : 'unavailable'}]\nResolve relative references against this directory.\n${skill.content}`).join('\n') ?? ''}`
+      return `${persona}\n[dsh-super-personal-agent prompt revision ${version.revision}]\n${composed}\n${current ? mandateInstructions(current.mandate) : ''}`
     }, ...(master || dialogue ? { complete: true } : {}) }))
     // A recreated skill scope (e.g. after the skills service restarts) starts empty, so reset `binding.skills` before rebinding.
     const skillScope = agent.ctx.inject(['skills'], scope => {
       binding.scope = scope
       binding.skills = undefined
       this.bindSkills(binding, host.prompts.current())
+      if (ticket?.expert) {
+        if (!host.experts) throw new Error('Expert resource loader unavailable')
+        const root = host.experts.materialize(ticket.expert)
+        for (const skill of ticket.expert.snapshot.skills) {
+          if (!skill.modelInvocable) continue
+          binding.disposers.push(scope.skills.register({ name: `${ticket.expert.snapshot.id}-${skill.name}`, description: skill.description,
+            content: skill.content, source: 'runtime', resourceBase: { kind: 'directory', path: joinExpertPath(root, skill.directory) } }))
+        }
+      }
     })
     binding.disposers.push(() => { skillScope.dispose().catch((error: unknown) => { this.ctx.logger.warn('dsh-super-personal-agent could not release a skill scope: %s', String(error)) }) })
     await skillScope
     // Bail out if the agent was disposed while awaiting the skill scope.
     if (this.bindings.get(agent) !== binding) return
+    if (ticket?.expert && Object.keys(ticket.expert.snapshot.mcp).length) {
+      if (!host.experts) throw new Error('Expert resource loader unavailable')
+      const root = host.experts.materialize(ticket.expert)
+      const definitions = ticket.expert.snapshot.mcp
+      const fork = agent.ctx.plugin({ name: 'expert-mcp', async apply(scope: Context) {
+        for (const [name, config] of Object.entries(definitions))
+          await applyMcp(scope, mcpConfig(name, config, root, agent.id, host.expertMcpTimeout?.() ?? 60000))
+      } })
+      binding.disposers.push(() => { fork.dispose().catch((error: unknown) => this.ctx.logger.warn('Expert MCP disposal failed: %s', String(error))) })
+      try { await fork } catch (error) { this.release(agent); throw error }
+    }
     const register = this.registerTool(agent, binding)
     for (const tool of host.tools(agent, ticket)) register(tool.name, tool.description, tool.schema, tool.execute)
     if (dialogue) {
@@ -355,7 +384,7 @@ export class Sessions {
     const { scope, skills: previous } = binding
     if (!scope || previous?.revision === version.revision) return
     previous?.dispose()
-    const disposers: (() => void)[] = []
+    const disposers: (() => void)[] = [scope.skills.register({ name: 'create-expert', description: expertCreator.description, content: expertCreator.content, source: 'runtime', resourceBase: { kind: 'directory', path: dirname(expertCreator.path) } })]
     for (const [name, content] of this.host.prompts.skills(version.config)) {
       const bundled = name === 'feishu' || name === 'github' ? bundledSkills[name] : undefined
       const body = version.config.skills[name] ?? ''

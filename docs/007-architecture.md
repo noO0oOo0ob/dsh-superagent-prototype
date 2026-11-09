@@ -316,6 +316,11 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/connectors/protocol.ts` | Validated native IM event and checked transport fields |
 | `src/personal/artifacts.ts` | Bounded UTF-8 deliverable reads confined to a task workspace |
 | `src/personal/config.ts` | Versioned Personal settings and concurrent-edit detection |
+| `src/experts/model.ts` | Expert selections and captured package definitions |
+| `src/experts/package.ts` | External plugin format and resource import |
+| `src/experts/catalog.ts` | Expert catalog, activation and captured resources |
+| `src/experts/mcp.ts` | Package MCP transport and namespace adaptation |
+| `src/client/experts.tsx` | Expert package preview and activation panel |
 | `src/personal/identities.ts` | Immutable identity publications, inherited previews and explicit local draft exchange |
 | `src/client/identities.tsx` | Identity catalog editor, preview and version publication |
 | `src/personal/hooks.ts` | Immutable task/result/delivery facts and independently retried JSON files |
@@ -456,6 +461,10 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/native-feishu.spec.mjs` | Native QR/manual account lifecycle and platform media delivery |
 | `tests/executor-resources.spec.ts` | Resource preparation cancellation, wake validation and last-moment routing revocation |
 | `tests/artifacts.spec.ts` | Personal feature lifecycle and isolation checks |
+| `tests/expert-package.spec.ts` | Manifest compatibility and instruction resources |
+| `tests/experts.spec.ts` | Expert catalog conflicts and immutable resources |
+| `tests/expert-routing.spec.ts` | Main selection, general fallback and Worker context snapshot |
+| `tests/expert-mcp.spec.ts` | MCP normalization and environment resolution |
 | `tests/identities.spec.ts` | Identity versions, inheritance, conflicts, draft files and preview snapshot |
 | `tests/panel-identities.spec.tsx` | Identity editing, preview publication and persistent UI drafts |
 | `tests/group-targets.spec.ts` | Bot mentions, verified replies, group defaults, revocation and restart deduplication |

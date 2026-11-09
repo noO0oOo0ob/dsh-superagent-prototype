@@ -301,6 +301,10 @@ const ticketOf = (id: string) =>
 const SourceSave = z.object({ enabled: z.boolean(), config: z.unknown() })
 
 const ROUTES: { [K in keyof Api]: Route<K> } = {
+  'GET personal/experts': { answer: () => [] },
+  'POST personal/experts/preview': { body: true, answer: () => refuse(400, 'Use a runtime fixture for experts') },
+  'POST personal/experts': { body: true, answer: () => refuse(400, 'Use a runtime fixture for experts') },
+  'PUT personal/experts/:id': { body: true, answer: () => refuse(400, 'Use a runtime fixture for experts') },
   'GET personal': { answer: () => ({ revision: 0, config: PersonalConfigSchema.parse({}), connectors: {}, deliveries: [], vault: [], routeDecisions: [], schedules: [], runs: [], hooks: [] }) },
   'PUT personal': { body: true, answer: ({ body }) => ({ revision: body.revision + 1, config: PersonalConfigSchema.parse(body.config) }) },
   'GET personal/identities': { answer: () => ({ activation: 'catalog-only', draftRoot: '/state/identity-drafts', identities: [] }) },

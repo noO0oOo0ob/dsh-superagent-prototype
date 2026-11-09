@@ -38,7 +38,7 @@ interface Skill { name: string; description: string; content: string }
  * Lower this limit when shrinking model-facing text; raise it only intentionally and explain why in the commit message.
  */
 // Profile selection and the owned delegation tool add bounded schemas; model catalogues stay behind tool reads.
-const BUDGET: Record<Role, number> = { orchestrator: 70_000, worker: 46_000 }
+const BUDGET: Record<Role, number> = { orchestrator: 72_000, worker: 46_000 }
 const PROMPTS = 'prompts/, skills/', TOOLS = 'src/app/tools/', SESSIONS = 'src/app/sessions.ts'
 const NOTICES = 'src/app/notices.ts', LINKS = 'src/app/links.ts', ASSESSMENT = 'src/app/assessment.ts'
 const EXECUTOR = 'src/executor/dsh.ts', ERRORS = 'src/core/errors.ts'

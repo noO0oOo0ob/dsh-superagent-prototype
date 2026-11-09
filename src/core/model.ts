@@ -277,6 +277,7 @@ export interface Attention { id: string; question: string; triggerId?: string }
 /** Ticket aggregate: an authorized work item with its assignments, channels, thread bindings, and inputs. */
 export interface Ticket {
   /** Immutable model choice for new tasks; absent on pre-profile tasks, whose Sessions retain their original selection. */
+  expert?: import('../experts/model.ts').ExpertBinding
   modelPlan?: import('../models.ts').WorkerModelPlan
   id: string
   title: string

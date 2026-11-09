@@ -1,0 +1,15 @@
+schemaVersion: 1
+instructions:
+  agents: ./AGENTS.md
+  soul: ./SOUL.md
+routing:
+  description: 制定多日旅行行程、比较路线、估算预算和核对交通可行性。
+  examples:
+    - 制定新西兰七天旅行计划，两个人，不要太赶
+    - 带父母旅行，比较自驾和公共交通方案
+  exclusions:
+    - 修改代码或排查软件故障
+    - 实际付款或预订
+entry:
+  preloadSkills:
+    - itinerary
