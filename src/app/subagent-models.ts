@@ -28,7 +28,7 @@ function hostPolicy(ctx: Context, agent: Agent): RoleModel[] | undefined {
   return undefined
 }
 
-export const WORKER_MODEL_INSTRUCTIONS = 'For subagent delegation, omit model_profile to inherit your current provider, model and reasoning effort. '
+export const WORKER_MODEL_INSTRUCTIONS = 'Use personal_agent_delegate for subagent delegation; do not call native subagent or list_subagent_models. Omit model_profile to inherit your current provider, model and reasoning effort. '
   + 'Use personal_agent_model_profiles before explicitly selecting another enabled profile for a new child. Profiles were captured when this task was accepted. '
   + 'Do not supply provider/model IDs or change an existing child to handle an image. Continue an existing child with send_message. '
   + 'Read images through the normal attachment tools; native vision or ModLens handles them. Treat image-read errors or uncertain evidence as limitations, never as a successful observation.'
@@ -45,14 +45,14 @@ interface Host {
 /** Only new profile-aware tasks get these tools; older Workers keep their existing delegation behavior. */
 export function modelDelegationTools(host: Host): Tool[] {
   const { context: ctx, agent, plan } = host
-  return [tool({ name: 'personal_agent_model_profiles', description: 'Read this task\'s captured child model profiles. Omit model_profile on subagent to inherit the current parent model.',
+  return [tool({ name: 'personal_agent_model_profiles', description: 'Read this task\'s captured child model profiles. Omit model_profile on personal_agent_delegate to inherit the current parent model.',
     schema: z.object({}).strict(), execute: async () => {
       host.assertLive()
       return { default: 'inherit', current: parentAgentOptionsForDelegation(agent), profiles: MODEL_PROFILES.flatMap(id => {
         const profile = plan.profiles[id]
         return profile ? [{ id, description: profile.description, model: profile.model }] : []
       }), host_allowed_models: hostPolicy(ctx, agent) ?? null }
-    } }), tool({ name: 'subagent', description: 'Start a managed child for an independent task. Omit model_profile to inherit the current parent model; explicitly select only a captured task profile. DSH reports completion automatically. Use send_message to continue an existing child.',
+    } }), tool({ name: 'personal_agent_delegate', description: 'Start a managed child for an independent task. Omit model_profile to inherit the current parent model; explicitly select only a captured task profile. DSH reports completion automatically. Use send_message to continue an existing child.',
     schema: z.object({ description: z.string().trim().min(1), prompt: z.string().min(1), cwd: z.string().optional(), model_profile: ModelProfileIdSchema.optional() }).strict(),
     execute: async ({ description, prompt, cwd, model_profile }, signal) => {
       host.assertLive(); signal.throwIfAborted()
@@ -86,4 +86,11 @@ export function modelDelegationTools(host: Host): Tool[] {
       const activation = await subagents.startActivation({ provider: 'spawn', label: description, request, signal, delivery: 'parent' })
       return { kind: 'activation', subagentId: activation.childId, model_profile: model_profile ?? 'inherit', model: selected }
     } })]
+}
+
+/** Native delegation must not bypass the model profiles captured by a managed task. */
+export function managedDelegationGuard({ name }: { name: string }): string | undefined {
+  return name === 'subagent' || name === 'list_subagent_models'
+    ? 'Use personal_agent_delegate and personal_agent_model_profiles for this task; native delegation bypasses its captured model policy'
+    : undefined
 }

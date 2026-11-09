@@ -22,7 +22,7 @@ import { hasModelSelection, initializeRoleModel } from './role-models.ts'
 import { WorkerModelPlanSchema } from '../models.ts'
 import { resolveVisionModel } from './model-routing.ts'
 import { defaultModel } from './worker-models.ts'
-import { modelDelegationTools, WORKER_MODEL_INSTRUCTIONS } from './subagent-models.ts'
+import { managedDelegationGuard, modelDelegationTools, WORKER_MODEL_INSTRUCTIONS } from './subagent-models.ts'
 import { toolParameters } from './tools/definition.ts'
 import { bundledSkills, expertCreator } from './skill-files.ts'
 import { SKILL_PREFIX, type PromptVersion, type Prompts } from './prompts.ts'
@@ -357,9 +357,10 @@ export class Sessions {
     const parent = scopeParentOf(agent)
     const profiled = !!store.tickets.get(ticketId)?.modelPlan
     const allow = WORK_TOOLS.filter(name => !(profiled && (name === 'subagent' || name === 'list_subagent_models')) && agent.ctx.tools.get(name, parent))
-    return [agent.ctx.tools.restrict({ allow }), agent.ctx.tools.guard(() => {
+    return [agent.ctx.tools.restrict({ allow }), agent.ctx.tools.guard(execution => {
       const current = store.tickets.get(ticketId)
-      return !current || !liveTicket(current) ? 'Ticket ended; new work needs a new authorized ticket' : undefined
+      if (!current || !liveTicket(current)) return 'Ticket ended; new work needs a new authorized ticket'
+      return profiled ? managedDelegationGuard(execution) : undefined
     })]
   }
   /**

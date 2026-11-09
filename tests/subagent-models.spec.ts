@@ -2,13 +2,13 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentOptions } from '@deepseek-ai/dsh-agent'
-import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { ReasoningEffortId, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { bindScopeParent, createScope, type Scope } from '@deepseek-ai/dsh-scope'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { resolveChildAgentOptions } from '@deepseek-ai/dsh-subagent'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
-import { modelDelegationTools } from '../src/app/subagent-models.ts'
+import { managedDelegationGuard, modelDelegationTools } from '../src/app/subagent-models.ts'
 import { toolParameters } from '../src/app/tools/definition.ts'
 import type { WorkerModelPlan } from '../src/models.ts'
 import { deferred } from './fixtures/async.ts'
@@ -39,7 +39,7 @@ function setup() {
     const entry = tools.find(item => item.name === name)!
     return entry.execute(entry.schema.parse(args), new AbortController().signal)
   }
-  const delegate = (extra: Record<string, unknown> = {}) => invoke('subagent', { description: 'Identify a landmark', prompt: 'Read the supplied image', ...extra })
+  const delegate = (extra: Record<string, unknown> = {}) => invoke('personal_agent_delegate', { description: 'Identify a landmark', prompt: 'Read the supplied image', ...extra })
   return { ctx, agent, session, plan, live, start, resolve, invoke, delegate }
 }
 it('inherits the current request model and effort, not the model used when the parent was constructed', async () => {
@@ -90,7 +90,7 @@ it('lets a child inherit its immediate parent model while retaining the task pro
   const { ctx, agent, plan } = setup()
   const session = Session.create(SessionId('second-level'), [], { ...agent.session.header, id: SessionId('second-level'), origin: 'subagent', parentSession: agent.id })
   const child = { id: session.id, session, ctx, options: { provider: 'native', model: 'deep' } } as Agent
-  const tool = modelDelegationTools({ context: ctx, agent: child, plan, preset: 'worker-preset', assertLive: () => {} }).find(item => item.name === 'subagent')!
+  const tool = modelDelegationTools({ context: ctx, agent: child, plan, preset: 'worker-preset', assertLive: () => {} }).find(item => item.name === 'personal_agent_delegate')!
   expect(await tool.execute(tool.schema.parse({ description: 'Check a detail', prompt: 'Verify this fact' }), new AbortController().signal))
     .toMatchObject({ model_profile: 'inherit', model: { provider: 'native', model: 'deep' } })
 })
@@ -100,7 +100,7 @@ it('does not fall back when the selected vision route disappears', async () => {
   await expect(delegate({ model_profile: 'basic' })).rejects.toMatchObject({ code: 'modlensUnavailable' })
   expect(start).not.toHaveBeenCalled()
 })
-it('shadows preset delegation only in profiled scopes using the real DSH tool registry', async () => {
+it('coexists with native delegation mounted in the Worker scope using the real DSH tool registry', async () => {
   const { agent, plan } = setup()
   const ctx = new Context(); contexts.push(ctx)
   await ctx.plugin(SystemPrompt)
@@ -116,12 +116,27 @@ it('shadows preset delegation only in profiled scopes using the real DSH tool re
     output: { schema: { type: 'object' }, render: () => [] }, execute: async () => ({}) })
   bindScopeParent(agent, preset); bindScopeParent(legacy, preset)
   const scope = await mint(agent)
+  scope.ctx.tools.register({ name: 'subagent', description: 'Worker-local native delegation', parameters: { type: 'object', properties: {} },
+    output: { schema: { type: 'object' }, render: () => [] }, execute: async () => ({}) })
   scope.ctx.tools.restrict({ allow: [] })
+  scope.ctx.tools.guard(managedDelegationGuard)
   for (const entry of modelDelegationTools({ context: ctx, agent, plan, preset: 'worker-preset', assertLive: () => {} })) {
     scope.ctx.tools.register({ name: entry.name, description: entry.description, parameters: toolParameters(entry.schema),
       output: { schema: { type: 'object' }, render: () => [] }, execute: async () => ({}) })
   }
-  expect(ctx.tools.schemas(agent).map(tool => tool.name).sort()).toEqual(['personal_agent_model_profiles', 'subagent'])
-  expect(ctx.tools.get('subagent', agent)?.parameters).toMatchObject({ properties: { model_profile: { enum: ['basic', 'standard', 'advanced'] } } })
+  expect(ctx.tools.schemas(agent).map(tool => tool.name).sort()).toEqual(['personal_agent_delegate', 'personal_agent_model_profiles', 'subagent'])
+  expect(ctx.tools.get('personal_agent_delegate', agent)?.parameters).toMatchObject({ properties: { model_profile: { enum: ['basic', 'standard', 'advanced'] } } })
   expect(ctx.tools.get('subagent', legacy)?.description).toBe('Native delegation')
+  const denied = await ctx.tools.execute({ callId: ToolCallId('native'), name: 'subagent', arguments: {}, agent, signal: new AbortController().signal })
+  expect(denied.isError).toBe(true)
+  expect(JSON.stringify(denied)).toContain('Use personal_agent_delegate')
+  const managed = await ctx.tools.execute({ callId: ToolCallId('managed'), name: 'personal_agent_delegate', arguments: { description: 'Check', prompt: 'Check' }, agent, signal: new AbortController().signal })
+  expect(managed.isError).toBe(false)
+})
+
+it('blocks native model-policy bypass but allows managed delegation and other work tools', () => {
+  expect(managedDelegationGuard({ name: 'subagent' })).toContain('personal_agent_delegate')
+  expect(managedDelegationGuard({ name: 'list_subagent_models' })).toContain('personal_agent_model_profiles')
+  expect(managedDelegationGuard({ name: 'personal_agent_delegate' })).toBeUndefined()
+  expect(managedDelegationGuard({ name: 'read' })).toBeUndefined()
 })

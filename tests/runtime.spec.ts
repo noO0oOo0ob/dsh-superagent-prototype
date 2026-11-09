@@ -697,7 +697,7 @@ it('retries only a failed, blocked or undelivered ticket with a new assignment, 
   await runTool(`spa-worker-${ticket.id}`, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'failed', summary: 'LlmError: offline' })
   expect(waitsForPerson(runtime.store.tickets.get(ticket.id)!)).toBe(true)
   // A person may continue a failed worker in its Session; only an ended Ticket locks its tools.
-  expect(guards.get(`spa-worker-${ticket.id}`)!()).toBeUndefined()
+  expect(guards.get(`spa-worker-${ticket.id}`)!({ name: 'read', arguments: {} })).toBeUndefined()
   const retried = await runtime.engine.retryTicket(ticket.id)
   await runtime.idle()
   expect(waitsForPerson(runtime.store.tickets.get(ticket.id)!)).toBe(false)
@@ -1578,9 +1578,9 @@ it('reads the main Session\'s preset from a registry with or without presetForSe
 
 it('refuses an ended ticket\'s worker its tools, and restricts the main Session to the tools it may use', async () => {
   const { ticket, sessionId } = await acceptedTicket()
-  expect(guards.get(sessionId)!()).toBeUndefined()
+  expect(guards.get(sessionId)!({ name: 'read', arguments: {} })).toBeUndefined()
   runtime.engine.stopTicket(ticket.id)
-  expect(guards.get(sessionId)!()).toBe('Ticket ended; new work needs a new authorized ticket')
+  expect(guards.get(sessionId)!({ name: 'read', arguments: {} })).toBe('Ticket ended; new work needs a new authorized ticket')
   expect(restricts.get(runtime.masterId)).toEqual([{ allow: ['skill', 'bash', 'read', 'read_image', 'job_output', 'job_list', 'job_kill'] }])
   // A worker keeps only the profile's work tools: none that ask a person, change the profile, schedule or start work outside
   // the worker slots, reach other Sessions or edit documents, whenever they were registered.
@@ -1739,13 +1739,13 @@ it('gives a subagent of a worker only the worker\'s work tools, and none once th
   child.session.header = { parentSession: sessionId }
   await (runtime as unknown as { ctx: Context }).ctx.parallel('agent/created', { agent: child } as never)
   expect(restricts.get('child-1')).toEqual([{ allow: ['read', 'read_image', 'grep', 'bash', 'job_output', 'job_list', 'job_kill', 'web_search', 'skill'] }])
-  expect(guards.get('child-1')!()).toBeUndefined()
+  expect(guards.get('child-1')!({ name: 'read', arguments: {} })).toBeUndefined()
   expect(tools.get('child-1')?.has('personal_agent_model_profiles')).toBe(true)
-  expect(tools.get('child-1')?.has('subagent')).toBe(true)
+  expect(tools.get('child-1')?.has('personal_agent_delegate')).toBe(true)
   expect(sections.get('child-1')!.text({})).toContain('inherit your current provider')
   runtime.engine.stopTicket(ticket.id)
-  expect(guards.get('child-1')!()).toBe('Ticket ended; new work needs a new authorized ticket')
-  await expect(runTool('child-1', 'subagent', { description: 'No new work', prompt: 'Do another task' })).rejects.toThrow('task ended')
+  expect(guards.get('child-1')!({ name: 'read', arguments: {} })).toBe('Ticket ended; new work needs a new authorized ticket')
+  await expect(runTool('child-1', 'personal_agent_delegate', { description: 'No new work', prompt: 'Do another task' })).rejects.toThrow('task ended')
   // Another Session's subagent is left as it is.
   await (controller.create as (options: { sessionId: string }) => Promise<void>)({ sessionId: 'child-2' })
   const other = agents.get('child-2')! as unknown as { session: { header: { parentSession?: string } } }
@@ -1766,9 +1766,9 @@ it('gives a subagent of a worker\'s subagent the same work tools and guard', asy
   }
   expect(restricts.get('grandchild-1')).toEqual([{ allow: ['read', 'read_image', 'grep', 'bash', 'job_output', 'job_list', 'job_kill', 'web_search', 'skill'] }])
   expect(tools.get('grandchild-1')?.has('personal_agent_model_profiles')).toBe(true)
-  expect(tools.get('grandchild-1')?.has('subagent')).toBe(true)
+  expect(tools.get('grandchild-1')?.has('personal_agent_delegate')).toBe(true)
   runtime.engine.stopTicket(ticket.id)
-  expect(guards.get('grandchild-1')!()).toBe('Ticket ended; new work needs a new authorized ticket')
+  expect(guards.get('grandchild-1')!({ name: 'read', arguments: {} })).toBe('Ticket ended; new work needs a new authorized ticket')
 })
 
 it('gives the Assignment a restart starts the messages the replaced one had delivered but no step took, once', async () => {
