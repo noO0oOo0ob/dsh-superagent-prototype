@@ -1,4 +1,5 @@
 /** Main-session assessor per-eval state and context loading. */
+import { ExpertBindingSchema } from '../src/experts/model.ts'
 import { expect, it, vi } from 'vitest'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { AssessmentSchema, EvalReadSchema, MasterAssessor, type AssessorHost } from '../src/app/assessment.ts'
@@ -59,7 +60,7 @@ function setup(strength: 'explicit' | 'inferred' = 'inferred', bodies = Array.fr
   // Per-Eval state retained by the assessor and released when the Eval ends.
   const kept = assessor as unknown as { evals: Map<string, unknown> }
   const size = () => kept.evals.size
-  return { repo, engine, assessor, tools, size, gate }
+  return { repo, engine, assessor, tools, size, gate, host }
 }
 const issue = (n: number): Trigger => ({ id: `issue-${n}`, source: 'github', threads: [{ source: 'github', id: String(n) }], actor: { source: 'github', id: 'bob' }, human: true,
   at: new Date(Date.UTC(2026, 8, 9, 0, 0, n)).toISOString(), text: `issue ${n}`, url: `https://github.com/acme/widgets/issues/${n}`, meta: { number: n } })
@@ -182,4 +183,14 @@ it('lets the main Session read on from the cursor its loaded window ends with, a
   s2.engine.receive(long); s2.engine.receive({ ...issue(3), threads: issue(1).threads }); s2.engine.evaluateDue()
   const other = await s2.assessor.context('issue-3', signal) as { batch: Record<string, unknown>[] }
   expect(other.batch).toEqual([expect.objectContaining({ trigger_id: 'long', chars: long.text.length, read: 'trigger/long' })])
+})
+
+it('rejects changed expert binding after proactive model preflight', async () => {
+  const s = setup()
+  s.host.settings = () => SettingsSchema.parse({ eval: { mode: 'auto' } })
+  s.engine.receive(issue(1)); s.engine.evaluateDue()
+  const expert = ExpertBindingSchema.parse({ reason: 'Fixed expert', snapshot: { schemaVersion: 1, id: 'travel', name: 'Travel', version: '1', format: 'codex', digest: 'a'.repeat(64), description: 'Trips', examples: [], exclusions: [], agentsSource: 'Plan', agents: 'Plan', soul: 'Warm', defaults: [], skills: [], files: {}, executables: [], issues: [], mcp: {} } })
+  s.host.selectExpert = vi.fn().mockReturnValueOnce(undefined).mockReturnValueOnce(expert)
+  await expect(s.assessor.decide('issue-1', AssessmentSchema.parse({ decision: 'accept', title: 'Trip', worktree_name: 'trip', scope: 'Trip', reason: 'Requested', intent_evidence: 'quoted', acknowledgement: 'Starting', rule_assessments: [{ rule_id: 'copy', matched: true, reason: 'Requested' }, { rule_id: 'visual', matched: false, reason: 'No visual work' }], direction: { implementation_requested: true, target_basis: 'specified', requires_design_decision: false, evidence: 'Explicit' } }), signal)).rejects.toThrow('changed during model preflight')
+  expect(s.repo.tickets.list()).toEqual([])
 })

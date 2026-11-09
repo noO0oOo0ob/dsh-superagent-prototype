@@ -403,15 +403,7 @@ a.spa-btn, a.spa-btn:hover { text-decoration: none; }
   .spa-page[data-layout='messaging'] > .spa-column { gap: 12px; }
 }
 
-.spa-identities, .spa-identity-editor { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.spa-identity-picker, .spa-identity-actions { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
-.spa-identity-picker > label, .spa-identity-picker > form { flex: 1 1 260px; min-width: 0; }
-.spa-identity-picker form { display: flex; flex-wrap: wrap; gap: 8px; }
-.spa-identity-picker form > input { flex: 1 1 180px; min-width: 0; }
-.spa-identity-picker label, .spa-identity-editor label { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.spa-identity-editor fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
-.spa-identity-file { width: 100%; max-width: 100%; resize: vertical; font-family: var(--ds-font-family-code, Menlo, monospace); }
-.spa-identity-preview { max-height: 45vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+.spa-identities { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 
 .spa-experts { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .spa-experts label { display: flex; flex-direction: column; gap: 8px; min-width: 0; }

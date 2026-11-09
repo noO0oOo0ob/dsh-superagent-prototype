@@ -71,6 +71,7 @@ import { Schedules } from '../personal/schedules.ts'
 import { personalTools } from './personal-tools.ts'
 import { scheduledPolicy } from './personal-policy.ts'
 import { Routing } from '../personal/routing.ts'
+import { ExpertPreferences } from '../experts/preferences.ts'
 import { Experts } from '../experts/catalog.ts'
 import { Identities } from '../personal/identities.ts'
 import { PersonalSettings } from '../personal/config.ts'
@@ -113,6 +114,7 @@ export class Runtime extends Service implements SourceHost {
   readonly vault: Vault
   readonly repositories: RepositoryRegistry
   readonly routing: Routing
+  readonly expertPreferences: ExpertPreferences
   readonly experts: Experts
   readonly identities: Identities
   readonly personal: PersonalSettings
@@ -145,6 +147,7 @@ export class Runtime extends Service implements SourceHost {
       const store = opened = this.store = new Store(join(machine.stateDir, 'orchestrator.sqlite'), report)
       this.personal = new PersonalSettings(store)
       this.experts = new Experts(store, join(machine.stateDir, 'expert-snapshots'), () => ({ ...this.personal.view().config.expertImports, maxPromptChars: machine.promptMaxChars.get() }))
+      this.expertPreferences = new ExpertPreferences(store, this.experts, () => machine.promptMaxChars.get())
       this.identities = new Identities(store, join(machine.stateDir, 'identity-drafts'), () => machine.promptMaxChars.get())
       this.messageDelivery = new MessageDelivery(store)
       this.conversations = new Conversations(store, this.messageDelivery)
@@ -189,10 +192,10 @@ export class Runtime extends Service implements SourceHost {
         selectedResources: id => ({ selected: store.get(selectedResources(id)) ?? [], prepared: store.get(preparedResources(id)) ?? [] }),
         promptVersion: id => this.sessions.promptVersion(id), mayRead: (id, revision) => this.sessions.mayRead(id, revision),
         feishuPageSize: () => feishuSettings(sources).readPageSize, sourceLink: link }
-      const sessions = this.sessions = new Sessions({ experts: this.experts, expertMcpTimeout: () => this.personal.view().config.expertImports.mcpTimeoutMs, context: ctx, store, prompts, effects, health: board.claim('models'), masterId,
+      const sessions = this.sessions = new Sessions({ experts: this.experts, mainPersona: nextTurn => this.expertPreferences.main(masterId, nextTurn), expertMcpTimeout: () => this.personal.view().config.expertImports.mcpTimeoutMs, context: ctx, store, prompts, effects, health: board.claim('models'), masterId,
         lifetime: this.lifetime,
         closing: () => this.closing(), environment,
-        dialogue: id => this.conversations.isDialogue(id) ? { prompt: this.conversations.forSession(id) ? DIALOGUE_PROMPT : 'This conversation was reset. End the turn.' } : undefined,
+        dialogue: id => this.conversations.isDialogue(id) ? { prompt: this.conversations.forSession(id) ? `${DIALOGUE_PROMPT}\n${this.expertPreferences.dialogue(id, this.conversations.forSession(id)!.source)}` : 'This conversation was reset. End the turn.' } : undefined,
         defaults: id => {
           const ticketId = id.startsWith('spa-worker-') ? id.slice('spa-worker-'.length) : undefined
           const ticket = ticketId ? store.tickets.get(ticketId) : undefined
@@ -224,7 +227,7 @@ export class Runtime extends Service implements SourceHost {
         },
         repliedTo: trigger => repliedTo({ store, sources }, trigger) })
       this.assessor = new MasterAssessor({ get engine() { return runtime.engine }, commands, get deployment() { return setup.deployment }, effects,
-        selectExpert: selection => this.experts.select(selection),
+        selectExpert: (selection, triggerId) => this.expertPreferences.select(selection, triggerId ? store.triggers.get(triggerId)?.source : undefined),
         planModel: (profile, signal) => planWorkerModel(ctx, () => store.settings(), profile, signal),
         settings: () => store.settings(), paused: () => this.paused(), threadContext: trigger => sources.threadContext(trigger),
         deliver: (id, text, trigger) => this.deliverCandidate(id, text, trigger), candidateCard: candidate => candidateCard(links, candidate) })
@@ -322,7 +325,7 @@ export class Runtime extends Service implements SourceHost {
       this.sourceDeps = { store, engine, outbox, commands, sources, get ready() { return runtime.ready },
         get deployment() { return setup.deployment }, configured: () => setup.configured(),
         get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, get githubProblem() { return setup.githubProblem }, receive: trigger => passes.receive(trigger) }
-      this.toolHost = { experts: this.experts, artifactLimit: () => this.personal.view().config.artifacts.maxBytes, context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources,
+      this.toolHost = { expertPreferences: this.expertPreferences, experts: this.experts, artifactLimit: () => this.personal.view().config.artifacts.maxBytes, context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources,
         get github() { return runtime.context({ kind: 'github', health: ['github'] }) },
         requestPass: () => { passes.request() }, sendReplies: () => outbox.sent(),
         quietly: run => { this.quiet++; try { return run() } finally { this.quiet-- } } }
@@ -444,7 +447,7 @@ export class Runtime extends Service implements SourceHost {
     const runtime = this
     const { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, setup, passes } = this
     return { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, results: this.results,
-      personal: this.personal, experts: this.experts, identities: this.identities, connectors: this.connectors, get nativeFeishu() { return runtime.nativeFeishu }, messageDelivery: this.messageDelivery, vault: this.vault, routing: this.routing, schedules: this.schedules, hooks: this.hooks, effects: this.effects,
+      personal: this.personal, expertPreferences: this.expertPreferences, experts: this.experts, identities: this.identities, connectors: this.connectors, get nativeFeishu() { return runtime.nativeFeishu }, messageDelivery: this.messageDelivery, vault: this.vault, routing: this.routing, schedules: this.schedules, hooks: this.hooks, effects: this.effects,
       get deployment() { return setup.deployment },
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, get githubProblem() { return setup.githubProblem },
       configured: () => setup.configured(), links: () => runtime.links(), ticketEnvironment: ticket => runtime.ticketEnvironment(ticket),

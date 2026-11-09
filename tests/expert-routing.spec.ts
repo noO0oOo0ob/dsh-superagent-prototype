@@ -1,7 +1,7 @@
 /** Main routes can explicitly select an expert or stay general; task continuations keep their binding. */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { afterEach, beforeEach, expect, it } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { startRuntime, feishu, type Host } from './fixtures/host.ts'
 let h: Host
 beforeEach(async () => { h = await startRuntime() })
@@ -34,7 +34,7 @@ it('exposes descriptions to Main, then loads only the selected AGENTS and SOUL i
   const worker = h.promptSections.get(`spa-worker-${ticket.id}`)!({})
   expect(worker).toContain('resource directory:'); expect(worker).toContain('/skills/itinerary]'); expect(worker).toContain('Check travel distances'); expect(worker).toContain('patient travel adviser')
   expect(h.promptSections.get(h.runtime.masterId)!({})).not.toContain('patient travel adviser')
-  expect(worker.replaceAll(h.directory, '[state]')).toMatchSnapshot()
+  expect(worker.split('[dsh-super-personal-agent prompt revision')[0]!.replaceAll(h.directory, '[state]')).toMatchSnapshot()
 })
 it.each([undefined, null])('allows no expert even when a specialist is available (%s)', async selection => {
   expert(); const ticket = await accept('2', selection)
@@ -55,4 +55,11 @@ it('does not let a follow-up replace the expert; duplicate acceptance keeps its 
   await expect(h.route({ kind: 'attach', trigger_id: follow.id, ticket_id: ticket.id, expert: selection })).rejects.toThrow('only allowed')
   await h.route({ kind: 'attach', trigger_id: follow.id, ticket_id: ticket.id })
   expect(h.runtime.store.tickets.get(ticket.id)?.expert).toEqual(ticket.expert)
+})
+
+it('rejects a general-to-fixed expert change across model preflight before creating work', async () => {
+  const selection = expert(), chosen = h.runtime.experts.select(selection)!
+  vi.spyOn(h.runtime.expertPreferences, 'select').mockReturnValueOnce(undefined).mockReturnValueOnce(chosen)
+  await expect(accept('racing', null)).rejects.toThrow('changed during model preflight')
+  expect(h.runtime.store.tickets.list()).toEqual([])
 })

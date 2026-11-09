@@ -1,4 +1,5 @@
 /** Addressed IM conversation receives a checked reply without creating background work. */
+import { join } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
 import { key, UserError } from '../src/core/index.ts'
 import { ImEventSchema, type ConnectorService } from '../src/connectors/protocol.ts'
@@ -237,4 +238,27 @@ it('refuses historical owner requests and cross-conversation stops even through 
   expect(result.results).toEqual([expect.objectContaining({ refused: expect.stringContaining('original conversation') })])
   await expect(h.runTool(String(first.meta.dialogueSessionId), 'personal_agent_route', { decisions: [{ trigger_id: triggerId, kind: 'stop', ticket_id: ticket.id }] })).rejects.toThrow('already been handled')
   expect(h.runtime.store.tickets.get(ticket.id)?.ended).toBeUndefined()
+})
+
+
+it('scopes the IM expert catalog and enforces source restrictions at acceptance', async () => {
+  const { h, triggerId } = await conversation('dm', false, '准备七天旅行计划')
+  const input = { directory: join(process.cwd(), 'skills/create-expert/assets/travel-planner'), format: 'codex' as const }
+  const snapshot = h.runtime.experts.preview(input)
+  h.runtime.experts.save(input, snapshot.digest, 0); h.runtime.experts.enable(snapshot.id, 1, true)
+  const trigger = h.runtime.store.triggers.get(triggerId)!, dialogueId = String(trigger.meta.dialogueSessionId)
+  const persona = { agents: 'Coordinate trips', soul: 'Be warm' }
+  const prefs = h.runtime.expertPreferences
+  prefs.save({ accounts: [{ source: trigger.source, persona, allowed: [] }] }, 0)
+  expect(await h.runTool(dialogueId, 'personal_agent_experts', {})).toMatchObject({ experts: [] })
+  await expect(h.runTool(dialogueId, 'personal_agent_experts', { trigger_id: 'foreign' })).rejects.toThrow()
+  const decision = { kind: 'accept', trigger_id: triggerId, title: 'Trip', worktree_name: 'trip', acknowledgement: '开始规划。',
+    expert: { id: snapshot.id, digest: snapshot.digest, reason: 'Seven-day itinerary requested' } }
+  expect(await h.runTool(dialogueId, 'personal_agent_route', { decisions: [decision] })).toMatchObject({ results: [{ refused: expect.stringContaining('not allowed') }] })
+  expect(h.runtime.store.tickets.list()).toEqual([])
+  prefs.save({ accounts: [{ source: trigger.source, persona, allowed: [snapshot.id] }] }, 1)
+  expect(await h.runTool(dialogueId, 'personal_agent_experts', {})).toMatchObject({ experts: [{ id: snapshot.id }] })
+  await h.runTool(dialogueId, 'personal_agent_route', { decisions: [decision] })
+  await h.runtime.idle()
+  expect(h.runtime.store.tickets.list()[0]?.expert?.snapshot.digest).toBe(snapshot.digest)
 })

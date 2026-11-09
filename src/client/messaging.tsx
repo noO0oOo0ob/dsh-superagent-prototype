@@ -4,6 +4,7 @@ import { usePanel } from './provider.tsx'
 import { usePoll } from './api.ts'
 import { Button, Input, SegmentedTabs } from './controls.tsx'
 import { LoadState, Section, Hint } from './widgets.tsx'
+import { ExpertPersona } from './expert-persona.tsx'
 import { GroupPolicies } from './group-policies.tsx'
 import { deliveryState } from '../messaging/delivery-state.ts'
 import type { DeliveryRecord } from '../messaging/delivery.ts'
@@ -11,7 +12,7 @@ import { FeishuSettingsTab, FeishuGroupSettingsPage, FeishuSlashPanelSettingsPag
   FeishuConversationDirectorySettingsPage, AccessPolicySettingsPage, BotSettingsContext, installImStyles,
   MessagingShell, BotSettingsTabs, installFeishuStyles, setImTranslator, en, zh, type NativeRpc, type BotAccount, type AccountSettingsUpdate } from './native-ui.mjs'
 
-const tabs = ['group', 'access', 'directory', 'commands'] as const
+const tabs = ['group', 'access', 'directory', 'commands', 'expert'] as const
 type Tab = typeof tabs[number]
 /** Independent account and delivery views retain the panel's route history. */
 export function MessagingPage({ view }: { view: 'accounts' | 'deliveries' }) {
@@ -64,6 +65,7 @@ function NativeMessaging() {
         <BotSettingsTabs tabs={tabs.map(id => ({ id, label: t(`messaging.tab.${id}`) }))} activeTabId={tab}
           onChange={id => { const next = tabs.find(value => value === id); if (next) setTab(next) }} />
         <div role="tabpanel" id={`spa-im-bot-settings-${tab}-panel`} aria-labelledby={`spa-im-bot-settings-${tab}-tab`} key={`${account.botId}:${tab}`}>
+          {tab === 'expert' && <ExpertPersona botId={account.botId} />}
           {tab === 'group' && <><GroupPolicies botId={account.botId} /><FeishuGroupSettingsPage account={account} rpcCall={rpcCall} managedTargeting /></>}
           {tab === 'access' && <AccessPolicySettingsPage channel="feishu" account={account} rpcCall={rpcCall} onSaved={accessPolicy => saved({ accessPolicy })} />}
           {tab === 'directory' && <FeishuConversationDirectorySettingsPage account={account} rpcCall={rpcCall} />}

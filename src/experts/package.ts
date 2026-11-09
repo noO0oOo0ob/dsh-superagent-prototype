@@ -118,11 +118,13 @@ export function readExpertPackage(input: PackageInput, limits: PackageLimits): E
   const openai = extensions?.['com.openai'] ? object.parse(extensions['com.openai']) : overlay
   if (openai?.hooks || openai?.apps) issues.push('OpenAI hooks/apps require host-specific integration')
   for (const name of ext?.requirements?.mcp.required ?? []) if (!(name in mcp)) throw new Error(`Missing required MCP: ${name}`)
+  const optional = ext?.requirements?.mcp.optional ?? []
+  if (optional.some(name => ext?.requirements?.mcp.required.includes(name))) throw new Error('An MCP server cannot be both required and optional')
   issues.push(...mcpIssues(mcp))
   const value = { schemaVersion: 1 as const, id, name: typeof manifest.displayName === 'string' ? manifest.displayName : id,
     version: typeof manifest.version === 'string' ? manifest.version : 'unversioned', format,
     description: ext?.routing?.description ?? z.string().min(1).parse(manifest.description),
     examples: ext?.routing?.examples ?? [], exclusions: ext?.routing?.exclusions ?? [], agentsSource: agentsText, agents: finalAgents, soul: soul ?? GENERAL_SOUL,
-    defaults, skills, files, executables, issues, mcp, ...(ext?.execution?.modelProfile ? { modelProfile: ext.execution.modelProfile } : {}) }
+    defaults, skills, files, executables, issues, mcp, optionalMcp: ext?.requirements?.mcp.optional ?? [], ...(ext?.execution?.modelProfile ? { modelProfile: ext.execution.modelProfile } : {}) }
   return { ...value, digest: createHash('sha256').update(JSON.stringify(value)).digest('hex') }
 }

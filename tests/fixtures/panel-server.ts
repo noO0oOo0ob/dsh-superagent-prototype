@@ -301,6 +301,8 @@ const ticketOf = (id: string) =>
 const SourceSave = z.object({ enabled: z.boolean(), config: z.unknown() })
 
 const ROUTES: { [K in keyof Api]: Route<K> } = {
+  'GET personal/expert-preferences': { answer: () => ({ revision: 0, config: { main: { agents: 'Coordinate tasks', soul: 'Clear and concise' }, accounts: [] } }) },
+  'PUT personal/expert-preferences': { body: true, answer: ({ body }) => ({ revision: body.revision + 1, config: body.config }) },
   'GET personal/experts': { answer: () => [] },
   'POST personal/experts/preview': { body: true, answer: () => refuse(400, 'Use a runtime fixture for experts') },
   'POST personal/experts': { body: true, answer: () => refuse(400, 'Use a runtime fixture for experts') },
@@ -311,6 +313,7 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   'GET personal/identities/:id': { query: ['revision'], answer: () => refuse(404, 'Use a runtime fixture for identities') },
   'POST personal/identities/preview': { body: true, answer: () => refuse(400, 'Use a runtime fixture for identities') },
   'PUT personal/identities/:id': { body: true, answer: () => refuse(400, 'Use a runtime fixture for identities') },
+  'POST personal/identities/:id/expert': { answer: () => refuse(400, 'Use a runtime fixture for migration') },
   'POST personal/identities/:id/export': { answer: () => refuse(400, 'Use a runtime fixture for identities') },
   'POST personal/identities/:id/import': { answer: () => refuse(400, 'Use a runtime fixture for identities') },
   'GET personal/groups': { answer: () => ({ groups: [], decisions: [] }) },

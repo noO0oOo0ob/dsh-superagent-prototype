@@ -55,6 +55,13 @@ export function dialogueTools(host: MainToolsHost, store: Store, conversations: 
   return [...mainTools(scoped, agent).filter(item => ['personal_agent_model_profiles', 'personal_agent_experts'].includes(item.name)).map(item => ({ ...item,
     execute: async (input: unknown, signal: AbortSignal) => {
       if (!conversations.forSession(agent.id)) throw new Error('Conversation was reset')
+      if (item.name === 'personal_agent_experts') {
+        const value = z.object({ trigger_id: z.string().optional() }).parse(input)
+        const triggerId = value.trigger_id ?? conversations.history(agent.id).at(-1)?.id
+        if (!triggerId) throw new Error('No current conversation request')
+        guard(triggerId)
+        return item.execute({ trigger_id: triggerId }, signal)
+      }
       return item.execute(input, signal)
     } })), ...mainTools(scoped, agent).filter(item => permitted.has(item.name)).map(item => ({ ...item,
     execute: async (input: unknown, signal: AbortSignal) => {

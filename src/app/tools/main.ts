@@ -14,7 +14,8 @@ import type { Sessions } from '../sessions.ts'
 import type { Settings } from '../settings.ts'
 import type { Store } from '../store.ts'
 import { AcknowledgementSchema, readTool, tool, type Tool } from './tool.ts'
-import { ExpertSelectionSchema } from '../../experts/model.ts'
+import { checkExpertUnchanged, ExpertSelectionSchema } from '../../experts/model.ts'
+import type { ExpertPreferences } from '../../experts/preferences.ts'
 import type { Experts } from '../../experts/catalog.ts'
 import { ModelProfileIdSchema } from '../../models.ts'
 import { ModelRoutingError } from '../model-routing.ts'
@@ -24,6 +25,7 @@ const RoutingNoteSchema = z.string().trim()
   .refine(text => wordCount(text) <= NOTE_WORDS, `Routing note must not exceed ${NOTE_WORDS} words (Chinese uses word segmentation). Shorten it; do not split it across deliveries.`)
   .describe(`Optional routing background or explicit human constraint, at most ${NOTE_WORDS} words. Never add implementation instructions or replace the original source.`)
 export interface MainToolsHost {
+  readonly expertPreferences?: Pick<ExpertPreferences, 'choices' | 'select'>
   readonly experts?: Pick<Experts, 'choices' | 'select'>
   readonly context: Context
   readonly engine: Pick<EngineForMainSession, 'candidate' | 'decide' | 'attach' | 'reply' | 'requestStatus' | 'note'> & EngineForPeople
@@ -115,11 +117,12 @@ async function route(host: MainToolsHost, item: RouteItem, decided: ReadonlyMap<
       const existing = before && !host.engine.candidate(item.trigger_id) ? host.store.tickets.list().find(ticket => ticket.decisionId === before) : undefined
       if (existing) return { decision: 'accept', reason: `Already accepted as ${existing.id}; model, title and acknowledgement unchanged`, ticketId: existing.id }
       if (item.expert && !host.experts) throw new Error('Expert catalog unavailable')
-      const requested = host.experts?.select(item.expert)
+      const requested = host.expertPreferences ? host.expertPreferences.select(item.expert, host.store.triggers.get(item.trigger_id)?.source) : host.experts?.select(item.expert)
       const profile = item.model_profile ?? (requested?.snapshot.modelProfile ? ModelProfileIdSchema.parse(requested.snapshot.modelProfile) : undefined)
       const modelPlan = await planWorkerModel(host.context, () => host.store.settings(), profile, signal)
       host.authorizeRoute?.(item.trigger_id, undefined, item.kind)
-      const expert = host.experts?.select(item.expert)
+      const expert = host.expertPreferences ? host.expertPreferences.select(item.expert, host.store.triggers.get(item.trigger_id)?.source) : host.experts?.select(item.expert)
+      checkExpertUnchanged(requested, expert)
       const decision = host.engine.decide(item.trigger_id, { kind: 'accept', title: item.title!, scope: item.title!, reason: { code: 'explicitRouted' },
         ...(expert ? { expert } : {}), modelPlan, audit: { resource_ids: item.resource_ids ?? [] }, acknowledgement: item.acknowledgement!, name: item.worktree_name!, ...note })
       // A Decision that created no ticket is the item's refusal; one that existed before keeps what it was accepted with.
@@ -205,7 +208,11 @@ export function mainTools(host: MainToolsHost, agent: Agent): Tool[] {
   const resources: MainResourceHost = { ...host.resources, sessions: host.sessions, settings: host.settings }
   return [
     tool({ name: 'personal_agent_experts', description: 'Read available expert packages before new work. Match the task meaning, examples and exclusions. No match: omit expert or use null. Ordinary conversation needs no Worker; follow-ups keep the existing Ticket expert.',
-      schema: z.object({}).strict(), execute: async () => ({ general: 'Omit expert or pass null', experts: host.experts?.choices() ?? [] }) }),
+      schema: z.object({ trigger_id: z.string().optional() }).strict(), execute: async ({ trigger_id }) => {
+        if (trigger_id) host.authorizeRoute?.(trigger_id, undefined, 'catalog')
+        return { general: 'Omit expert or pass null when no clear match. A default is a preference; fixed mode is mandatory.',
+          ...(host.expertPreferences ? host.expertPreferences.choices(trigger_id ? host.store.triggers.get(trigger_id)?.source : undefined) : { experts: host.experts?.choices() ?? [] }) }
+      } }),
     tool({ name: 'personal_agent_model_profiles', description: 'Read enabled Worker model profiles before accepting a new task. Follow-ups keep the existing task model.',
       schema: z.object({}).strict(), execute: async () => profileChoices(host.store.settings()) }),
     readTool('Read one page of a resource the resource parameter lists, such as the ticket list or a ticket. Follow next_offset, and next_resource where a page names one.',

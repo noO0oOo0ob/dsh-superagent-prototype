@@ -1,5 +1,6 @@
 /** Type-only management API contract between the web panel and host routes, imported by the panel without bundling host code. */
 import type { ModelCatalog } from '@deepseek-ai/dsh-api-session-controller/types'
+import type { ExpertPreferencesConfig } from '../experts/preferences.ts'
 import type { ExpertEntry } from '../experts/catalog.ts'
 import type { PackageInput } from '../experts/package.ts'
 import type { ExpertSnapshot } from '../experts/model.ts'
@@ -33,6 +34,8 @@ export interface Api {
   'POST personal/feishu': { body: { endpoint: string; payload: unknown }; response: unknown }
   'GET personal/messages': { response: import('../messaging/delivery.ts').DeliveryRecord[] }
   'POST personal/messages/:id': { body: { partId: string; action: 'confirm_sent' | 'retry'; note: string }; response: { recorded: true } }
+  'GET personal/expert-preferences': { response: { revision: number; config: ExpertPreferencesConfig } }
+  'PUT personal/expert-preferences': { body: { revision: number; config: ExpertPreferencesConfig }; response: { revision: number; config: ExpertPreferencesConfig } }
   'GET personal/experts': { response: ExpertEntry[] }
   'POST personal/experts/preview': { body: PackageInput; response: ExpertSnapshot }
   'POST personal/experts': { body: { source: PackageInput; digest: string; revision: number }; response: ExpertEntry }
@@ -41,6 +44,7 @@ export interface Api {
   'GET personal/identities/:id': { query?: { revision?: number }; response: IdentityVersion }
   'POST personal/identities/preview': { body: IdentityFiles; response: IdentityPreview }
   'PUT personal/identities/:id': { body: { files: IdentityFiles; baseRevision: number; previewDigest: string }; response: IdentityVersion }
+  'POST personal/identities/:id/expert': { response: { directory: string; entry: ExpertEntry; unmapped: string[] } }
   'POST personal/identities/:id/export': { response: { directory: string } }
   'POST personal/identities/:id/import': { response: { files: IdentityFiles; baseRevision: number } }
   'GET personal/groups': { response: { groups: import('../messaging/group-targets.ts').GroupPolicyView[]; decisions: import('../messaging/group-targets.ts').TargetDecision[] } }

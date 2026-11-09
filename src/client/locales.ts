@@ -6,6 +6,24 @@ import { SETUP_PROBLEMS } from '../setup.ts'
 import { HEALTH_TEXT } from '../sources/host.ts'
 
 const TEXT = {
+  'identity.archive': ['旧身份版本只读保留。可迁移为专家包，AGENTS 与 SOUL 分别展开已发布的继承内容；迁移后默认停用。模型、preset 和权限设定需要在新配置中明确映射。', 'Legacy identities remain read-only. Migrate to an expert package with published AGENTS and SOUL ancestry flattened separately. Migrated experts are disabled; model, preset and capability settings require explicit mapping.'],
+  'identity.migrate': ['迁移为专家包', 'Migrate to expert package'],
+  'identity.migrated': ['已保存停用的专家包：{directory}。请到专家包页面检查并启用。', 'Disabled expert saved: {directory}. Review and enable it on the expert packages page.'],
+
+  'messaging.tab.expert': ['人格与专家', 'Persona and experts'],
+  'experts.mainPersona': ['Main 的 AGENTS / SOUL', 'Main AGENTS / SOUL'],
+  'experts.connectFirst': ['接入机器人后可设置人格与专家范围。', 'Connect a bot to configure its persona and experts.'],
+  'experts.botTiming': ['人格在新会话或 /new 后生效，后台任务保持原专家。专家范围设置作用于后续新任务。', 'Persona changes apply to new conversations or after /new. Background tasks keep their experts. Routing preferences apply to new tasks.'],
+  'experts.mainTiming': ['保存后从 Main 下一轮对话生效，不修改执行中的 Worker。', 'Saved instructions apply on Main’s next turn and do not alter running Workers.'],
+  'experts.mode': ['任务路由模式', 'Task routing mode'],
+  'experts.autoRouting': ['自动选择；无匹配使用通用 Worker', 'Automatic; general Worker when unmatched'],
+  'experts.fixedRouting': ['固定专家', 'Fixed expert'],
+  'experts.defaultExpert': ['默认专家', 'Default expert'],
+  'experts.noDefault': ['无默认专家', 'No default expert'],
+  'experts.allowAll': ['允许使用所有已启用专家', 'Allow all enabled experts'],
+  'experts.generalAllowed': ['自动模式始终允许通用 Worker；默认专家只是偏好，不强制匹配无关任务。固定模式要求指定专家可用。', 'Automatic mode always allows general work. A default is a preference, not a forced match. Fixed mode requires its expert to be available.'],
+  'experts.savePreferences': ['保存人格与路由设置', 'Save persona and routing settings'],
+
   'experts.task': ['专家：{id} · {version} · {digest}；选择原因：{reason}', 'Expert: {id} · {version} · {digest}; selected because: {reason}'],
   'settingsGroup.experts': ['专家包', 'Expert packages'],
   'personal.config.expertImports': ['专家包导入限制', 'Expert import limits'],
@@ -25,7 +43,7 @@ const TEXT = {
   'experts.soul': ['SOUL · 人格与互动', 'SOUL · Personality and interaction'],
   'experts.empty': ['尚未导入专家包；当前使用通用 Worker。', 'No expert packages imported; Workers use general instructions.'],
 
-  "settingsGroup.identities": ["身份配置", "Identities"],
+  "settingsGroup.identities": ["旧身份存档", "Legacy identities"],
   "identity.catalogOnly": ["这里管理身份配置版本。保存版本不会改变现有 Main、IM 会话或 Worker。", "Manage identity versions here. Saving a version does not change Main, IM conversations or Workers."],
   "identity.activationUnavailable": ["尚未接入运行时：公共策略的强制写保护需要 DSH 支持，当前不能将这些配置视为已生效的权限。", "Runtime activation is unavailable. Enforced public-policy protection needs DSH support; these settings are not active permissions."],
   "identity.select": ["身份", "Identity"],

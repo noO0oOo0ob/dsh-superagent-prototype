@@ -148,7 +148,7 @@ it('lists Personal settings before the workflow groups, opens each stage\'s grou
   async () => {
   await mount()
   await click(tab(zh['tab.settings']))
-  expect(all('.spa-settings-link').map(link => link.textContent)).toEqual(['Personal Agent', '来源', '评估', '执行', '专家包', '身份配置', '提示词', '部署'])
+  expect(all('.spa-settings-link').map(link => link.textContent)).toEqual(['Personal Agent', '来源', '评估', '执行', '专家包', '旧身份存档', '提示词', '部署'])
   expect(document.querySelector('.spa-settings-link[aria-current="page"]')?.textContent).toBe(zh['term.source'])
   for (const [tab, group] of [['来源', '来源'], ['评估', '评估'], ['执行', '执行']] as const) {
     await click(find(tab, '[role="tab"]'))

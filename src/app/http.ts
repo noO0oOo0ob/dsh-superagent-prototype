@@ -1,8 +1,11 @@
+import { join as joinExpertDirectory } from 'node:path'
+import { migrateIdentity } from '../experts/legacy.ts'
 /** Loopback-only management HTTP routes with same-origin enforcement for the web panel. */
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
+import { ExpertPreferencesConflict, ExpertPreferencesSchema, type ExpertPreferences } from '../experts/preferences.ts'
 import { ExpertConflict, ExpertImportSchema, type Experts } from '../experts/catalog.ts'
 import { IdentityConflict, IdentityInputError, IdentityFilesSchema, type Identities } from '../personal/identities.ts'
 import { GroupConflict } from '../messaging/group-targets.ts'
@@ -57,6 +60,7 @@ export interface HttpHost {
   readonly machine: Machine
   readonly masterId: string
   readonly results?: Results
+  readonly expertPreferences?: ExpertPreferences
   readonly experts?: Experts
   readonly identities?: Identities
   readonly personal?: PersonalSettings
@@ -126,7 +130,7 @@ function failure(error: unknown): [number, Record<string, unknown>] {
   if (error instanceof IdentityInputError) return [400, { error: error.message }]
   if (error instanceof RouteError) return [error.status, { error: error.message }]
   if (error instanceof UserError) return [error.missing ? 404 : 400, { error: error.message, code: error.code, values: error.values }]
-  if (error instanceof ExpertConflict || error instanceof IdentityConflict || error instanceof GroupConflict || error instanceof ScheduleConflict || error instanceof PersonalConflict || error instanceof SettingsConflict || error instanceof PromptConflict) return [409, { error: error.message }]
+  if (error instanceof ExpertPreferencesConflict || error instanceof ExpertConflict || error instanceof IdentityConflict || error instanceof GroupConflict || error instanceof ScheduleConflict || error instanceof PersonalConflict || error instanceof SettingsConflict || error instanceof PromptConflict) return [409, { error: error.message }]
   return [500, { error: error instanceof Error ? error.message : String(error) }]
 }
 
@@ -218,6 +222,15 @@ function routes(runtime: HttpHost): Routes {
       runtime.effects?.enqueue('reply', params.id, {})
       return { recorded: true }
     },
+    'GET personal/expert-preferences': () => {
+      if (!runtime.expertPreferences) throw new RouteError(404, 'Expert preferences unavailable')
+      return runtime.expertPreferences.view()
+    },
+    'PUT personal/expert-preferences': async ({ body }) => {
+      if (!runtime.expertPreferences) throw new RouteError(404, 'Expert preferences unavailable')
+      const input = z.object({ config: ExpertPreferencesSchema, revision: z.number().int().nonnegative() }).strict().parse(await body(identityBodyLimit(runtime)))
+      return runtime.expertPreferences.save(input.config, input.revision)
+    },
     'GET personal/experts': () => expertCatalog(runtime).list(),
     'POST personal/experts/preview': async ({ body }) => expertCatalog(runtime).preview(ExpertImportSchema.parse(await body(identityBodyLimit(runtime)))),
     'POST personal/experts': async ({ body }) => {
@@ -241,6 +254,11 @@ function routes(runtime: HttpHost): Routes {
       const catalog = identityCatalog(runtime)
       if (catalog.preview(value.files).id !== params.id) throw new RouteError(400, 'Identity ID does not match the edited identity')
       return catalog.publish(value.files, value.baseRevision, value.previewDigest)
+    },
+    'POST personal/identities/:id/expert': ({ params }) => {
+      const version = identityCatalog(runtime).get(params.id)
+      if (!version) throw new RouteError(404, 'Identity not found')
+      return migrateIdentity(version, joinExpertDirectory(runtime.machine.stateDir, 'legacy-expert-drafts'), expertCatalog(runtime))
     },
     'POST personal/identities/:id/export': async ({ params }) => ({ directory: await identityCatalog(runtime).exportDraft(params.id) }),
     'POST personal/identities/:id/import': ({ params }) => identityCatalog(runtime).importDraft(params.id),

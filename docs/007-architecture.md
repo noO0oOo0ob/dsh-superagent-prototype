@@ -316,6 +316,9 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/connectors/protocol.ts` | Validated native IM event and checked transport fields |
 | `src/personal/artifacts.ts` | Bounded UTF-8 deliverable reads confined to a task workspace |
 | `src/personal/config.ts` | Versioned Personal settings and concurrent-edit detection |
+| `src/experts/preferences.ts` | Main and bot persona snapshots and expert routing scope |
+| `src/experts/legacy.ts` | Legacy identity export to disabled expert packages |
+| `src/client/expert-persona.tsx` | Main and bot persona and routing editor |
 | `src/experts/model.ts` | Expert selections and captured package definitions |
 | `src/experts/package.ts` | External plugin format and resource import |
 | `src/experts/catalog.ts` | Expert catalog, activation and captured resources |
@@ -462,6 +465,9 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/executor-resources.spec.ts` | Resource preparation cancellation, wake validation and last-moment routing revocation |
 | `tests/artifacts.spec.ts` | Personal feature lifecycle and isolation checks |
 | `tests/expert-package.spec.ts` | Manifest compatibility and instruction resources |
+| `tests/expert-preferences.spec.ts` | Persona update timing and source routing policies |
+| `tests/expert-legacy.spec.ts` | Published identity ancestry migration |
+| `tests/panel-experts.spec.tsx` | Package preview, editing and explicit activation |
 | `tests/experts.spec.ts` | Expert catalog conflicts and immutable resources |
 | `tests/expert-routing.spec.ts` | Main selection, general fallback and Worker context snapshot |
 | `tests/expert-mcp.spec.ts` | MCP normalization and environment resolution |

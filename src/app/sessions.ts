@@ -37,6 +37,7 @@ export interface SessionsHost {
   readonly context: Context
   readonly store: Pick<Store, 'tickets' | 'settings' | 'get' | 'set' | 'keys'>
   readonly experts?: Pick<Experts, 'materialize'>
+  mainPersona?(nextTurn?: boolean): string
   expertMcpTimeout?(): number
   readonly prompts: Pick<Prompts, 'current' | 'version' | 'compose' | 'skills'>
   readonly effects: Pick<Effects, 'enqueue' | 'handle' | 'idle' | 'pending'>
@@ -131,6 +132,7 @@ export class Sessions {
       const agent = ctx.agents.get(session.id)
       const binding = agent && agent.session === session ? this.bindings.get(agent) : undefined
       if (!agent || !binding || binding.subagent) return
+      if (agent.id === this.host.masterId && event.type === 'turn/start') this.host.mainPersona?.(true)
       this.retryHealth.observe(agent.id, event)
       this.updateModelHealth()
     })
@@ -276,7 +278,7 @@ export class Sessions {
       const current = ticket && host.store.tickets.get(ticket.id)
       const composed = host.prompts.compose(version.config, master ? 'orchestrator' : 'worker', current ? host.environment(current) : undefined)
       const expertRoot = current?.expert ? host.experts?.materialize(current.expert) : undefined
-      const persona = master ? EXPERT_ROUTING : `\n[Expert AGENTS]\n${current?.expert?.snapshot.agents ?? GENERAL_AGENTS}\n[Expert SOUL]\n${current?.expert?.snapshot.soul ?? GENERAL_SOUL}\n${current?.expert?.snapshot.skills.filter(skill => skill.preload).map(skill => `[Preloaded skill ${skill.name}; resource directory: ${expertRoot ? joinExpertPath(expertRoot, skill.directory) : 'unavailable'}]\nResolve relative references against this directory.\n${skill.content}`).join('\n') ?? ''}`
+      const persona = master ? `${EXPERT_ROUTING}\n${host.mainPersona?.() ?? ''}` : `\n[Expert AGENTS]\n${current?.expert?.snapshot.agents ?? GENERAL_AGENTS}\n[Expert SOUL]\n${current?.expert?.snapshot.soul ?? GENERAL_SOUL}\n${current?.expert?.snapshot.skills.filter(skill => skill.preload).map(skill => `[Preloaded skill ${skill.name}; resource directory: ${expertRoot ? joinExpertPath(expertRoot, skill.directory) : 'unavailable'}]\nResolve relative references against this directory.\n${skill.content}`).join('\n') ?? ''}`
       return `${persona}\n[dsh-super-personal-agent prompt revision ${version.revision}]\n${composed}\n${current ? mandateInstructions(current.mandate) : ''}`
     }, ...(master || dialogue ? { complete: true } : {}) }))
     // A recreated skill scope (e.g. after the skills service restarts) starts empty, so reset `binding.skills` before rebinding.
@@ -301,10 +303,19 @@ export class Sessions {
     if (ticket?.expert && Object.keys(ticket.expert.snapshot.mcp).length) {
       if (!host.experts) throw new Error('Expert resource loader unavailable')
       const root = host.experts.materialize(ticket.expert)
-      const definitions = ticket.expert.snapshot.mcp
+      const definitions = ticket.expert.snapshot.mcp, optional = ticket.expert.snapshot.optionalMcp ?? []
       const fork = agent.ctx.plugin({ name: 'expert-mcp', async apply(scope: Context) {
-        for (const [name, config] of Object.entries(definitions))
-          await applyMcp(scope, mcpConfig(name, config, root, agent.id, host.expertMcpTimeout?.() ?? 60000))
+        for (const [name, config] of Object.entries(definitions)) {
+          const server = scope.plugin({ name: `expert-mcp-${name}`, async apply(child: Context) {
+            await applyMcp(child, mcpConfig(name, config, root, agent.id, host.expertMcpTimeout?.() ?? 60000))
+          } })
+          try { await server } catch (error) {
+            await server.dispose()
+            if (!optional.includes(name)) throw error
+            scope.logger.warn('Optional expert MCP %s unavailable: %s', name, String(error))
+            scope.effect(() => scope.systemPrompt.section({ name: `expert-mcp-unavailable-${name}`, order: 9997, interpolate: false, text: `Optional expert MCP ${JSON.stringify(name)} is unavailable. Do not claim to have used its tools.` }))
+          }
+        }
       } })
       binding.disposers.push(() => { fork.dispose().catch((error: unknown) => this.ctx.logger.warn('Expert MCP disposal failed: %s', String(error))) })
       try { await fork } catch (error) { this.release(agent); throw error }

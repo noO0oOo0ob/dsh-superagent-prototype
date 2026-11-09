@@ -1,7 +1,7 @@
 /** Proactive candidate assessment for the main Session: relays candidate cards, serves bounded context reads, and records outcomes. */
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { z } from 'zod'
-import { ExpertSelectionSchema, type ExpertBinding, type ExpertSelection } from '../experts/model.ts'
+import { checkExpertUnchanged, ExpertSelectionSchema, type ExpertBinding, type ExpertSelection } from '../experts/model.ts'
 import { ModelProfileIdSchema, type ModelProfileId, type WorkerModelPlan } from '../models.ts'
 import { reasonText, threadKey, type Assessor, type AssessmentOutcome, type Candidate, type EngineForMainSession,
   type Trigger } from '../core/index.ts'
@@ -51,7 +51,7 @@ interface EvalReads { cache: ReadCache; context?: AssessmentContext; error?: str
 const NO_CONTEXT = 'This Source gives no Thread context; assess the Trigger\'s own text and the batch.'
 /** Host dependencies used by `MasterAssessor`. */
 export interface AssessorHost {
-  selectExpert?(selection?: ExpertSelection | null): ExpertBinding | undefined
+  selectExpert?(selection?: ExpertSelection | null, triggerId?: string): ExpertBinding | undefined
   planModel(profile: ModelProfileId | undefined, signal?: AbortSignal): Promise<WorkerModelPlan>
   /** Active evaluations in `Engine` that the assessor reads and decides. */
   readonly engine: Pick<EngineForMainSession, 'candidate' | 'candidateDelivered' | 'decide'>
@@ -280,11 +280,12 @@ export class MasterAssessor implements Assessor {
     signal?.throwIfAborted()
     let outcome: AssessmentOutcome = assessmentOutcome(result, this.host.settings(), candidate.strength)
     if (outcome.kind === 'accept') {
-      const initial = this.host.selectExpert?.(result.expert)
+      const initial = this.host.selectExpert?.(result.expert, triggerId)
       const profile = result.model_profile ?? (initial?.snapshot.modelProfile ? ModelProfileIdSchema.parse(initial.snapshot.modelProfile) : undefined)
       const modelPlan = await this.host.planModel(profile, signal)
       if (result.expert && !this.host.selectExpert) throw new Error('Expert catalog unavailable')
-      const expert = this.host.selectExpert?.(result.expert)
+      const expert = this.host.selectExpert?.(result.expert, triggerId)
+      checkExpertUnchanged(initial, expert)
       outcome = { ...outcome, modelPlan, ...(expert ? { expert } : {}) }
     } else if (result.expert) throw new Error('Expert selection is only valid for accepted work')
     if (outcome.kind === 'accept' && outcome.acknowledgement) outcome = { ...outcome, acknowledgement: checkedImText(outcome.acknowledgement) }

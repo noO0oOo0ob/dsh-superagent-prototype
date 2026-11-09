@@ -3,6 +3,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync,
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, expect, it } from 'vitest'
+import { family } from '../src/kv.ts'
+import { ExpertBindingSchema } from '../src/experts/model.ts'
 import { Store } from '../src/app/store.ts'
 import { Experts } from '../src/experts/catalog.ts'
 const cleanups: (() => void)[] = []
@@ -14,7 +16,7 @@ function fixture() {
   writeFileSync(join(directory, '.codex-plugin/plugin.json'), JSON.stringify({ name: 'travel', description: 'Travel planning' }))
   writeFileSync(join(directory, 'AGENTS.md'), 'Plan travel'); writeFileSync(join(directory, 'SOUL.md'), 'Friendly')
   const catalog = new Experts(store, join(root, 'snapshots'), () => ({ maxBytes: 100000, maxFiles: 100, maxPromptChars: 10000 }))
-  return { catalog, directory }
+  return { catalog, directory, store }
 }
 it('keeps imported packages disabled until explicitly enabled and supports no expert', () => {
   const { catalog, directory } = fixture(), preview = catalog.preview({ directory })
@@ -45,4 +47,15 @@ it('preserves executable package resources', () => {
   const preview = catalog.preview({ directory }); catalog.save({ directory }, preview.digest, 0); catalog.enable('travel', 1, true)
   const path = catalog.materialize(catalog.select({ id: 'travel', digest: preview.digest, reason: 'Trip' })!)
   expect(statSync(join(path, 'server.sh')).mode & 0o100).toBe(0o100)
+})
+
+it('reads stage-one snapshots without optional MCP metadata and retains their digest', () => {
+  const { catalog, directory, store } = fixture(), preview = catalog.preview({ directory })
+  const { optionalMcp: _optional, ...legacy } = preview
+  store.set(family<unknown>('expert-package:')('travel'), { directory, revision: 2, enabled: true, snapshot: legacy })
+  expect(catalog.list()[0]?.snapshot).toMatchObject({ optionalMcp: [], digest: legacy.digest })
+  const selected = catalog.select({ id: 'travel', digest: legacy.digest, reason: 'Resume' })!
+  expect(selected.snapshot.optionalMcp).toEqual([])
+  const resumed = ExpertBindingSchema.parse({ snapshot: legacy, reason: 'Resume' })
+  expect(readFileSync(join(catalog.materialize(resumed), 'SOUL.md'), 'utf8')).toBe('Friendly')
 })
