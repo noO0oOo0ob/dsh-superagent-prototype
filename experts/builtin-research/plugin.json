@@ -1,0 +1,7 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "builtin-research",
+  "displayName": "研究分析专家",
+  "version": "1.0.0",
+  "description": "检索资料、核验来源、比较方案并解释决策依据。"
+}

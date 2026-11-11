@@ -27,6 +27,7 @@
     "locale/*.json",
     "README.md",
     "prompts",
+    "experts",
     "skills",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",

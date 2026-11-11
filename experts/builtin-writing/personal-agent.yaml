@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "instructions": {
+    "agents": "./AGENTS.md",
+    "soul": "./SOUL.md"
+  },
+  "routing": {
+    "description": "撰写、润色、改写、翻译面向特定受众的内容。",
+    "examples": [
+      "帮我写一封项目进展邮件",
+      "把这段汇报改得更简洁",
+      "将上面的文案改成面向客户的版本"
+    ],
+    "exclusions": [
+      "需要新事实研究交给研究分析；需要修改软件交给软件工程。"
+    ]
+  },
+  "entry": {
+    "preloadSkills": []
+  }
+}

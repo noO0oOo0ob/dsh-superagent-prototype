@@ -1,0 +1,7 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "builtin-planning",
+  "displayName": "规划执行专家",
+  "version": "1.0.0",
+  "description": "将目标转成可执行计划，安排项目、学习、旅行和日常事项。"
+}

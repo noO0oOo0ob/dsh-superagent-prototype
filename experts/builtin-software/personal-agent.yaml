@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "instructions": {
+    "agents": "./AGENTS.md",
+    "soul": "./SOUL.md"
+  },
+  "routing": {
+    "description": "理解仓库、讨论架构、实现功能、诊断故障和审查代码。",
+    "examples": [
+      "分析这个仓库的调用链",
+      "定位这个报错并修复",
+      "继续按刚才确认的方案修改代码"
+    ],
+    "exclusions": [
+      "跨产品资料研究可交给研究分析；普通文章润色交给写作。"
+    ]
+  },
+  "entry": {
+    "preloadSkills": []
+  }
+}

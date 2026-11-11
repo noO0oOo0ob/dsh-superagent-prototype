@@ -1,3 +1,4 @@
+import { bundledExperts } from '../experts/bundled.ts'
 /** Application composition root and lifecycle manager for dsh-super-personal-agent. */
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -147,6 +148,7 @@ export class Runtime extends Service implements SourceHost {
       const store = opened = this.store = new Store(join(machine.stateDir, 'orchestrator.sqlite'), report)
       this.personal = new PersonalSettings(store)
       this.experts = new Experts(store, join(machine.stateDir, 'expert-snapshots'), () => ({ ...this.personal.view().config.expertImports, maxPromptChars: machine.promptMaxChars.get() }))
+      this.experts.installBundled(bundledExperts())
       this.expertPreferences = new ExpertPreferences(store, this.experts, () => machine.promptMaxChars.get())
       this.identities = new Identities(store, join(machine.stateDir, 'identity-drafts'), () => machine.promptMaxChars.get())
       this.messageDelivery = new MessageDelivery(store)

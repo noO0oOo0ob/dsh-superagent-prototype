@@ -15,6 +15,17 @@ export class ExpertConflict extends Error {}
 /** Owns package import, preview validation, enablement and exact task selection. */
 export class Experts {
   constructor(private readonly store: Pick<Store, 'get' | 'set' | 'keys' | 'atomic'>, private readonly root: string, private readonly limits: () => PackageLimits) {}
+  /** Install missing bundled packages without replacing user-owned catalog entries. */
+  installBundled(packages: readonly { id: string; directory: string }[]): void {
+    const additions = packages.filter(item => !this.store.get(entries(item.id))).map(item => {
+      const snapshot = this.preview({ directory: item.directory, format: 'portable' })
+      if (snapshot.id !== item.id || snapshot.issues.length) throw new Error(`Invalid bundled expert: ${item.id}`)
+      return { revision: 1, enabled: true, directory: item.directory, snapshot }
+    })
+    this.store.atomic(() => {
+      for (const entry of additions) if (!this.store.get(entries(entry.snapshot.id))) this.store.set(entries(entry.snapshot.id), entry)
+    })
+  }
   list(): ExpertEntry[] { return this.store.keys(entries).map(key => entrySchema.parse(this.store.get(key))) }
   preview(input: PackageInput) { return readExpertPackage(ExpertImportSchema.parse(input), this.limits()) }
   save(input: PackageInput, digest: string, revision: number): ExpertEntry {

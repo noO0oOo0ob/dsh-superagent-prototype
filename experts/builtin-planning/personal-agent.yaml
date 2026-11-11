@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "instructions": {
+    "agents": "./AGENTS.md",
+    "soul": "./SOUL.md"
+  },
+  "routing": {
+    "description": "将目标转成可执行计划，安排项目、学习、旅行和日常事项。",
+    "examples": [
+      "把这个目标拆成两周计划",
+      "安排一趟不赶路的旅行",
+      "按新的截止时间调整刚才的安排"
+    ],
+    "exclusions": [
+      "主要判断方案优劣交给研究分析；具体代码实现交给软件工程。"
+    ]
+  },
+  "entry": {
+    "preloadSkills": []
+  }
+}

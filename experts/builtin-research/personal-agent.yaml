@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "instructions": {
+    "agents": "./AGENTS.md",
+    "soul": "./SOUL.md"
+  },
+  "routing": {
+    "description": "检索资料、核验来源、比较方案并解释决策依据。",
+    "examples": [
+      "比较这三个技术方案的适用条件",
+      "核实这篇报道的依据",
+      "继续补充刚才方案的反面证据"
+    ],
+    "exclusions": [
+      "修改具体代码由软件工程处理；以数据集计算为主交给数据分析；排期执行交给规划。"
+    ]
+  },
+  "entry": {
+    "preloadSkills": []
+  }
+}

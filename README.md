@@ -8,6 +8,8 @@ A local message can become a durable Ticket, run in its own worker Session and o
 
 The package ID is `dsh-super-personal-agent`. It uses its own service, presets, Sessions, panel, HTTP routes and worker environment so it can share a DSH profile with `dsh-superagent`. Give each plugin a separate state directory. Installing this fork does not migrate the original plugin's data.
 
+Five general experts ship with the plugin and register automatically on first activation: research, writing, software engineering, data analysis, and planning. Each includes AGENTS, SOUL and three on-demand Skills. Existing expert edits and disablement are preserved. See [Bundled experts](docs/expert-packages.md#bundled-general-experts).
+
 ## Setup
 
 Start with [SETUP.md](SETUP.md), or follow the [phase-one local inbox walkthrough](docs/009-personal-agent.md). The walkthrough needs no external account. [Deployment](docs/006-deployment.md) covers installation alongside the original plugin and optional GitHub configuration.

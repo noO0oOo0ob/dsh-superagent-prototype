@@ -1,0 +1,7 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "builtin-writing",
+  "displayName": "写作表达专家",
+  "version": "1.0.0",
+  "description": "撰写、润色、改写、翻译面向特定受众的内容。"
+}

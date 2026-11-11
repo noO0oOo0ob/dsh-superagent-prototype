@@ -1,0 +1,7 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "builtin-software",
+  "displayName": "软件工程专家",
+  "version": "1.0.0",
+  "description": "理解仓库、讨论架构、实现功能、诊断故障和审查代码。"
+}

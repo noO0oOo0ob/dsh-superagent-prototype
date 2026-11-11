@@ -1,0 +1,7 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "builtin-data",
+  "displayName": "数据分析专家",
+  "version": "1.0.0",
+  "description": "处理数据集和电子表格，核对指标、计算、分析和可视化。"
+}

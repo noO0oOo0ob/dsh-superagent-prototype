@@ -30,7 +30,7 @@ async function accept(id: string, selection?: ReturnType<typeof expert> | null) 
 it('exposes descriptions to Main, then loads only the selected AGENTS and SOUL into its Worker', async () => {
   const selection = expert()
   const catalog = await h.runTool(h.runtime.masterId, 'personal_agent_experts', {})
-  expect(catalog).toMatchObject({ experts: [{ id: 'travel', digest: selection.digest }] })
+  expect(catalog).toMatchObject({ experts: expect.arrayContaining([{ id: 'travel', digest: selection.digest, description: expect.any(String), examples: [], exclusions: [] }]) })
   expect(JSON.stringify(catalog)).not.toContain('patient travel adviser')
   const ticket = await accept('1', selection)
   expect(ticket.expert?.reason).toBe(selection.reason)

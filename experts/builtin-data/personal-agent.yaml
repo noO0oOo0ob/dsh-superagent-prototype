@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "instructions": {
+    "agents": "./AGENTS.md",
+    "soul": "./SOUL.md"
+  },
+  "routing": {
+    "description": "处理数据集和电子表格，核对指标、计算、分析和可视化。",
+    "examples": [
+      "分析这份销售表的变化",
+      "清理重复行并解释规则",
+      "把刚才的结论按地区重新计算"
+    ],
+    "exclusions": [
+      "以资料检索为主交给研究分析；复杂业务软件开发交给软件工程。"
+    ]
+  },
+  "entry": {
+    "preloadSkills": []
+  }
+}
