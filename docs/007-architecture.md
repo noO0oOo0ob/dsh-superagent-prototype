@@ -305,7 +305,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/messaging/conversations.ts` | Stable IM conversation generations and task ownership |
 | `src/messaging/delivery-state.ts` | Pure aggregate delivery status |
 | `src/messaging/delivery.ts` | Immutable per-part receipts and explicit recovery |
-| `src/messaging/dialogue.ts` | Restricted conversation router and logged metadata projection |
+| `src/messaging/dialogue.ts` | Captured source settings and logged metadata projection |
 | `src/messaging/files.ts` | Immutable binary artifact snapshots |
 | `src/messaging/group-targets.ts` | Durable per-account target decisions and verified group defaults |
 | `src/messaging/inbound.ts` | Source-scoped inbound resource downloads |

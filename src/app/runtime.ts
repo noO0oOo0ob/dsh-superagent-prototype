@@ -60,8 +60,9 @@ import { nativeDelivery } from '../connectors/native-delivery.ts'
 import { ArtifactFiles } from '../messaging/files.ts'
 import { MessageActions } from '../messaging/actions.ts'
 import { InboundFiles } from '../messaging/inbound.ts'
+import { migrateMainCandidates } from '../messaging/main-routing.ts'
 import { Conversations } from '../messaging/conversations.ts'
-import { dialogueTools, dialogueSettings, dialogueMessage, DIALOGUE_PROMPT } from '../messaging/dialogue.ts'
+import { dialogueSettings, dialogueMessage } from '../messaging/dialogue.ts'
 import { commandOf, executeCommand } from '../messaging/commands.ts'
 import { MessageDelivery } from '../messaging/delivery.ts'
 import { Results } from './results.ts'
@@ -197,22 +198,17 @@ export class Runtime extends Service implements SourceHost {
       const sessions = this.sessions = new Sessions({ experts: this.experts, mainPersona: nextTurn => this.expertPreferences.main(masterId, nextTurn), expertMcpTimeout: () => this.personal.view().config.expertImports.mcpTimeoutMs, context: ctx, store, prompts, effects, health: board.claim('models'), masterId,
         lifetime: this.lifetime,
         closing: () => this.closing(), environment,
-        dialogue: id => this.conversations.isDialogue(id) ? { prompt: this.conversations.forSession(id) ? `${DIALOGUE_PROMPT}\n${this.expertPreferences.dialogue(id, this.conversations.forSession(id)!.source)}` : 'This conversation was reset. End the turn.' } : undefined,
+        retired: id => this.conversations.isDialogue(id),
         defaults: id => {
           const ticketId = id.startsWith('spa-worker-') ? id.slice('spa-worker-'.length) : undefined
           const ticket = ticketId ? store.tickets.get(ticketId) : undefined
-          return dialogueSettings(ticket ? store.triggers.get(ticket.origin.triggerId) : this.conversations.history(id).at(-1))
+          return dialogueSettings(ticket ? store.triggers.get(ticket.origin.triggerId) : undefined)
         },
         tools: (agent, ticket) => ticket ? [...executorTools(this.toolHost, ticket), this.inbound.tool(agent, id => {
           const current = store.tickets.get(ticket.id), trigger = store.triggers.get(id)
           if (!current || !trigger || !ticketContexts(current).some(ref => ref.triggerId === id) || !this.routing.permits(current, trigger)) throw new Error('Input is outside this task')
           return trigger
-        }, true)] : this.conversations.isDialogue(agent.id) ? [...dialogueTools(this.toolHost, store, this.conversations, agent),
-          this.inbound.tool(agent, id => {
-            const trigger = this.conversations.authorize(agent.id, id)
-            if (!this.sources.scope(trigger).listened) throw new Error('Source access was removed')
-            return trigger
-          }, false)] : [...mainTools(this.toolHost, agent), ...this.main.tools(), ...personalTools({ store, schedules: this.schedules, currentRequest: () => this.main.currentRequest(), requestPass: () => this.passes.request() })] })
+        }, true)] : [this.inbound.tool(agent, id => this.authorizeMainInput(id), false), ...mainTools(this.toolHost, agent), ...this.main.tools(), ...personalTools({ store, schedules: this.schedules, currentRequest: () => this.main.currentRequest(), requestPass: () => this.passes.request() })] })
       effects.handle('dialogueReset', async ({ sessionId }) => sessions.cancel(sessionId))
       const policyChanged: EngineForSettings['policyChanged'] = (from, to, effects) => { this.engine.policyChanged(from, to, effects) }
       this.settings = new Settings({ store, sources, engine: { policyChanged }, health: board, context: ctx, lifetime: this.lifetime, sessions,
@@ -263,7 +259,7 @@ export class Runtime extends Service implements SourceHost {
           if (!origin) throw new Error('Scheduled input is not authorized')
           store.contexts.parent(trigger, origin)
         },
-        permitsInput: (ticket, trigger) => this.routing.permits(ticket, trigger) && this.conversations.permitsInput(ticket, trigger),
+        permitsInput: (ticket, trigger) => this.routing.permits(ticket, trigger) && this.conversations.permitsInput(ticket, trigger) && this.directTarget(trigger) === ticket.id,
         beforeFollow: (ticket, thread) => this.routing.follow(ticket, thread),
         beforeAttach: (ticket, trigger) => { this.conversations.authorizeMutation(ticket, trigger); this.routing.attach(ticket, trigger) },
         outbox, prepareTicket: (ticket, outcome) => {
@@ -327,7 +323,7 @@ export class Runtime extends Service implements SourceHost {
       this.sourceDeps = { store, engine, outbox, commands, sources, get ready() { return runtime.ready },
         get deployment() { return setup.deployment }, configured: () => setup.configured(),
         get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, get githubProblem() { return setup.githubProblem }, receive: trigger => passes.receive(trigger) }
-      this.toolHost = { expertPreferences: this.expertPreferences, experts: this.experts, artifactLimit: () => this.personal.view().config.artifacts.maxBytes, context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources,
+      this.toolHost = { authorizeRoute: (id, ticketId, kind) => this.authorizeMainRoute(id, ticketId, kind), expertPreferences: this.expertPreferences, experts: this.experts, artifactLimit: () => this.personal.view().config.artifacts.maxBytes, context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources,
         get github() { return runtime.context({ kind: 'github', health: ['github'] }) },
         requestPass: () => { passes.request() }, sendReplies: () => outbox.sent(),
         quietly: run => { this.quiet++; try { return run() } finally { this.quiet-- } } }
@@ -354,23 +350,66 @@ export class Runtime extends Service implements SourceHost {
     if (received === 'stored') this.passes.request()
     return received
   }
+  /** Only a unique persisted task binding can bypass semantic routing. */
+  private directTarget(trigger: Trigger): string | undefined {
+    if (trigger.meta.conversationVersion === 1) return typeof trigger.meta.targetTicketId === 'string' ? trigger.meta.targetTicketId : undefined
+    if (trigger.source !== 'github' && trigger.source !== 'feishu') return undefined
+    const matches = new Set<string>()
+    for (const ref of trigger.threads) {
+      const thread = this.store.threads.get(threadKey(ref))
+      for (const id of thread?.subscriptions ?? []) {
+        if (thread?.context?.includes(id)) continue
+        const ticket = this.store.tickets.get(id)
+        if (!ticket || ticket.ended?.by === 'human') continue
+        matches.add(id)
+      }
+    }
+    return matches.size === 1 ? [...matches][0] : undefined
+  }
+  /** Source identity survives delivery to Main; it never becomes the local owner's authority. */
+  private authorizeMainInput(id: string): Trigger {
+    const trigger = this.store.triggers.get(id)
+    if (!trigger || !this.sources.scope(trigger).listened) throw new Error('Source access was removed')
+    if (trigger.meta.conversationVersion === 1) {
+      const conversation = this.conversations.forTrigger(trigger)
+      if (!conversation) throw new Error('Conversation is unavailable')
+      this.conversations.authorize(conversation.sessionId, id)
+    }
+    return trigger
+  }
+  private authorizeMainRoute(id: string, ticketId: string | undefined, kind: string): void {
+    const trigger = this.store.triggers.get(id)
+    if (!trigger && kind === 'catalog') throw new Error('Unknown source request')
+    if (trigger?.meta.conversationVersion !== 1) return
+    this.authorizeMainInput(id)
+    const candidate = this.engine.candidate(id)
+    if (!candidate) throw new Error('The current request has already been handled or belongs to a Worker')
+    for (const sibling of candidate.triggers) this.authorizeMainInput(sibling.id)
+    if (ticketId) {
+      const ticket = this.store.tickets.get(ticketId)
+      if (!ticket || !this.conversations.belongs(ticket, trigger)) throw new Error('Task is outside this conversation')
+      if (kind === 'attach' || kind === 'stop') this.conversations.authorizeMutation(ticket, trigger)
+    }
+  }
+  /** Requeue only undecided legacy candidates, atomically with the upgrade marker. */
+  private async retireDialogues(): Promise<void> {
+    for (const id of this.conversations.sessionIds()) await this.sessions.cancel(id)
+    migrateMainCandidates(this.store, this.effects)
+  }
   private async deliverCandidate(id: string, text: string, trigger?: Trigger): Promise<void> {
     if (!trigger || trigger.meta.conversationVersion !== 1) return this.sessions.prompt(this.masterId, id, text, 'steer')
     const conversation = this.conversations.forTrigger(trigger)
     if (!conversation || conversation.generation !== trigger.meta.dialogueGeneration) return
-    const defaults = dialogueSettings(trigger)
-    const workspace = conversation.workspace ?? this.conversations.bindWorkspace(conversation.sessionId, await this.connectors.prepareDialogue(trigger, conversation.id)
-      ?? defaults.workspace ?? join(this.machine.stateDir, 'conversations'))
-    await this.sessions.ensure(conversation.sessionId, workspace,
-      `IM · ${String(trigger.meta.conversationTitle ?? trigger.meta.conversationId)}`, 'orchestrator')
     const candidate = this.engine.candidate(trigger.id)
     if (!candidate) return
     const current = candidate.triggers.map(item => dialogueMessage(item, this.conversations.tasks(item)
       .filter(ticket => this.store.triggers.get(ticket.origin.triggerId)?.meta.dialogueGeneration === conversation.generation)))
     const message = JSON.stringify({ kind: 'candidate', strength: candidate.strength, messages: current,
+      conversation: { id: conversation.id, generation: conversation.generation },
+      source_persona: this.expertPreferences.dialogue(conversation.sessionId, trigger.source),
+      recent_messages: this.conversations.history(conversation.sessionId).slice(-10).map(item => dialogueMessage(item, [])),
       next_action: 'personal_agent_route: respond, accept, attach, stop, ignore' })
-    await this.sessions.prompt(conversation.sessionId, id, message, 'steer', () => { this.conversations.authorize(conversation.sessionId, trigger.id) })
-    this.sessions.notify(id, { kind: 'im_candidate', sessionId: conversation.sessionId, messages: current }, 'IM conversation received')
+    await this.sessions.prompt(this.masterId, `main:${id}`, message, 'steer', () => { this.authorizeMainInput(trigger.id) })
   }
   /** Native accounts are independent of any installed IM plugin. */
   private async startNativeFeishu(): Promise<void> {
@@ -416,7 +455,7 @@ export class Runtime extends Service implements SourceHost {
     return ticketEnvironment({ deployment, sources, settings: this.store.settings(), ticket, ...trigger ? { trigger } : {} })
   }
   checkSetup(): void { this.setup.check() }
-  receive(trigger: Trigger): ReceiveResult { return this.passes.receive(trigger) }
+  receive(trigger: Trigger): ReceiveResult { return trigger.meta.conversationVersion === 1 ? this.receiveConversation(trigger) : this.passes.receive(trigger) }
   idle(): Promise<void> { return this.passes.idle() }
   pump(): Promise<void> { return this.passes.pump() }
   sendReplies(): Promise<void> { return this.outbox.sent() }
@@ -434,6 +473,7 @@ export class Runtime extends Service implements SourceHost {
     this.main.install()
     this.executor.install()
     await this.sessions.ensure(this.masterId, this.machine.stateDir, 'dsh-super-personal-agent orchestrator', 'orchestrator')
+    await this.retireDialogues()
     await this.main.restore()
     await this.startNativeFeishu()
     await this.connectors.refresh()

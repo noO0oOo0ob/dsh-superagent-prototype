@@ -40,7 +40,7 @@ let runtime: Runtime
 const viewsOf = (value: Runtime) => ({ store: value.store, sources: value.sources, links: value.links() })
 const overviewOf = (value: Runtime) => overview(viewsOf(value), value.health, policyVersion(value.store.settings()), executorLoad(value.store, value.executor.activeCount()), value.setupProblem ?? value.feishuProblem)
 let directory: string
-let controller: { create: ReturnType<typeof vi.fn>; selectModel: ReturnType<typeof vi.fn>; resolveAgent: ReturnType<typeof vi.fn>; rename: ReturnType<typeof vi.fn>; prompt: ReturnType<typeof vi.fn>; inspect: ReturnType<typeof vi.fn>; modelCatalog: ReturnType<typeof vi.fn> }
+let controller: { create: ReturnType<typeof vi.fn<(input: { sessionId: string; agentPreset?: string }) => Promise<void>>>; selectModel: ReturnType<typeof vi.fn>; resolveAgent: ReturnType<typeof vi.fn>; rename: ReturnType<typeof vi.fn>; prompt: ReturnType<typeof vi.fn>; inspect: ReturnType<typeof vi.fn>; modelCatalog: ReturnType<typeof vi.fn> }
 type RegisteredTool = { name: string; output: { render: (args: unknown, result: unknown) => unknown }; execute: (args: unknown, execution: { signal: AbortSignal }) => Promise<unknown> }
 let tools: Map<string, Map<string, RegisteredTool>>
 type Section = { name: string; text: (context: { signal?: AbortSignal }) => string; interpolate?: boolean }
@@ -1231,7 +1231,7 @@ it('keeps the receipt of a message withdrawn while it went out, so its id is not
   expect([runtime.store.receipts.get('raced'), runtime.effects.pending('reply')]).toEqual([expect.objectContaining({ text: 'Done', status: 'sent' }), false])
 })
 
-it('resumes several ended tickets on one thread from one message without the launch waiting on itself', async () => {
+it('sends ambiguous thread bindings to Main without resuming multiple ended tickets', async () => {
   const first = await acceptedTicket()
   const other = feishu('30', '@bot 顺手把这里也改了', { root_id: undefined })
   await receive(other)
@@ -1242,9 +1242,11 @@ it('resumes several ended tickets on one thread from one message without the lau
   await runTool(first.sessionId, 'personal_agent_trigger_handback', { trigger_id: another.id, reason: 'Another change.' })
   const second = await acceptedTicket(another)
   for (const ticket of [first, second]) await runTool(ticket.sessionId, 'personal_agent_report', { publication: { mode: 'internal' }, state: 'dropped', summary: 'nothing to do' })
-  await receive(feishu('32', '还有问题', { mentions: [], root_id: 'om_1', sender_id: 'ou_guest' }))
-  await vi.waitFor(() => expect([first, second].map(ticket => runtime.store.tickets.get(ticket.ticket.id)!.ended)).toEqual([undefined, undefined]), { timeout: 3000 })
-  await vi.waitFor(() => expect([first, second].map(ticket => runtime.store.tickets.get(ticket.ticket.id)!.assignments.at(-1)!.state)).toEqual(['running', 'running']), { timeout: 3000 })
+  const ambiguous = feishu('32', '@bot 还有问题', { root_id: 'om_1' })
+  await receive(ambiguous)
+  expect([first, second].map(item => runtime.store.tickets.get(item.ticket.id)!.ended?.outcome)).toEqual(['dropped', 'dropped'])
+  expect(runtime.store.triggers.disposition(ambiguous.id)?.fanout).toEqual([])
+  expect(relays(runtime.masterId)).toContainEqual(expect.objectContaining({ kind: 'candidate', trigger_id: ambiguous.id }))
 })
 
 it('attaches a message to an ended ticket and so resumes it', async () => {
@@ -1820,4 +1822,16 @@ it('keeps the Policy the main Session judges by in its prompt, after admission a
   await runtime.settings.save('policy', { ...saved.policy, rules: rules.map(rule => ({ ...rule, enabled: false })) }, runtime.store.blockRevision('policy'), 'panel')
   expect(policy()).toContain('No rule is enabled: a proactive candidate can only be ignored.')
   expect(policy()).toContain('The accept mode and the rules decide proactive candidates only')
+})
+
+it('retires an already loaded legacy IM router without cancelling Main', async () => {
+  const input = feishu('80', 'legacy'), captured = runtime.conversations.prepare({ ...input,
+    meta: { ...input.meta, conversationVersion: 1, fingerprint: 'legacy-account', conversationId: CHAT, conversationType: 'group', messageId: 'legacy' } })
+  const id = String(captured.meta.dialogueSessionId)
+  await controller.create({ sessionId: id, agentPreset: 'dsh-super-personal-agent-router' })
+  await runtime.sessions.cancel(id)
+  expect(agents.get(id)!.cancel).toHaveBeenCalled()
+  expect(() => guards.get(id)!()).toThrow('retired')
+  expect(tools.get(id)?.has('personal_agent_route')).toBe(false)
+  expect(agents.get(runtime.masterId)!.cancel).not.toHaveBeenCalled()
 })

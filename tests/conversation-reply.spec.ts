@@ -47,7 +47,7 @@ it.each([['dm', false], ['group', true]] as const)('replies to a %s greeting wit
   expect(replyChecked).toHaveBeenCalledOnce()
   expect(replyChecked.mock.calls[0]!.slice(0, 3)).toEqual(['bot', expect.objectContaining({ messageId: 'greeting', conversationId: 'chat' }), '你好！今天想聊点什么？'])
   expect(h.runtime.store.tickets.list()).toHaveLength(0)
-  expect(h.agents.size).toBe(2)
+  expect(h.agents.size).toBe(1)
   expect(h.runtime.engine.candidate(triggerId)).toBeUndefined()
   const decision = h.runtime.store.decisions.get(h.runtime.store.triggers.disposition(triggerId)!.decisionId!)!
   const view = snapshot({ store: h.runtime.store, sources: h.runtime.sources, links: () => ({ url: 'https://example.invalid/chat', label: { zh: '对话', en: 'Chat' } }) })
@@ -93,31 +93,32 @@ it('retains task delegation for requests that need background execution', async 
   expect(await route({ kind: 'accept', title: 'Plan a trip', worktree_name: 'trip', acknowledgement: '开始准备旅行计划。' })).toHaveProperty('ticket')
   await h.runtime.idle()
   expect(h.runtime.store.tickets.list()).toHaveLength(1)
-  expect(h.agents.size).toBe(3)
+  expect(h.agents.size).toBe(2)
   expect(replyChecked).toHaveBeenCalledOnce()
 })
 
 
-it('keeps one DM Thread and router while assigning distinct tasks without subscription fanout', async () => {
+it('keeps one DM Thread and Main router while assigning distinct tasks without subscription fanout', async () => {
   const { h, event, receive, triggerId, route } = await conversation('dm', false, '调研旅行')
   const first = h.runtime.store.triggers.get(triggerId)!
   const dialogueId = String(first.meta.dialogueSessionId)
-  expect(h.agents.has(dialogueId)).toBe(true)
+  expect(h.agents.has(dialogueId)).toBe(false)
+  expect(h.relays(h.runtime.masterId)).toContainEqual(expect.objectContaining({ kind: 'candidate', messages: [expect.objectContaining({ trigger_id: triggerId })] }))
   expect(await route({ kind: 'accept', title: 'Travel', worktree_name: 'travel', acknowledgement: '开始调研。' })).toHaveProperty('ticket')
   await receive({ ...event, messageId: 'second', eventId: 'second', text: '另外帮我修复一个开源项目。', reply: { ...event.reply, messageId: 'second' } })
   const secondId = key('dsh-im', 'chat', event.fingerprint, 'chat', 'second'), second = h.runtime.store.triggers.get(secondId)!
   expect(second.threads).toEqual(first.threads)
   expect(second.meta.dialogueSessionId).toBe(dialogueId)
   expect(h.runtime.store.triggers.disposition(secondId)?.fanout).toEqual([])
-  await h.runTool(dialogueId, 'personal_agent_route', { decisions: [{ trigger_id: secondId, kind: 'accept', title: 'Fix project', worktree_name: 'fix-project', acknowledgement: '开始检查。' }] })
+  await h.runTool(h.runtime.masterId, 'personal_agent_route', { decisions: [{ trigger_id: secondId, kind: 'accept', title: 'Fix project', worktree_name: 'fix-project', acknowledgement: '开始检查。' }] })
   await h.runtime.idle()
   expect(h.runtime.store.tickets.list()).toHaveLength(2)
   expect(h.runtime.store.tickets.list().map(ticket => ticket.origin.triggerId).sort()).toEqual([triggerId, secondId].sort())
   expect(h.runtime.store.tickets.list().every(ticket => ticket.inputs.every(input => input.kind !== 'trigger' || input.triggerId === ticket.origin.triggerId))).toBe(true)
-  expect(h.agents.size).toBe(4)
+  expect(h.agents.size).toBe(3)
 })
 
-it('intercepts /new once, refuses old router tools, and keeps Workers and Main history', async () => {
+it('intercepts /new once, refuses old generation requests, and keeps Workers and Main history', async () => {
   const { h, event, receive, triggerId, route, replyChecked } = await conversation('dm', false, '准备旅行计划')
   await route({ kind: 'accept', title: 'Travel', worktree_name: 'travel', acknowledgement: '开始准备。' })
   await h.runtime.idle()
@@ -129,7 +130,7 @@ it('intercepts /new once, refuses old router tools, and keeps Workers and Main h
   expect(h.agents.get(h.runtime.masterId)!.cancel).not.toHaveBeenCalled()
   expect(h.agents.get(`spa-worker-${ticket.id}`)!.cancel).not.toHaveBeenCalled()
   expect(h.runtime.store.tickets.get(ticket.id)?.ended).toBeUndefined()
-  await expect(h.runTool(oldId, 'personal_agent_route', { decisions: [{ trigger_id: triggerId, kind: 'respond', text: 'stale' }] })).rejects.toThrow('changed')
+  expect(await h.runTool(h.runtime.masterId, 'personal_agent_route', { decisions: [{ trigger_id: triggerId, kind: 'respond', text: 'stale' }] })).toMatchObject({ results: [{ refused: expect.stringContaining('changed') }] })
   await receive({ ...event, messageId: 'next', eventId: 'next', text: '你好', reply: { ...event.reply, messageId: 'next' } })
   const nextId = key('dsh-im', 'chat', event.fingerprint, 'chat', 'next'), next = h.runtime.store.triggers.get(nextId)!
   expect(next.meta.dialogueSessionId).not.toBe(oldId)
@@ -152,14 +153,16 @@ it('aggregates group topics but prevents another member from changing an existin
   expect(h.runtime.store.triggers.disposition(second.id)?.fanout).toEqual([])
 })
 
-it('denies cross-conversation router decisions and global management tools', async () => {
-  const { h, event, receive, triggerId } = await conversation()
-  const first = h.runtime.store.triggers.get(triggerId)!
+it('routes multiple conversations through Main while retaining original reply destinations', async () => {
+  const { h, event, receive, route } = await conversation()
   await receive({ ...event, messageId: 'other', eventId: 'other', conversation: { kind: 'dm', id: 'other' },
     reply: { ...event.reply, messageId: 'other', conversationId: 'other' } })
   const otherId = key('dsh-im', 'chat', event.fingerprint, 'other', 'other')
-  await expect(h.runTool(String(first.meta.dialogueSessionId), 'personal_agent_route', { decisions: [{ trigger_id: otherId, kind: 'respond', text: 'wrong chat' }] })).rejects.toThrow('changed')
-  await expect(h.runTool(String(first.meta.dialogueSessionId), 'personal_agent_settings_save', {})).rejects.toThrow()
+  expect(await route({ kind: 'respond', text: 'First chat' })).toMatchObject({ decision: 'respond' })
+  expect(await h.runTool(h.runtime.masterId, 'personal_agent_route', { decisions: [{ trigger_id: otherId, kind: 'respond', text: 'Second chat' }] }))
+    .toMatchObject({ results: [{ decision: 'respond' }] })
+  expect(h.agents.size).toBe(1)
+  expect(h.deliveries.mock.calls.every(([call]) => call.sessionId === h.runtime.masterId)).toBe(true)
 })
 
 
@@ -173,6 +176,15 @@ it('records a stable model-visible conversation envelope with typed attachment r
       group: { enabled: false, fields: [], guidance: '' } } }, senderName: 'Alice' } }, [])
   expect(rendered).toMatchInlineSnapshot(`
     {
+      "origin": {
+        "actor": {
+          "id": "alice",
+          "source": "im-chat",
+        },
+        "conversation": "c37bc7c354e4a0db232c236e067494e1",
+        "generation": 0,
+        "source": "im-chat",
+      },
       "resources": [
         {
           "key": "img_a",
@@ -202,7 +214,7 @@ it('keeps normal conversation replies available after a task subscribes to the s
   await route({ kind: 'accept', title: 'Travel', worktree_name: 'travel', acknowledgement: '开始。' })
   await receive({ ...event, messageId: 'greet-again', eventId: 'greet-again', text: '你好呀', reply: { ...event.reply, messageId: 'greet-again' } })
   const id = key('dsh-im', 'chat', event.fingerprint, 'chat', 'greet-again'), trigger = h.runtime.store.triggers.get(id)!
-  const result = await h.runTool(String(trigger.meta.dialogueSessionId), 'personal_agent_route', { decisions: [{ trigger_id: id, kind: 'respond', text: '你好！' }] })
+  const result = await h.runTool(h.runtime.masterId, 'personal_agent_route', { decisions: [{ trigger_id: id, kind: 'respond', text: '你好！' }] })
   expect(result.results).toEqual([expect.objectContaining({ decision: 'respond' })])
   expect(h.runtime.store.tickets.list()).toHaveLength(1)
 })
@@ -220,7 +232,7 @@ it('separates simultaneous group requests into decisions owned by their actual s
   expect(h.runtime.engine.candidate(ids[1]!)).toBeUndefined()
   for (const [index, actor] of ['alice', 'bob'].entries()) {
     const id = ids[index]!, trigger = h.runtime.store.triggers.get(id)!
-    await h.runTool(String(trigger.meta.dialogueSessionId), 'personal_agent_route', { decisions: [{ trigger_id: id, kind: 'accept', title: actor,
+    await h.runTool(h.runtime.masterId, 'personal_agent_route', { decisions: [{ trigger_id: id, kind: 'accept', title: actor,
       worktree_name: actor, acknowledgement: '开始。' }] })
     await h.runtime.idle()
   }
@@ -235,8 +247,8 @@ it('refuses historical owner requests and cross-conversation stops even through 
     reply: { ...event.reply, messageId: 'other-stop', conversationId: 'other' } })
   const otherId = key('dsh-im', 'chat', event.fingerprint, 'other', 'other-stop')
   const result = await h.runTool(h.runtime.masterId, 'personal_agent_route', { decisions: [{ trigger_id: otherId, kind: 'stop', ticket_id: ticket.id }] })
-  expect(result.results).toEqual([expect.objectContaining({ refused: expect.stringContaining('original conversation') })])
-  await expect(h.runTool(String(first.meta.dialogueSessionId), 'personal_agent_route', { decisions: [{ trigger_id: triggerId, kind: 'stop', ticket_id: ticket.id }] })).rejects.toThrow('already been handled')
+  expect(result.results).toEqual([expect.objectContaining({ refused: expect.stringContaining('outside this conversation') })])
+  expect(await h.runTool(h.runtime.masterId, 'personal_agent_route', { decisions: [{ trigger_id: triggerId, kind: 'stop', ticket_id: ticket.id }] })).toMatchObject({ results: [{ refused: expect.stringContaining('already been handled') }] })
   expect(h.runtime.store.tickets.get(ticket.id)?.ended).toBeUndefined()
 })
 
@@ -250,15 +262,79 @@ it('scopes the IM expert catalog and enforces source restrictions at acceptance'
   const persona = { agents: 'Coordinate trips', soul: 'Be warm' }
   const prefs = h.runtime.expertPreferences
   prefs.save({ accounts: [{ source: trigger.source, persona, allowed: [] }] }, 0)
-  expect(await h.runTool(dialogueId, 'personal_agent_experts', {})).toMatchObject({ experts: [] })
-  await expect(h.runTool(dialogueId, 'personal_agent_experts', { trigger_id: 'foreign' })).rejects.toThrow()
+  expect(await h.runTool(h.runtime.masterId, 'personal_agent_experts', { trigger_id: triggerId })).toMatchObject({ experts: [] })
+  await expect(h.runTool(h.runtime.masterId, 'personal_agent_experts', { trigger_id: 'foreign' })).rejects.toThrow()
   const decision = { kind: 'accept', trigger_id: triggerId, title: 'Trip', worktree_name: 'trip', acknowledgement: '开始规划。',
     expert: { id: snapshot.id, digest: snapshot.digest, reason: 'Seven-day itinerary requested' } }
-  expect(await h.runTool(dialogueId, 'personal_agent_route', { decisions: [decision] })).toMatchObject({ results: [{ refused: expect.stringContaining('not allowed') }] })
+  expect(await h.runTool(h.runtime.masterId, 'personal_agent_route', { decisions: [decision] })).toMatchObject({ results: [{ refused: expect.stringContaining('not allowed') }] })
   expect(h.runtime.store.tickets.list()).toEqual([])
   prefs.save({ accounts: [{ source: trigger.source, persona, allowed: [snapshot.id] }] }, 1)
-  expect(await h.runTool(dialogueId, 'personal_agent_experts', {})).toMatchObject({ experts: [{ id: snapshot.id }] })
-  await h.runTool(dialogueId, 'personal_agent_route', { decisions: [decision] })
+  expect(await h.runTool(h.runtime.masterId, 'personal_agent_experts', { trigger_id: triggerId })).toMatchObject({ experts: [{ id: snapshot.id }] })
+  await h.runTool(h.runtime.masterId, 'personal_agent_route', { decisions: [decision] })
   await h.runtime.idle()
   expect(h.runtime.store.tickets.list()[0]?.expert?.snapshot.digest).toBe(snapshot.digest)
+})
+
+it('delivers a verified reply directly to its Worker but routes unbound follow-ups through Main', async () => {
+  const { h, event, receive, route, triggerId } = await conversation('dm', false, '研究杭州旅行')
+  await route({ kind: 'accept', title: 'Travel', worktree_name: 'travel', acknowledgement: '开始。' })
+  await h.runtime.idle()
+  const ticket = h.runtime.store.tickets.list()[0]!
+  h.deliveries.mockClear()
+  await receive({ ...event, messageId: 'reply', eventId: 'reply', text: '增加一天',
+    reply: { ...event.reply, messageId: 'reply', parentId: 'greeting' } })
+  const id = key('dsh-im', 'chat', event.fingerprint, 'chat', 'reply')
+  expect(h.runtime.store.triggers.disposition(id)?.fanout).toEqual([ticket.id])
+  expect(h.runtime.engine.candidate(id)).toBeUndefined()
+  expect(h.relays(`spa-worker-${ticket.id}`)).toContainEqual(expect.objectContaining({ trigger_id: id }))
+  expect(h.relays(h.runtime.masterId).filter(item => item.kind === 'candidate')).toEqual([])
+  await receive({ ...event, messageId: 'vague', eventId: 'vague', text: '再改一下', reply: { ...event.reply, messageId: 'vague' } })
+  const vague = key('dsh-im', 'chat', event.fingerprint, 'chat', 'vague')
+  expect(h.runtime.store.triggers.disposition(vague)?.fanout).toEqual([])
+  expect(h.runtime.engine.candidate(vague)).toBeDefined()
+  expect(h.runtime.store.tickets.get(ticket.id)?.origin.triggerId).toBe(triggerId)
+})
+
+it('does not give another sender a Worker through a quoted task message', async () => {
+  const { h, event, receive, route } = await conversation('group', true, '研究旅行')
+  await route({ kind: 'accept', title: 'Travel', worktree_name: 'travel', acknowledgement: '开始。' })
+  await receive({ ...event, messageId: 'stranger', eventId: 'stranger', actor: { kind: 'user', id: 'bob' }, text: '改变计划',
+    reply: { ...event.reply, messageId: 'stranger', parentId: 'greeting', actorId: 'bob' } })
+  const id = key('dsh-im', 'chat', event.fingerprint, 'chat', 'stranger')
+  expect(h.runtime.store.triggers.disposition(id)?.fanout).toEqual([])
+  expect(h.runtime.engine.candidate(id)?.triggers[0]?.actor.id).toBe('bob')
+})
+
+it('atomically transfers an undecided legacy evaluation and does not duplicate Main delivery on restart', async () => {
+  const { migrateMainCandidates } = await import('../src/messaging/main-routing.ts')
+  const { h, triggerId } = await conversation()
+  h.runtime.store.delete('personal-main-routing-v1')
+  const thread = h.runtime.store.threads.active().find(item => item.evaluating?.triggerIds.includes(triggerId))!
+  expect(thread.evaluating?.delivered).toBeDefined()
+  const enqueue = vi.spyOn(h.runtime.effects, 'enqueue').mockImplementationOnce(() => { throw new Error('queue unavailable') })
+  expect(() => migrateMainCandidates(h.runtime.store, h.runtime.effects)).toThrow('queue unavailable')
+  expect(h.runtime.store.get('personal-main-routing-v1')).toBeUndefined()
+  expect(h.runtime.store.threads.get(thread.key)?.evaluating?.delivered).toBeDefined()
+  enqueue.mockRestore()
+  h.deliveries.mockClear()
+  migrateMainCandidates(h.runtime.store, h.runtime.effects)
+  migrateMainCandidates(h.runtime.store, h.runtime.effects)
+  await h.runtime.idle()
+  expect(h.runtime.store.get('personal-main-routing-v1')).toBe(true)
+  expect(h.runtime.engine.candidate(triggerId)).toBeDefined()
+  expect(h.deliveries).not.toHaveBeenCalled()
+  expect(h.agents.size).toBe(1)
+})
+
+it('rechecks the IM generation when model preflight finishes after /new', async () => {
+  const { h, event, receive, route } = await conversation('dm', false, '准备旅行计划')
+  const original = h.controller.modelCatalog.getMockImplementation()!
+  let release!: () => void
+  const waiting = new Promise<void>(resolve => { release = resolve })
+  h.controller.modelCatalog.mockImplementationOnce(async (...args) => { await waiting; return original(...args) })
+  const pending = route({ kind: 'accept', title: 'Travel', worktree_name: 'travel', acknowledgement: '开始。' })
+  await receive({ ...event, messageId: 'reset', eventId: 'reset', text: '/new', reply: { ...event.reply, messageId: 'reset' } })
+  release()
+  expect(await pending).toMatchObject({ refused: expect.stringContaining('changed') })
+  expect(h.runtime.store.tickets.list()).toEqual([])
 })

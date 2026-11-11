@@ -1,6 +1,6 @@
 # Expert packages
 
-Expert packages supply Worker instructions, Skills and MCP tools. They do not replace Sources, Threads, Tickets or message delivery. Main and IM routers read package summaries through `personal_agent_experts`; `expert: null` or omission accepts general work. Explicit selections contain the catalog ID, digest and reason. Existing tasks retain their selection. There is no keyword classifier and no claim that offline tests establish model routing accuracy.
+Expert packages supply Worker instructions, Skills and MCP tools. They do not replace Sources, Threads, Tickets or message delivery. Main reads package summaries through `personal_agent_experts`; `expert: null` or omission accepts general work. Explicit selections contain the catalog ID, digest and reason. Existing tasks retain their selection. There is no keyword classifier and no claim that offline tests establish model routing accuracy.
 
 ## Import and activation
 

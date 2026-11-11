@@ -72,9 +72,9 @@ export class Conversations {
     }
     return candidates.size === 1 ? [...candidates][0] : undefined
   }
-  /** Ordinary native IM messages go through the dialogue router, never subscription broadcast. */
+  /** Ordinary native IM messages go through Main, never subscription broadcast. */
   permitsInput(ticket: Ticket, trigger: Trigger): boolean {
-    return trigger.meta.conversationVersion !== 1 || !trigger.meta.command && trigger.meta.targetTicketId === ticket.id && this.belongs(ticket, trigger) && ticket.mandate.actor.id === trigger.actor.id
+    return trigger.meta.conversationVersion !== 1 || this.forTrigger(trigger)?.generation === trigger.meta.dialogueGeneration && !trigger.meta.command && trigger.meta.targetTicketId === ticket.id && this.belongs(ticket, trigger) && ticket.mandate.actor.id === trigger.actor.id
   }
   bindWorkspace(session: string, workspace: string): string {
     const current = this.forSession(session)

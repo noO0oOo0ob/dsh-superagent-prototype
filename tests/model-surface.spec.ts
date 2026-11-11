@@ -200,7 +200,9 @@ async function drive(host: Host) {
   await run(master, 'personal_agent_route', { decisions: [{ kind: 'attach', ticket_id: a, trigger_id: other.id }] })
   await run(workerA, 'personal_agent_thread_unrelated', { thread: `feishu:${CHAT}:om_9`, reason: 'It asks for something else.' })
   await run(workerA, 'personal_agent_thread_follow', { thread: `feishu:${CHAT}:om_7`, reason: 'The same settings page.' })
-  await runtime.receive(feishu('7', '@bot 这个页面的按钮也改一下'))
+  const contextOnly = feishu('7', '@bot 这个页面的按钮也改一下')
+  await runtime.receive(contextOnly)
+  expect(runtime.store.triggers.disposition(contextOnly.id)?.fanout).toEqual([])
   const beyond = feishu('8', '另外把导出也做了', { mentions: [], root_id: 'om_1' })
   await runtime.receive(beyond)
   await runtime.idle()
@@ -375,7 +377,7 @@ it('collects both roles\' tools, prompts, skills and inputs', () => {
     'orchestrator prompt runtime/admission', 'orchestrator input candidate', 'orchestrator input worker_attention', 'orchestrator input worker_report',
     'orchestrator input thread_unrelated', 'orchestrator input ticket_ended', 'orchestrator input settings_saved', 'worker input assignment (explicit)',
     'worker input assignment (inferred)', 'worker input policy-changed', 'worker input resumed', 'worker input status',
-    'worker input recovery', 'worker input note', 'worker input trigger (context)', 'orchestrator input follow_up',
+    'worker input recovery', 'worker input note', 'orchestrator input follow_up',
     'orchestrator input thread_followed', 'orchestrator tool personal_agent_reply error']) expect(wheres).toContain(where)
   expect(sessions.refusal).not.toBe('')
 })

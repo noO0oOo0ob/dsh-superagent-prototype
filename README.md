@@ -65,3 +65,7 @@ This project builds on and reuses code from these open-source projects:
 Thank you to the maintainers and contributors of both projects for sharing their engineering work, architecture and implementations. Their work makes this Personal Agent fork possible. We also thank [JHOpenDev/dsh-superagent-inbox](https://github.com/JHOpenDev/dsh-superagent-inbox) for the local inbox adapter this project adapts.
 
 Expert packages: see [the package guide](docs/expert-packages.md) for optional task specialization, AGENTS/SOUL loading and the bundled creation Skill.
+
+### Main routing
+
+IM conversations keep durable context generations without their own Agent. Main handles discussion and semantic routing, including expert selection. A unique authorized task binding (verified IM reply, explicit task command, or task/PR thread) may deliver directly to its Worker. Ambiguous bindings return to Main. `/new` resets the current IM context without creating a Ticket or clearing Main history. See [the routing upgrade](docs/main-routing-upgrade.md) before upgrading an existing installation.
