@@ -24,7 +24,7 @@ import { resolveVisionModel } from './model-routing.ts'
 import { defaultModel } from './worker-models.ts'
 import { managedDelegationGuard, modelDelegationTools, WORKER_MODEL_INSTRUCTIONS } from './subagent-models.ts'
 import { toolParameters } from './tools/definition.ts'
-import { bundledSkills, expertCreator } from './skill-files.ts'
+import { bundledSkills, expertCreator, replyPresentation } from './skill-files.ts'
 import { SKILL_PREFIX, type PromptVersion, type Prompts } from './prompts.ts'
 import type { Store } from './store.ts'
 import type { RoleModel } from '../policy.ts'
@@ -397,6 +397,7 @@ export class Sessions {
     if (!scope || previous?.revision === version.revision) return
     previous?.dispose()
     const disposers: (() => void)[] = [scope.skills.register({ name: 'create-expert', description: expertCreator.description, content: expertCreator.content, source: 'runtime', resourceBase: { kind: 'directory', path: dirname(expertCreator.path) } })]
+    if (!Object.hasOwn(version.config.skills, 'reply-presentation')) disposers.push(scope.skills.register({ name: replyPresentation.name, description: replyPresentation.description, content: replyPresentation.content, source: 'runtime', resourceBase: { kind: 'directory', path: dirname(replyPresentation.path) } }))
     for (const [name, content] of this.host.prompts.skills(version.config)) {
       const bundled = name === 'feishu' || name === 'github' ? bundledSkills[name] : undefined
       const body = version.config.skills[name] ?? ''

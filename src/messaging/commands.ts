@@ -1,11 +1,13 @@
 /** Deterministic IM commands, persisted with their reply before returning the platform acknowledgement. */
-import { key, threadKey, UserError, type Engine, type Trigger, type Ticket } from '../core/index.ts'
+import { key, threadKey, UserError, type Engine, type Trigger, type Ticket, type OutboundMessage } from '../core/index.ts'
 import type { Store } from '../app/store.ts'
 import type { Outbox } from '../app/outbox.ts'
 import type { Effects } from '../app/effects.ts'
 import type { Results } from '../app/results.ts'
 import type { Conversations } from './conversations.ts'
 import type { MessageActions } from './actions.ts'
+import { attributedBlocks } from './attribution.ts'
+import { publicationText } from './content.ts'
 import { dialogueMessage } from './dialogue.ts'
 
 /** A command refusal is returned to its sender without retrying the command. */
@@ -33,6 +35,7 @@ export function executeCommand(host: Host, trigger: Trigger): void {
     return found
   }
   let text: string, blocks
+  let resultIdentity: Pick<OutboundMessage, 'ticketId' | 'resultId' | 'attribution'> | undefined
   try {
     switch (command.name) {
       case 'new': case 'clear': {
@@ -74,8 +77,9 @@ export function executeCommand(host: Host, trigger: Trigger): void {
         const found = task(command.argument || current.focus || '', false)
         const result = host.results.list(found.id).find(item => item.publication?.mode === 'publish')
         if (!result || result.publication?.mode !== 'publish') throw new CommandRefusal('此任务还没有已发布的结果。')
-        blocks = result.publication.blocks
-        text = result.summary
+        blocks = attributedBlocks(result.publication.blocks, result.attribution)
+        text = publicationText(blocks)
+        resultIdentity = { ticketId: found.id, resultId: result.id, ...(result.attribution ? { attribution: result.attribution } : {}) }
         break
       }
       case 'history':
@@ -100,7 +104,7 @@ export function executeCommand(host: Host, trigger: Trigger): void {
   if (!store.triggers.disposition(trigger.id)?.decisionId && !store.triggers.disposition(trigger.id)?.fanout.length)
     engine.decide(trigger.id, { kind: 'ignore', reason: 'Handled by the deterministic IM command dispatcher' })
   outbox.send({ id: key('im-command-v1', trigger.id), kind: 'reply', channel: trigger.channel, text,
-    ...(blocks ? { blocks } : {}) })
+    ...resultIdentity, ...(blocks ? { blocks } : {}) })
   effects.enqueue('notice', `im-command:${trigger.id}`, { value: { kind: 'im_command', command: command.name,
     ...dialogueMessage(trigger, []), result: text }, summary: `IM /${command.name}` })
 }

@@ -5,4 +5,6 @@ Use gh only for authorized GitHub work with a configured account.
 Never merge a PR directly or enable auto-merge other than as the Delivery requirements section says, close issues or expose private Feishu content on GitHub.
 Use personal_agent_read for truncated messages and load the matching source skill when needed.
 Resolve routine problems; report concrete blockers internally.
-Publish substantial UTF-8 text/Markdown deliverables from this workspace with personal_agent_artifact, then finish with personal_agent_report. Include the useful result and distinguish completed work from an incomplete draft; the host delivers the result and artifact links.
+Follow the requested format and expert delivery guidance; length alone does not require files.
+Publish usable answers through personal_agent_report; register needed files with personal_agent_artifact. The host adds author attribution.
+Load dsh-super-personal-agent-reply-presentation when complex presentation needs guidance.

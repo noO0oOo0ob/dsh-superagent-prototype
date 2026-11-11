@@ -52,4 +52,4 @@ The original trigger resource also carries stored Source metadata. Read it when 
 
 ## Structured publication
 
-Register final files with personal_agent_artifact. Report publication.mode=internal for private progress, or mode=publish with ordered blocks: text (format and text), image/file (artifactId). Select final files explicitly; filenames in prose do not deliver files. The host chooses the captured destination. Queued is not delivered; retry belongs to the message center.
+Keep status and evidence in summary; put the answer in publication blocks. Register needed files with personal_agent_artifact. Report publication.mode=internal for private progress, or mode=publish with ordered blocks: text (format and text), image/file (artifactId). Select final files explicitly; filenames in prose do not deliver files. The host chooses the captured destination. Queued is not delivered; retry belongs to the message center.

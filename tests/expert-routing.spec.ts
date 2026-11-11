@@ -2,6 +2,9 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { resultHtml, resultRecords } from '../src/app/results.ts'
+import { checkedImText } from '../src/infra/text.ts'
+import { publicationText } from '../src/messaging/content.ts'
 import { startRuntime, feishu, type Host } from './fixtures/host.ts'
 let h: Host
 beforeEach(async () => { h = await startRuntime() })
@@ -62,4 +65,72 @@ it('rejects a general-to-fixed expert change across model preflight before creat
   vi.spyOn(h.runtime.expertPreferences, 'select').mockReturnValueOnce(undefined).mockReturnValueOnce(chosen)
   await expect(accept('racing', null)).rejects.toThrow('changed during model preflight')
   expect(h.runtime.store.tickets.list()).toEqual([])
+})
+
+it('offers presentation guidance lazily without changing the task expert', async () => {
+  const ticket = await accept('71', expert()), session = `spa-worker-${ticket.id}`
+  const skill = h.skills.get(session)?.get('dsh-super-personal-agent-reply-presentation')
+  expect(skill?.description).toContain('comparisons')
+  expect(skill?.content).toContain('publication.blocks')
+  expect(h.promptSections.get(session)!({})).not.toContain(skill!.content)
+  expect(h.skills.get(session)?.has('travel-itinerary')).toBe(true)
+  expect(h.skills.get(h.runtime.masterId)?.has('dsh-super-personal-agent-reply-presentation')).toBe(true)
+})
+
+it('publishes the complete answer and captured expert author without requiring a file', async () => {
+  const selection = expert(), ticket = await accept('72', selection)
+  const content = '推荐第二条路线。\n\n| 路线 | 天数 |\n| --- | --- |\n| A | 3 |\n| B | 5 |\n\n[参考](https://example.com/routes)'
+  await h.runTool(`spa-worker-${ticket.id}`, 'personal_agent_report', {
+    state: 'ready', summary: 'Compared two routes.', publication: { mode: 'publish', blocks: [{ type: 'text', text: content }] },
+  })
+  await h.runtime.idle()
+  const result = h.runtime.results.list(ticket.id)[0]!
+  expect(result.attribution).toEqual({ kind: 'expert', id: 'travel', name: 'travel', digest: selection.digest })
+  expect(result.artifacts).toEqual([])
+  expect(result.publication).toMatchObject({ blocks: [{ text: content }] })
+  const message = h.runtime.results.replyMessage({ purpose: 'result', ticket: h.runtime.store.tickets.get(ticket.id)!, channel: { source: 'inbox', thread: 'preview', address: {} } })!
+  expect(message.attribution).toEqual(result.attribution)
+  expect(message.text.replaceAll(result.url, '[result URL]')).toMatchSnapshot()
+  expect(publicationText(message.blocks!)).toBe(`${content}\n\n— 来自专家 / From expert: travel`)
+  expect(JSON.stringify(h.agents.get(h.runtime.masterId)!.inject.mock.calls)).toContain('From expert: travel')
+  expect(resultHtml(result)).toContain('From expert: travel')
+
+  // Later delivery must use the captured author, even if the task record or catalog changes.
+  const current = h.runtime.store.tickets.get(ticket.id)!
+  current.expert!.snapshot.name = 'Renamed'
+  h.runtime.store.tickets.save(current)
+  h.runtime.experts.enable('travel', 2, false)
+  const again = h.runtime.results.replyMessage({ purpose: 'result', ticket: h.runtime.store.tickets.get(ticket.id)!, channel: { source: 'inbox', thread: 'later', address: {} } })!
+  expect(again.attribution).toEqual(result.attribution)
+  expect(again.text).not.toContain('Renamed')
+  expect(again.text.match(/From expert:/g)).toHaveLength(1)
+
+  h.runtime.store.set(resultRecords(result.id), { ...result, attribution: undefined })
+  const legacy = h.runtime.results.replyMessage({ purpose: 'result', ticket: h.runtime.store.tickets.get(ticket.id)!, channel: { source: 'inbox', thread: 'legacy', address: {} } })!
+  expect(legacy.attribution).toBeUndefined()
+  expect(legacy.text).not.toContain('From expert:')
+})
+
+it('reserves room for author attribution in legacy Feishu summary notices', async () => {
+  const ticket = await accept('73', expert())
+  const current = h.runtime.store.tickets.get(ticket.id)!
+  current.expert!.snapshot.name = 'Specialist '.repeat(20).trim()
+  h.runtime.store.tickets.save(current)
+  h.runtime.engine.report(ticket.id, { state: 'ready', summary: 'word '.repeat(85).trim() })
+  const result = h.runtime.results.replyMessage({ purpose: 'result', ticket: h.runtime.store.tickets.get(ticket.id)!,
+    channel: { source: 'feishu', thread: 'summary', address: { messageId: 'summary' } } })!
+  expect(() => checkedImText(result.text)).not.toThrow()
+  expect(result.text).toContain(current.expert!.snapshot.name)
+})
+
+it('uses a team presentation skill override and restores the bundled skill after removal', async () => {
+  const name = 'dsh-super-personal-agent-reply-presentation'
+  const initial = h.runtime.prompts.current()
+  h.runtime.prompts.save({ ...initial.config, skills: { ...initial.config.skills, 'reply-presentation': 'Use our comparison format.' } }, initial.revision, 'panel')
+  h.promptSections.get(h.runtime.masterId)!({ signal: new AbortController().signal })
+  expect(h.skills.get(h.runtime.masterId)?.get(name)?.content).toBe('Use our comparison format.')
+  const changed = h.runtime.prompts.current()
+  h.runtime.prompts.save(initial.config, changed.revision, 'panel')
+  h.promptSections.get(h.runtime.masterId)!({ signal: new AbortController().signal })
+  expect(h.skills.get(h.runtime.masterId)?.get(name)?.content).toContain('publication.blocks')
 })

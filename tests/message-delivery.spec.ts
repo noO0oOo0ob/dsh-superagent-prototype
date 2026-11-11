@@ -5,6 +5,8 @@ import { join } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
 import { Store } from '../src/app/store.ts'
 import { MessageDelivery, DeliveryFailure, deliveryState, type DeliveryAdapter } from '../src/messaging/delivery.ts'
+import { attributedBlocks } from '../src/messaging/attribution.ts'
+import { prepareFeishuBlocks } from '../src/connectors/native-delivery.ts'
 import { PublicationSchema } from '../src/messaging/content.ts'
 import type { OutboundMessage } from '../src/core/index.ts'
 
@@ -60,4 +62,24 @@ it('rejects changed destinations and explicitly preserves unsupported media inst
   await expect(h.center.deliver({ ...h.message, channel: { ...h.message.channel, thread: 'other' } }, h.adapter, h.signal)).rejects.toThrow('destination changed')
   const parsed = PublicationSchema.parse({ mode: 'publish', blocks: h.message.blocks })
   expect(parsed.mode === 'publish' && parsed.blocks.length).toBe(4)
+})
+
+it('retains captured attribution and retries only the final signature after a partial send', async () => {
+  const h = setup()
+  h.message.attribution = { kind: 'expert', id: 'writer', name: 'Writer', digest: 'c'.repeat(64) }
+  h.message.blocks = attributedBlocks(h.message.blocks!, h.message.attribution)
+  h.adapter.prepare = blocks => prepareFeishuBlocks(blocks, 3500)
+  h.send.mockImplementation(async (block, options) => {
+    if (block.type === 'text' && block.text.includes('From expert:')) throw new DeliveryFailure('failed', 'send-failed')
+    return { providerMessageIds: [options.id] }
+  })
+  await expect(h.center.deliver(h.message, h.adapter, h.signal)).rejects.toThrow('not completely')
+  expect(h.center.get(h.message.id)?.attribution).toEqual(h.message.attribution)
+  expect(h.send.mock.calls.map(([block]) => block.type)).toEqual(['text', 'image', 'file', 'text'])
+  const restored = new MessageDelivery(h.store)
+  h.send.mockClear().mockImplementation(async (_block, options) => ({ providerMessageIds: [options.id] }))
+  await restored.deliver(h.message, h.adapter, h.signal)
+  await restored.deliver(h.message, h.adapter, h.signal)
+  expect(h.send).toHaveBeenCalledTimes(1)
+  expect(h.send.mock.calls[0]![0]).toMatchObject({ type: 'text', text: '— 来自专家 / From expert: Writer' })
 })

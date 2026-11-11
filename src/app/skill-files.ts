@@ -21,6 +21,8 @@ function load(name: string) {
   if (!match) throw new Error(`Invalid packaged skill: ${path}`)
   return { name: match[1]!, description: match[2]!, content: match[3]!, path }
 }
+/** Optional presentation guidance, discovered without preloading its body. */
+export const replyPresentation = load('reply-presentation')
 export const bundledSkills = { feishu: load('feishu'), github: load('github') }
 /**
  * Loads a built-in prompt file (`prompts/<name>.md`). Source `.md` files are written one sentence per line for

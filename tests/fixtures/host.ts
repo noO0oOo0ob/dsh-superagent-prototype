@@ -165,6 +165,7 @@ export async function startRuntime(seed?: (store: Store) => void) {
   const agents = new Map<string, FakeAgent>()
   /** Each Session's next step, which takes the messages that wait for one. */
   const steps = new Map<string, () => void>(), claims = new Map<string, () => void>()
+  const skills = new Map<string, Map<string, { name: string; content: string; description: string }>>()
   const tools = new Map<string, Map<string, RegisteredTool>>()
   const promptSections = new Map<string, (context: { signal?: AbortSignal }) => string>()
   const deliveries = vi.fn<(request: Delivery) => void>()
@@ -179,7 +180,9 @@ export async function startRuntime(seed?: (store: Store) => void) {
       tools.set(sessionId, sessionTools)
       const register = (tool: RegisteredTool) => { sessionTools.set(tool.name, tool); return () => sessionTools.delete(tool.name) }
       agentCtx.reflect.provide('tools', { register, get: () => undefined, restrict: vi.fn(() => () => {}), guard: vi.fn(() => () => {}) })
-      agentCtx.reflect.provide('skills', { register: () => () => {} })
+      const sessionSkills = new Map<string, { name: string; content: string; description: string }>()
+      skills.set(sessionId, sessionSkills)
+      agentCtx.reflect.provide('skills', { register: (skill: { name: string; content: string; description: string }) => { sessionSkills.set(skill.name, skill); return () => sessionSkills.delete(skill.name) } })
       agentCtx.reflect.provide('systemPrompt', { section: (section: { name: string; text: string | ((context: { signal?: AbortSignal }) => string) }) => {
         if (section.name === 'dsh-super-personal-agent-policy') { const text = section.text; promptSections.set(sessionId, typeof text === 'string' ? () => text : text) }
         return () => { if (section.name === 'dsh-super-personal-agent-policy') promptSections.delete(sessionId) }
@@ -302,7 +305,7 @@ export async function startRuntime(seed?: (store: Store) => void) {
   const step = (sessionId: string) => { steps.get(sessionId)!() }
   /** A step of the worker claims what waits for it, and is cut off before the Session took it. */
   const claim = (sessionId: string) => { claims.get(sessionId)!() }
-  return { runtime, ctx, directory, agents, tools, promptSections, deliveries, relays, candidates, runTool, route, acceptedTicket, api, controller, subprocess, hooks, resolveDefault, stop,
+  return { runtime, ctx, directory, agents, tools, skills, promptSections, deliveries, relays, candidates, runTool, route, acceptedTicket, api, controller, subprocess, hooks, resolveDefault, stop,
     jobs, subagents, step, claim }
 }
 export type Host = Awaited<ReturnType<typeof startRuntime>>

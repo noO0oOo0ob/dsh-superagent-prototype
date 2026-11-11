@@ -8,8 +8,10 @@ description: Create or adapt a Personal Agent expert package with AGENTS, SOUL, 
 Use the local template in `assets/travel-planner/` as a working example, replacing the travel content with the requested specialty. Write into the user’s selected directory; do not overwrite an existing package without inspecting it.
 
 Keep two distinct instruction resources:
-- `AGENTS.md`: responsibilities, methods, checks and deliverables.
+- `AGENTS.md`: responsibilities, methods, checks and scenario-specific reply forms.
 - `SOUL.md`: personality, tone, interaction and uncertainty handling.
+
+Define delivery defaults and exceptions in AGENTS.md, or in the package-relative file referenced by `output.guidance` (whose contents are appended to AGENTS), keeping one home for the rules. Cover discussion, execution and revision: a coding expert explains designs inline but writes requested source changes; a writing expert shows usable copy inline but creates requested exports. Do not require files merely for long or complex answers. The shared `dsh-super-personal-agent-reply-presentation` Skill supplies optional formatting guidance; do not preload or duplicate it. The host adds expert attribution, so the package must not require a signature.
 
 Both must contain meaningful text. Keep operational task reporting and publication tools authoritative; expert instructions must not invent delivery destinations, override source identity, change permissions, or require direct IM sending.
 

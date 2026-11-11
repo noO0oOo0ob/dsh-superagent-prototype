@@ -5,11 +5,13 @@ import { z } from 'zod'
 import { key, type OutboundMessage } from '../core/index.ts'
 import { family } from '../kv.ts'
 import type { Store } from '../app/store.ts'
+import { AttributionSchema } from './attribution.ts'
 import { ContentBlockSchema, type ContentBlock } from './content.ts'
 
 const PartSchema = z.object({ id: z.string(), block: ContentBlockSchema, state: z.enum(['pending', 'sending', 'sent', 'failed', 'unknown', 'unsupported']),
   attempts: z.number().int().nonnegative(), providerMessageIds: z.array(z.string()), resourceKey: z.string().optional(), error: z.string().optional() }).strict()
 const DeliverySchema = z.object({ version: z.literal(1), id: z.string(), signature: z.string(), source: z.string(), thread: z.string(),
+  attribution: AttributionSchema.optional(),
   ticketId: z.string().optional(), resultId: z.string().optional(), at: z.string(), updatedAt: z.string(), parts: z.array(PartSchema),
   resolutions: z.array(z.object({ partId: z.string(), action: z.enum(['confirm_sent', 'retry']), note: z.string(), at: z.string() })) }).strict()
 export type PartReceipt = z.infer<typeof PartSchema>
@@ -51,6 +53,7 @@ export class MessageDelivery {
       const blocks = z.array(ContentBlockSchema).min(1).max(1024).parse(adapter.prepare?.(original) ?? original)
       const at = new Date().toISOString()
       const entry: DeliveryRecord = { version: 1, id: message.id, signature, source: message.channel.source, thread: message.channel.thread,
+        ...(message.attribution ? { attribution: message.attribution } : {}),
         ...(message.ticketId ? { ticketId: message.ticketId } : {}), ...(message.resultId ? { resultId: message.resultId } : {}), at, updatedAt: at,
         resolutions: [], parts: blocks.map((block, index) => ({ id: key('message-part-v1', message.id, String(index)), block, state: 'pending', attempts: 0, providerMessageIds: [] })) }
       this.save(entry); return entry

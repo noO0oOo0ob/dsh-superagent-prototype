@@ -1,4 +1,5 @@
 /** Durable result snapshots and automatic delivery independent of a further model reply. */
+import { attributedBlocks, attributionFooter, type Attribution } from '../messaging/attribution.ts'
 import { ArtifactFiles, type StoredFile } from '../messaging/files.ts'
 import { publicationArtifacts, publicationText, type ContentBlock, type Publication } from '../messaging/content.ts'
 import { key, latestAssignment, type Ticket, type ChannelRef, type OutboundMessage } from '../core/index.ts'
@@ -15,6 +16,8 @@ export interface ResultRecord {
   version: 1; id: string; ticketId: string; assignmentId: string; at: string; state: string; title: string
   summary: string; contexts: ContextRef[]; url: string
   file?: StoredFile
+  /** Author captured from the Ticket when reported; absent on historical results and artifacts. */
+  attribution?: Attribution
   publication?: Publication
   channel?: ChannelRef
   artifactPath?: string
@@ -111,6 +114,7 @@ export class Results {
     if (this.get(id)) return
     const result: ResultRecord = { version: 1, id, ticketId: ticket.id, assignmentId: assignment.id, at: report.at,
       state: report.state, title: ticket.title, summary: question?.question ?? report.summary,
+      attribution: ticket.expert ? { kind: 'expert', id: ticket.expert.snapshot.id, name: ticket.expert.snapshot.name, digest: ticket.expert.snapshot.digest } : { kind: 'general' },
       contexts: this.host.store.contexts.references(ticketContexts(ticket)), url: `http://127.0.0.1:${this.host.port}/super-personal-agent/result/${id}`,
       ...(report.publication ? { publication: report.publication } : {}),
       artifacts: this.list(ticket.id).filter(item => item.artifactPath && item.assignmentId === assignment.id
@@ -157,15 +161,20 @@ export class Results {
     const artifacts = (result.artifacts ?? []).map(item => `\n[${item.title}](${item.url})`).join('')
     const text = `${result.title}\n\n${result.publication?.mode === 'publish' ? publicationText(result.publication.blocks) : result.summary}\n\n[查看结果 / View result](${result.url})${vaultLink}${artifacts}`
     // Local links are useful on the Host only. IM gets readable content and a stable task reference.
+    const footer = attributionFooter(result.attribution)
     let summary = result.summary
-    if (channel.source === 'feishu') while (wordCount(summary) > 85) summary = summary.slice(0, Math.max(1, Math.floor(summary.length * 0.8)))
+    if (channel.source === 'feishu') while (wordCount(summary) > Math.max(1, 85 - wordCount(footer))) summary = summary.slice(0, Math.max(1, Math.floor(summary.length * 0.8)))
     if (channel.source.startsWith('im-') && summary.length > 3700) summary = `${summary.slice(0, 3700)}...\nFull content and deliverables are available in the Main Session.`
     const blocks: ContentBlock[] = result.publication?.mode === 'publish' ? result.publication.blocks : [
       { type: 'text', text: `${summary}\n\nTicket: ${result.ticketId}`, format: 'markdown' },
       ...(result.artifacts ?? []).map(item => ({ type: 'file' as const, artifactId: item.id }))]
     const outgoing = channel.source === 'inbox' || channel.source === 'main' ? text : `${summary}\n\nTicket: ${result.ticketId}`
+    const deliveredBlocks = attributedBlocks(blocks, result.attribution)
+    const deliveredText = result.publication?.mode === 'publish' && channel.source !== 'main' && channel.source !== 'inbox'
+      ? publicationText(deliveredBlocks) : `${outgoing}${footer ? `\n\n${footer}` : ''}`
     return { id, channel, ticketId: result.ticketId, resultId: result.id,
-      ...(result.attentionId ? { attentionId: result.attentionId } : {}), kind: 'notice', text: result.publication?.mode === 'publish' && channel.source !== 'main' && channel.source !== 'inbox' ? publicationText(blocks) : outgoing, blocks }
+      ...(result.attribution ? { attribution: result.attribution } : {}),
+      ...(result.attentionId ? { attentionId: result.attentionId } : {}), kind: 'notice', text: deliveredText, blocks: deliveredBlocks }
   }
   private deliveryId(result: ResultRecord, channel: ChannelRef): string {
     const original = result.channel && destination(result.channel) === destination(channel)
@@ -181,5 +190,5 @@ export function resultHtml(result: ResultRecord, exports: VaultExport[] = []): s
   const escape = (text: string) => text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
   const artifacts = (result.artifacts ?? []).map(item => `<p><a href="${escape(item.url)}">${escape(item.title)}</a></p>`).join('')
   const links = exports.filter(item => item.uri).map(item => `<p><a href="${escape(item.uri!)}">Obsidian · ${escape(item.state)}</a></p>`).join('')
-  return `<!doctype html><html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escape(result.title)}</title><body><main><h1>${escape(result.title)}</h1><p>${escape(result.state)} · ${escape(result.at)}</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${escape(result.publication?.mode === 'publish' ? publicationText(result.publication.blocks) : result.summary)}</pre><p>Ticket: ${escape(result.ticketId)}</p>${links}${artifacts}</main></body></html>`
+  return `<!doctype html><html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escape(result.title)}</title><body><main><h1>${escape(result.title)}</h1><p>${escape(result.state)} · ${escape(result.at)}</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${escape(result.publication?.mode === 'publish' ? publicationText(result.publication.blocks) : result.summary)}</pre><p>Ticket: ${escape(result.ticketId)}</p>${links}${artifacts}${result.attribution ? `<p>${escape(attributionFooter(result.attribution))}</p>` : ''}</main></body></html>`
 }

@@ -1,5 +1,5 @@
 Deliver the result requested by the person: an answer, research findings, a plan, a document, local code or an explicitly requested PR.
-Keep useful artifacts in the ticket directory and include their paths with a readable summary.
+Choose reply forms by the request and expert guidance. Publish usable content inline; attach files when the work calls for them.
 GitHub is optional; do not publish anything or create a repository merely to complete a ticket.
 The following GitHub PR requirements apply only when the authorized deliverable includes a PR.
 

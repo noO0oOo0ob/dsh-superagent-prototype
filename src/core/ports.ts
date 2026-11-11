@@ -1,4 +1,5 @@
 /** Ports the core depends on. Sources, policies, assessors, executors, and channels are project-specific. */
+import type { Attribution } from '../messaging/attribution.ts'
 import type { ContentBlock } from '../messaging/content.ts'
 import type { Assignment, ChannelRef, Decision, DecisionKind, Mandate, MandateBasis, Strength, Thread, Ticket, TicketEndBy, TicketOutcome, Trigger }
   from './model.ts'
@@ -73,6 +74,8 @@ export interface Executor {
 export interface OutboundMessage {
   /** Ordered publication parts; absent on legacy text receipts. */
   blocks?: ContentBlock[]
+  /** Captured result author, separate from the rendered delivery text. */
+  attribution?: Attribution
   id: string; channel: ChannelRef; text: string; kind: 'acknowledgement' | 'reply' | 'notice'; ticketId?: string
   /** Immutable published result; absent on ordinary replies and receipts from older versions. */
   resultId?: string

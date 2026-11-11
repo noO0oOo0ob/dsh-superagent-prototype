@@ -16,6 +16,8 @@ Personal settings include native Feishu/Lark QR or manual account setup, Obsidia
 
 New background tasks require [ModLens](https://github.com/liustack/modlens) to be installed and enabled in the same DSH profile. Configure Basic, Standard and Advanced models in Execution settings; each task saves its initial model choice, and child agents inherit their parent's current model unless an enabled task profile is explicitly selected. Native image models retain their original provider; text models use a verified ModLens image adapter. Configure and test the vision engine in ModLens settings. See [Worker models and ModLens](docs/model-routing.md) for setup, upgrades and acceptance checks.
 
+Replies default to usable conversation content, with scenario-specific delivery guidance in each expert and an optional presentation Skill. New task results carry a captured expert or general-assistant footer in Main and the originating channel. See [Expert packages](docs/expert-packages.md#reply-forms-and-result-authors).
+
 Automatic results and Main's reply tool share a persistent delivery receipt per result and destination. Rewording a reply or restarting the plugin does not resend a published result. Transferring an existing bot from dsh-im requires stopping its old listener first; independently installed plugins do not share an intake ledger. See [Connector ownership and handover](docs/014-connectors.md#consumer-mode-handover).
 
 ## Documentation

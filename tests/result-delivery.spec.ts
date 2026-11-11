@@ -59,6 +59,8 @@ it.each(['automatic', 'main'] as const)('publishes once when %s delivery runs fi
   expect(repeated.id).toBe(reply.id)
   expect(repeated).toMatchObject({ reused: true, status: 'sent' })
   expect(replyChecked.mock.calls[0]![2]).toContain('Visit the museum.')
+  expect(replyChecked.mock.calls[0]![2].match(/From general assistant/g)).toHaveLength(1)
+  expect(h.runtime.results.list(ticketId)[0]?.attribution).toEqual({ kind: 'general' })
 })
 
 it('does not bypass an uncertain automatic send through the Main reply tool', async () => {
@@ -200,4 +202,17 @@ it('uses the same Main Session publication for an automatic result and a manual 
   await h.runtime.idle()
   expect(main.inject.mock.calls).toHaveLength(before)
   expect(JSON.stringify(main.inject.mock.calls)).toContain(h.runtime.results.list(ticketId)[0]!.url)
+})
+
+it('replays the published answer and author through /result without exposing the internal summary', async () => {
+  const { h, ticketId, receive, event, replyChecked } = await imTask()
+  h.runtime.engine.report(ticketId, { state: 'ready', summary: 'Internal work notes',
+    publication: { mode: 'publish', version: 1, blocks: [{ type: 'text', format: 'markdown', text: 'The full usable answer.' }] } })
+  await h.runtime.idle()
+  replyChecked.mockClear()
+  await receive({ ...event, eventId: 'result-command', messageId: 'result-command', text: `/result ${ticketId}`,
+    reply: { ...event.reply, messageId: 'result-command' } })
+  await h.runtime.idle()
+  expect(replyChecked).toHaveBeenCalledOnce()
+  expect(replyChecked.mock.calls[0]![2]).toBe('The full usable answer.\n\n— 来自通用助手 / From general assistant')
 })

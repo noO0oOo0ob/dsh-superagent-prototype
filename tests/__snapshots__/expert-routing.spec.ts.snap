@@ -11,3 +11,20 @@ Resolve relative references against this directory.
 Read references/check.md.
 "
 `;
+
+exports[`publishes the complete answer and captured expert author without requiring a file 1`] = `
+"Travel plan
+
+推荐第二条路线。
+
+| 路线 | 天数 |
+| --- | --- |
+| A | 3 |
+| B | 5 |
+
+[参考](https://example.com/routes)
+
+[查看结果 / View result]([result URL])
+
+— 来自专家 / From expert: travel"
+`;

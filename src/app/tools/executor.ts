@@ -89,8 +89,8 @@ export function executorTools(host: ExecutorToolsHost, ticket: Ticket): Tool[] {
       description: 'Report progress, ready, blocked, failed or dropped, as the work and handoff sections say.',
       schema: z.object({
         state: z.enum(['progress', 'ready', 'blocked', 'failed', 'dropped']),
-        summary: z.string().min(1),
-        publication: WorkerPublicationSchema.describe('Publish selected text/image/file blocks or keep this report internal. The host resolves destinations.'),
+        summary: z.string().min(1).describe('Internal task status and evidence; the answer belongs in publication.'),
+        publication: WorkerPublicationSchema.describe('Publish usable text (including Markdown tables/links), images or files, or keep internal. The host resolves destinations and attribution.'),
         human_action: z.string().trim().min(1).max(1000).nullish().describe('One concrete question for a person, also with state=progress; omit to keep the pending one, null to clear it.'),
         question_for_trigger_id: z.string().optional().describe('With human_action: the human message that raised the question, which is asked where that person wrote.'),
         pr_number: z.number().int().positive().nullish().describe('Optional GitHub PR, only when the GitHub Source is enabled and verified. Omit for tasks without a PR.'),

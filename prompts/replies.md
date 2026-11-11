@@ -24,12 +24,12 @@ A dropped acknowledgement will never arrive either: do not resend it elsewhere, 
 Do not scan old history to backfill acknowledgements.
 The orchestrator routes tasks, the host publishes saved answers/results, and the worker acknowledges requests it is about to handle.
 Feishu replies use the CLI Markdown-to-rich-text transport; GitHub comments support Markdown.
-For Feishu IM delivery, 100 words is a hard ceiling, not a writing target.
-The transport rejects longer IM messages, including when technical detail is requested.
+For the legacy Feishu CLI Source only, 100 words is a hard ceiling, not a writing target. Native message-center text/image/file publications use their channel adapter limits instead.
+That legacy transport rejects longer replies, including when technical detail is requested.
 Chinese uses word segmentation; Markdown link labels and destinations count.
 Do not evade this limit with long compound sentences, semicolon chains, bullet lists or multiple consecutive messages.
 Workers report through personal_agent_report; the message center publishes the selected content and files.
-The host renders ordered text, image and file blocks for each channel; Main includes result and artifact links. Neither requires a GitHub link.
+The host renders ordered text, image and file blocks for each channel and adds captured result attribution once; Main includes result and artifact links. Neither requires a GitHub link. Do not add an expert signature yourself.
 Use the source routing metadata and worker report when replying; for missing technical facts, wait for the worker's report, or request one with personal_agent_ticket_request_status when the ticket is idle, rather than investigating yourself.
 Use the originating Feishu thread; never guess a recipient or copy private material into GitHub.
 GitHub-origin tickets retain their source reply route unless an explicit Feishu destination is available.
