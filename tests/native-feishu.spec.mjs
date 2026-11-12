@@ -28,7 +28,7 @@ async function fixture(options = {}) {
     sender: { sender_type: 'user', id_type: 'open_id', id: 'ou_user' } }] } }));
   const createFile = vi.fn(async () => ({ code: 0, data: { file_key: 'uploaded_file' } }));
   const createImage = vi.fn(async () => ({ code: 0, data: { image_key: 'uploaded_image' } }));
-  const client = { im: { v1: { message: { reply, get, list: vi.fn(async () => ({ code: 0, data: { items: [], has_more: false } })) },
+  const client = { request: vi.fn(async () => ({ code: 0, data: { document: { document_id: 'doc' } } })), im: { v1: { message: { reply, get, list: vi.fn(async () => ({ code: 0, data: { items: [], has_more: false } })) },
     file: { create: createFile }, image: { create: createImage },
     messageResource: { get: vi.fn(async () => ({ getReadableStream: () => Readable.from([Buffer.from('attachment')]) })) } } } };
   const sdk = { Domain: { Feishu: 'feishu', Lark: 'lark' }, LoggerLevel: { info: 1 },
@@ -46,7 +46,7 @@ async function fixture(options = {}) {
   const context = { credentials: { resolve: async ref => secrets.has(ref) ? { value: secrets.get(ref), source: 'file' } : undefined,
     set: async (ref, value) => { secrets.set(ref, value); }, unset: async ref => { secrets.delete(ref); } } };
   const accountsChanged = vi.fn();
-  const native = await createNativeFeishu({ context, stateDir: root, lifetime: lifetime.signal, sdk, ...(options.Runtime ? { Runtime: options.Runtime } : {}), onAccounts: accountsChanged,
+  const native = await createNativeFeishu({ context, stateDir: root, lifetime: lifetime.signal, sdk, ...(options.Runtime ? { Runtime: options.Runtime } : {}), onAccounts: accountsChanged, onDocumentComment: options.onDocumentComment,
     logger: { info() {}, warn() {}, error() {}, debug() {} } });
   cleanup.push(() => native.close());
   await native.start();
@@ -309,4 +309,35 @@ it.each(['original', 'parent'])('releases the native account queue when the %s m
   await expect(h.native.service.replyOwner(account.id, original, { expectedFingerprint: account.fingerprint, signal: h.lifetime.signal })).resolves.toBe('self');
   pending.reject(new Error('late SDK rejection'));
   await expect(h.native.rpc('bot.delete', { botId: account.id, confirm: true })).resolves.toMatchObject({ ok: true });
+});
+
+
+it('accepts only mentions of this bot in document comments and freezes the account for document calls', async () => {
+  const onDocumentComment = vi.fn(async () => {}), h = await fixture({ onDocumentComment }), account = await h.bind();
+  const handler = h.dispatchers.at(-1)['drive.notice.comment_add_v1'];
+  const event = { app_id: 'cli_test', is_mentioned: true, notice_meta: { to_user_id: { open_id: 'ou_bot' }, from_user_id: { open_id: 'ou_user' } } };
+  await handler(event);
+  expect(onDocumentComment).toHaveBeenCalledWith(account.id, account.fingerprint, event);
+  await handler({ ...event, is_mentioned: false });
+  await handler({ ...event, app_id: 'other' });
+  await handler({ ...event, notice_meta: { ...event.notice_meta, to_user_id: { open_id: 'other' } } });
+  await handler({ ...event, notice_meta: { ...event.notice_meta, from_user_id: { open_id: 'ou_bot' } } });
+  expect(onDocumentComment).toHaveBeenCalledTimes(1);
+  const request = { method: 'POST', url: '/open-apis/docx/v1/documents', data: { title: 'Test' } };
+  await expect(h.native.documentRequest(account.id, 'wrong', request)).rejects.toThrow();
+  expect(h.client.request).not.toHaveBeenCalled();
+  await expect(h.native.documentRequest(account.id, account.fingerprint, request)).resolves.toEqual({ document: { document_id: 'doc' } });
+  h.client.request.mockResolvedValueOnce({ code: 99991672 });
+  await expect(h.native.documentRequest(account.id, account.fingerprint, request)).rejects.toMatchObject({ outcome: 'failed' });
+  h.client.request.mockRejectedValueOnce(new Error('network lost'));
+  await expect(h.native.documentRequest(account.id, account.fingerprint, request)).rejects.toMatchObject({ outcome: 'unknown' });
+});
+
+it('requests document scopes and comment events during both QR creation and permission repair', async () => {
+  const h = await fixture();
+  await h.native.rpc('provision.begin', { locale: 'zh-CN' });
+  const manifest = JSON.stringify(h.registrations[0].options.addons);
+  expect(manifest).toContain('docs:permission.member:create');
+  expect(manifest).toContain('docx:document.block:convert');
+  expect(manifest).toContain('drive.notice.comment_add_v1');
 });

@@ -1,3 +1,4 @@
+import { DOCUMENT_SCOPES, DOCUMENT_COMMENT_EVENT } from '../../../src/channels/feishu/document-capabilities.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
@@ -47,11 +48,13 @@ test('CallbackRepairManager targets one real app with only the callback and requ
         'im:message.group_at_msg.include_bot:readonly',
         'im:message.group_msg',
         ...SLASH_COMMAND_TENANT_SCOPES,
+        ...DOCUMENT_SCOPES,
       ],
     },
     callbacks: { items: ['card.action.trigger'] },
+    events: { items: { tenant: [DOCUMENT_COMMENT_EVENT] } },
   });
-  assert.equal(Object.hasOwn(observed.addons, 'events'), false);
+  assert.deepEqual(observed.addons.events.items.tenant, [DOCUMENT_COMMENT_EVENT]);
 
   observed.onQRCodeReady({
     url: 'https://open.feishu.cn/page/launcher?tp=sdk&clientID=cli_real_app&addons=encoded',

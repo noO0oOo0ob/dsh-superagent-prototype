@@ -1,3 +1,4 @@
+import { DOCUMENT_SCOPES, DOCUMENT_COMMENT_EVENT } from '../../../src/channels/feishu/document-capabilities.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -233,7 +234,7 @@ test('QR registration separates events from card callbacks', async () => {
   const attemptId = started.registration.attempt;
   await waitFor(() => fx.registrationRuns.length === 1);
   const run = fx.registrationRuns.shift();
-  assert.deepEqual(run.options.addons.events.items.tenant, ['im.message.receive_v1']);
+  assert.deepEqual(run.options.addons.events.items.tenant, ['im.message.receive_v1', 'drive.notice.comment_add_v1']);
   assert.deepEqual(run.options.addons.callbacks.items, ['card.action.trigger']);
   assert.ok(run.options.addons.scopes.tenant.includes('im:resource'));
   assert.ok(run.options.addons.scopes.tenant.includes('im:message.group_at_msg.include_bot:readonly'));
@@ -613,9 +614,11 @@ test('callback repair is deduplicated per bot, records granted permissions, and 
         'im:message.group_msg',
         'application:app_slash_command:read',
         'application:app_slash_command:write',
+        ...DOCUMENT_SCOPES,
       ],
     },
     callbacks: { items: ['card.action.trigger'] },
+    events: { items: { tenant: [DOCUMENT_COMMENT_EVENT] } },
   });
   run.options.onQRCodeReady({
     url: callbackRepairQrUrl(existing.appId),

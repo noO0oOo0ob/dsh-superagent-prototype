@@ -36,6 +36,7 @@ export const ConnectorConfigSchema = z.object({
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>
 export const PersonalConfigSchema = z.object({
   expertImports: z.object({ maxBytes: z.number().int().positive().default(8_000_000), maxFiles: z.number().int().positive().default(1000), mcpTimeoutMs: z.number().int().positive().default(60000) }).strict().default(() => ({ maxBytes: 8_000_000, maxFiles: 1000, mcpTimeoutMs: 60000 })),
+  feishuDocuments: z.object({ contextChars: z.number().int().min(1000).max(200000).default(24000), commentPages: z.number().int().min(1).max(100).default(10) }).strict().default(() => ({ contextChars: 24000, commentPages: 10 })),
   artifacts: ArtifactConfigSchema.default(() => ArtifactConfigSchema.parse({})),
   scheduler: SchedulerOptionsSchema.default(() => SchedulerOptionsSchema.parse({})),
   hooks: HookConfigSchema.default(() => HookConfigSchema.parse({})),

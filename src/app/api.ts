@@ -32,6 +32,8 @@ export interface Api {
   'GET personal': { response: { revision: number; config: PersonalConfig; connectors: Record<string, { state: string; detail: string }>; deliveries: ImDelivery[]; vault: VaultExport[]; routeDecisions: RouteDecision[]; schedules: ScheduleRecord[]; runs: ScheduleRun[]; hooks: HookDelivery[] } }
   'PUT personal': { body: { revision: number; config: unknown }; response: { revision: number; config: PersonalConfig } }
   'POST personal/feishu': { body: { endpoint: string; payload: unknown }; response: unknown }
+  'GET personal/documents': { response: { documents: ReturnType<import('../messaging/feishu-documents.ts').FeishuDocuments['list']>; comments: ReturnType<import('../messaging/feishu-documents.ts').FeishuDocuments['pending']> } }
+  'POST personal/documents/:id': { body: { stage: string; note: string; action: 'retry' | 'confirm_applied'; documentId?: string }; response: { recorded: true } }
   'GET personal/messages': { response: import('../messaging/delivery.ts').DeliveryRecord[] }
   'POST personal/messages/:id': { body: { partId: string; action: 'confirm_sent' | 'retry'; note: string }; response: { recorded: true } }
   'GET personal/expert-preferences': { response: { revision: number; config: ExpertPreferencesConfig } }

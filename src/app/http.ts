@@ -66,6 +66,7 @@ export interface HttpHost {
   readonly personal?: PersonalSettings
   readonly connectors?: Connectors
   readonly nativeFeishu?: NativeFeishu
+  readonly documents?: import('../messaging/feishu-documents.ts').FeishuDocuments
   readonly messageDelivery?: MessageDelivery
   readonly vault?: Vault
   readonly routing?: Routing
@@ -213,6 +214,13 @@ function routes(runtime: HttpHost): Routes {
       if (!runtime.nativeFeishu) throw new RouteError(404, 'Native Feishu requires the DSH credentials service')
       const input = z.object({ endpoint: z.string().min(1).max(100), payload: z.unknown() }).strict().parse(await body(64_000))
       return runtime.nativeFeishu.rpc(input.endpoint, input.payload)
+    },
+    'GET personal/documents': () => ({ documents: runtime.documents?.list() ?? [], comments: runtime.documents?.pending() ?? [] }),
+    'POST personal/documents/:id': async ({ params, body }) => {
+      if (!runtime.documents) throw new RouteError(404, 'Document delivery unavailable')
+      const input = z.object({ stage: z.string().min(1), note: z.string().trim().min(1).max(2000), action: z.enum(['retry', 'confirm_applied']), documentId: z.string().regex(/^[a-zA-Z0-9_-]+$/).optional() }).strict().parse(await body())
+      runtime.documents.reconcile(params.id, input.stage, input.note, input.action, input.documentId)
+      return { recorded: true }
     },
     'GET personal/messages': () => runtime.messageDelivery?.list() ?? [],
     'POST personal/messages/:id': async ({ params, body }) => {

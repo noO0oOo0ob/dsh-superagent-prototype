@@ -1,3 +1,4 @@
+import { DOCUMENT_SCOPES, DOCUMENT_COMMENT_EVENT } from './document-capabilities.mjs';
 import { RegistrationManager } from './registration-manager.mjs';
 import { SLASH_COMMAND_TENANT_SCOPES } from './slash-command-registry.mjs';
 
@@ -15,6 +16,7 @@ export const REQUIRED_TENANT_SCOPES = Object.freeze([
   'im:resource',
   'cardkit:card:write',
   ...SLASH_COMMAND_TENANT_SCOPES,
+  ...DOCUMENT_SCOPES,
 ]);
 
 function safeConnectionStatus(runtime) {
@@ -107,7 +109,7 @@ export class DshFeishuController {
       addons: {
         preset: false,
         scopes: { tenant: [...REQUIRED_TENANT_SCOPES] },
-        events: { items: { tenant: ['im.message.receive_v1'] } },
+        events: { items: { tenant: ['im.message.receive_v1', DOCUMENT_COMMENT_EVENT] } },
         callbacks: { items: ['card.action.trigger'] },
       },
     });

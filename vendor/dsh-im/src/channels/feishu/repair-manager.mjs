@@ -1,3 +1,4 @@
+import { DOCUMENT_SCOPES, DOCUMENT_COMMENT_EVENT } from './document-capabilities.mjs';
 import { RegistrationManager } from './registration-manager.mjs';
 import { SLASH_COMMAND_TENANT_SCOPES } from './slash-command-registry.mjs';
 
@@ -71,15 +72,7 @@ export function assertCallbackRepairUrl(value, expectedAppId, domain = 'feishu')
   );
 }
 
-/**
- * One targeted update attempt for an existing Feishu app.  It intentionally
- * shares RegistrationManager's polling/state implementation while fixing the
- * update manifest in one place so callers can add only the card callback, the
- * message-read scope needed to download user-sent media, the resource scope
- * needed to upload bot-sent images/files, group-message and bot-mention scopes, and the
- * Slash Command scopes for the native command panel, without adding unrelated scopes, events,
- * presets, or createOnly.
- */
+/** Targeted app repair adds native messaging and document capabilities without creating another app. */
 export class CallbackRepairManager {
   #manager;
   #appId;
@@ -120,8 +113,10 @@ export class CallbackRepairManager {
             'im:message.group_at_msg.include_bot:readonly',
             'im:message.group_msg',
             ...SLASH_COMMAND_TENANT_SCOPES,
+            ...DOCUMENT_SCOPES,
           ],
         },
+        events: { items: { tenant: [DOCUMENT_COMMENT_EVENT] } },
         callbacks: { items: [CARD_ACTION_CALLBACK] },
       },
     });

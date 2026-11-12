@@ -254,8 +254,8 @@
     },
     {
       "path": "plugin-src/client/channels/feishu/index.js",
-      "sha256": "7f3197c8b7e599b0e3441d767c3f42ee002dff2ef50df560d250d4ec43480e10",
-      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings. Synchronize saved detail settings into the retained bot list; invalidate older status polls while preserving list expansion."
+      "sha256": "b2997b57bae7b10e3fcc2177226c512027035efb8fb3bd9d0d62a7adb3df76e0",
+      "reason": "Isolate CSS and i18n identifiers for coexistence; expose native account settings. Synchronize saved detail settings into the retained bot list; invalidate older status polls while preserving list expansion. Add native document publication and comment-event capabilities with shared QR/repair permissions."
     },
     {
       "path": "plugin-src/client/channels/feishu/slash-panel-settings.js",
@@ -299,8 +299,8 @@
     },
     {
       "path": "plugin-src/client/i18n.js",
-      "sha256": "5354bb0a8b9c188f0342c50f9951284eda87c4327a47f88ae028c6ad5d6f5faf",
-      "reason": "Keep group message authorization and topic display while Personal Agent owns explicit targeting and per-group defaults."
+      "sha256": "08eb809ab3173e4525a4576c3cedea268134ea08693a0565d8270e094254881a",
+      "reason": "Keep group message authorization and topic display while Personal Agent owns explicit targeting and per-group defaults. Add native document publication and comment-event capabilities with shared QR/repair permissions."
     },
     {
       "path": "plugin-src/client/model-setting.js",
@@ -324,13 +324,13 @@
     },
     {
       "path": "src/channels/feishu/feishu-runtime.mjs",
-      "sha256": "d5d260acf4b10ad0d9a0545ec089f2350a3ca0068f33e5af319164b06c4bbb38",
-      "reason": "Adapt native callbacks, checked media transport and supported command manifest without activating the old Session bridge."
+      "sha256": "14ff98fdb2a117be49b88e4144ebb928296eac233596b61885afa8fe236ce15c",
+      "reason": "Adapt native callbacks, checked media transport and supported command manifest without activating the old Session bridge. Add native document publication and comment-event capabilities with shared QR/repair permissions."
     },
     {
       "path": "src/channels/feishu/multi-bot-controller.mjs",
-      "sha256": "137fdb29040fd19a5d6fa2fd37437b68fe4b252ca95eff79036d4acf5a4d26ec",
-      "reason": "Release read-only native routing transitions on cancellation while observing late SDK responses; preserve send outcome handling."
+      "sha256": "b9d82fa2bc6d53a4d21e2d960d785df8fe6855aa5a4fe00366045bd1c95ea55e",
+      "reason": "Release read-only native routing transitions on cancellation while observing late SDK responses; preserve send outcome handling. Add native document publication and comment-event capabilities with shared QR/repair permissions."
     },
     {
       "path": "src/channels/feishu/slash-command-panel.mjs",
@@ -356,6 +356,31 @@
       "path": "plugin-src/client/styles.js",
       "sha256": "fc768c7bc27e38ac8b41b96e7c5886ccddab6fa59e7f2660da8c3a9aefa7cf05",
       "reason": "Embed the pinned page shell and keyboard-accessible settings tabs in Personal Agent; hide unsupported providers and bound scrolling to the available panel height."
+    },
+    {
+      "path": "src/channels/feishu/plugin-controller.mjs",
+      "reason": "Add native document publication and comment-event capabilities with shared QR/repair permissions.",
+      "sha256": "c4e53ee2bc1209d35a3f16d9f8a99d48a53bfd15028df5e2fb1c615bddf10e5d"
+    },
+    {
+      "path": "src/channels/feishu/repair-manager.mjs",
+      "reason": "Add native document publication and comment-event capabilities with shared QR/repair permissions.",
+      "sha256": "1ec9c128f4f417e2f2e637e7941e732595d52f1b8d8725b74d128f832864c466"
+    },
+    {
+      "path": "test/channels/feishu/multi-bot-controller.test.mjs",
+      "reason": "Add native document publication and comment-event capabilities with shared QR/repair permissions.",
+      "sha256": "aa3bb5005f21e2192e951c8ee0e54d74eefdd0fcd723fcd3b3d920a4c83618bd"
+    },
+    {
+      "path": "test/channels/feishu/repair-manager.test.mjs",
+      "reason": "Add native document publication and comment-event capabilities with shared QR/repair permissions.",
+      "sha256": "7a1648aa023f3c5d20a27a8c7ca0723c98f17ac8e03b48d0acf4341df4a390bc"
+    },
+    {
+      "path": "src/channels/feishu/document-capabilities.mjs",
+      "reason": "Add native document publication and comment-event capabilities with shared QR/repair permissions.",
+      "sha256": "c388d6c50e82b8ec66f0af000b298ec7b40f8cb485ecf1ffd30e25617e39ea02"
     }
   ]
 }

@@ -27,7 +27,7 @@ export function MessagingPage({ view }: { view: 'accounts' | 'deliveries' }) {
     <div className="spa-messaging-content" id="spa-messaging-content" role="tabpanel" aria-labelledby={`spa-messaging-${view}`}>
       {view === 'accounts' ? <MessagingShell label={t('messaging.accounts')} navigationLabel={t('messaging.channels')} channelLabel={t('messaging.feishu')}>
         <NativeMessaging />
-      </MessagingShell> : <div className="spa-messaging-deliveries" tabIndex={0}><MessageDeliveries /></div>}
+      </MessagingShell> : <div className="spa-messaging-deliveries" tabIndex={0}><MessageDeliveries /><DocumentDeliveries /></div>}
     </div>
   </div>
 }
@@ -110,4 +110,35 @@ function DeliveryItem({ record, reload }: { record: DeliveryRecord; reload(): Pr
     {record.parts.some(part => ['failed', 'unknown', 'unsupported'].includes(part.state)) &&
       <Input value={note} aria-label={t('messaging.note')} placeholder={t('messaging.note')} onChange={event => setNote(event.target.value)} />}
   </details>
+}
+
+/** Conversion checkpoints and comment destinations share the message-center audit view. */
+function DocumentDeliveries() {
+  const { t, call, notify } = usePanel(), [documentIds, setDocumentIds] = useState<Record<string, string>>({}), [notes, setNotes] = useState<Record<string, string>>({}), [busy, setBusy] = useState(false)
+  const { data, error, reload } = usePoll(() => call('GET personal/documents'), [call])
+  const recover = async (id: string, stage: string, action: 'retry' | 'confirm_applied') => {
+    setBusy(true)
+    try { await call('POST personal/documents/:id', { id, body: { stage, note: notes[id] ?? '', action, ...(documentIds[id] ? { documentId: documentIds[id] } : {}) } }); await reload() }
+    catch (error) { notify(error instanceof Error ? error.message : String(error)) }
+    finally { setBusy(false) }
+  }
+  return <Section title={t('messaging.documents')}>
+    {error && <LoadState loading={false} error={error} />}
+    {data?.documents.map(item => <details key={item.id} className="spa-message-record" open={!!item.inFlight || !!item.error}>
+      <summary>{item.documentId ?? item.artifactId} · {item.inFlight ?? item.completed.at(-1)}</summary>
+      {item.url && <a href={item.url} target="_blank" rel="noreferrer">{t('messaging.openDocument')}</a>}
+      {item.ticketId && <p>{t('ticketId')}: {item.ticketId}</p>}
+      {item.error && <p role="status">{item.error}</p>}
+      {item.inFlight && <><Hint>{t('messaging.documentRecovery')}</Hint>
+        <Input aria-label={t('messaging.note')} placeholder={t('messaging.note')} value={notes[item.id] ?? ''} onChange={event => setNotes({ ...notes, [item.id]: event.target.value })} />
+        <Button disabled={busy || !notes[item.id]?.trim()} onClick={() => { void recover(item.id, item.inFlight!, 'retry') }}>{t('messaging.documentRetry')}</Button>
+        {item.inFlight === 'create' && <Input aria-label={t('messaging.documentId')} placeholder={t('messaging.documentId')} value={documentIds[item.id] ?? ''} onChange={event => setDocumentIds({ ...documentIds, [item.id]: event.target.value })} />}
+        <Button variant="outline" disabled={busy || !notes[item.id]?.trim() || item.inFlight === 'create' && !documentIds[item.id]?.trim()} onClick={() => { void recover(item.id, item.inFlight!, 'confirm_applied') }}>{t('messaging.documentApplied')}</Button></>}
+    </details>)}
+    {data?.comments.map(item => <details key={item.id} className="spa-message-record" open={item.state === 'rejected'}>
+      <summary>{t(`messaging.comment.${item.state}`)} · {item.trigger.channel.address.commentId}</summary>
+      <p>{t('ticketId')}: {String(item.trigger.meta.targetTicketId)}</p>
+      {item.error && <p role="status">{item.error}</p>}
+    </details>)}
+  </Section>
 }

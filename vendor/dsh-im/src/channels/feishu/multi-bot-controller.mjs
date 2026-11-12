@@ -1,3 +1,4 @@
+import { DOCUMENT_COMMENT_EVENT } from './document-capabilities.mjs';
 import { ExclusiveInboundConsumers, normalizeExternalText } from './external-consumer.mjs';
 import { atConnectionStage, createConnectionDiagnostics } from '../shared/connection-error.mjs';
 import { createHash, randomUUID } from 'node:crypto';
@@ -288,7 +289,7 @@ export class MultiBotDshFeishuController {
       addons: {
         preset: false,
         scopes: { tenant: [...REQUIRED_TENANT_SCOPES] },
-        events: { items: { tenant: ['im.message.receive_v1'] } },
+        events: { items: { tenant: ['im.message.receive_v1', DOCUMENT_COMMENT_EVENT] } },
         callbacks: { items: ['card.action.trigger'] },
       },
     });
@@ -685,6 +686,20 @@ export class MultiBotDshFeishuController {
       this.#assertOpen('capability-unavailable');
       readSignal.throwIfAborted();
       return result;
+    });
+  }
+
+  /** Account-checked document operations share the account lifecycle lock. */
+  async withNativeDocument(botId, operation, { expectedFingerprint, signal } = {}) {
+    this.#assertOpen();
+    return this.#withBotTransition(botId, async () => {
+      const config = this.#requireBot(botId);
+      const account = await this.#deliveryAccount(config);
+      signal?.throwIfAborted();
+      if (account.fingerprint !== expectedFingerprint) throw Object.assign(new Error('account-changed'), { code: 'account-changed', outcome: 'failed' });
+      const runtime = this.#runtimes.get(botId);
+      if (!runtime || !isConnected(connectionStatus(runtime))) throw Object.assign(new Error('bot-not-connected'), { code: 'bot-not-connected', outcome: 'failed' });
+      return runtime.withNativeDocument(operation, { signal });
     });
   }
 

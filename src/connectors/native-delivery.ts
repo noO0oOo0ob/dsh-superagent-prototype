@@ -1,3 +1,4 @@
+import type { FeishuDocuments } from '../messaging/feishu-documents.ts'
 /** Connects native platform adapters to the single durable publication ledger. */
 import type { NativeFeishu } from './native-feishu.mjs'
 import type { Results } from '../app/results.ts'
@@ -20,12 +21,17 @@ export function prepareFeishuBlocks(blocks: ContentBlock[], maxCharacters = 3500
   return result
 }
 /** The transport never chooses recipients; it uses the validated captured route. */
-export function nativeDelivery(native: NativeFeishu, ledger: MessageDelivery, results: Results): void {
+export function nativeDelivery(native: NativeFeishu, ledger: MessageDelivery, results: Results, documents?: FeishuDocuments): void {
   native.service.deliverChecked = async (botId, route, message, options) => {
     const kind = message.channel.address.conversationKind
     const conversationKind = kind === 'dm' || kind === 'group' ? kind : undefined
     await ledger.deliver(message, { supported: ['text', 'image', 'file', 'link', 'card'], prepare: prepareFeishuBlocks,
       send: async (block, part) => {
+        if (documents && block.type === 'file') {
+          try { await native.validateRoute(botId, route, options) }
+          catch (cause) { throw new DeliveryFailure('failed', 'document-route-check-failed', { cause }) }
+          block = await documents.publish(botId, options.expectedFingerprint, route, message, block)
+        }
         let file
         if ('artifactId' in block) {
           try { file = await results.materialize(block.artifactId) }

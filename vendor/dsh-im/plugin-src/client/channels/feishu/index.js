@@ -320,10 +320,10 @@ function QrPane({ provision, now, onRefresh, onCancel, busy }) {
               ? "使用飞书确认群消息权限"
               : "使用飞书扫码创建机器人"),
         h("p", null, repairing
-          ? "扫码会更新现有飞书应用，增量补充当前缺少的卡片按钮回调、接收未 @ 群消息所需的 im:message.group_msg、读取用户消息内图片或文件所需的 im:message:readonly（飞书显示为“获取单聊、群组消息”）、上传机器人图片或文件所需的 im:resource、接收群内其他机器人 @ 当前机器人所需的 im:message.group_at_msg.include_bot:readonly，以及原生命令面板所需的 application:app_slash_command:read / write；不会创建新应用，群回复方式保持不变，实际收到的群消息和文件会自动保存。确认页只显示当前缺少项，完成后此机器人会短暂重连，其他机器人不受影响。"
+          ? "扫码会为现有应用补全消息收发、文件、命令面板、文档创建与转换、文档协作者及评论读写权限，同时订阅文档评论事件和卡片回调。不会创建新应用。确认页显示缺少项；完成后此机器人会短暂重连。"
           : grantingGroupMessages
             ? "扫码会更新现有飞书应用，只增量开通“获取群组中所有消息”权限；不会创建新应用。确认后会自动启用“响应所有群消息”，其他机器人不受影响。"
-            : "扫码会新增一个机器人，并申请 im:message.group_msg（接收未 @ 的群消息）、im:message:readonly（读取消息中的图片或文件）等所需权限。新机器人默认仅 @ 时回复，实际收到的群消息和文件会自动保存；已接入的机器人继续正常收发消息。"),
+            : "扫码会创建机器人并申请消息收发、文件、命令面板、文档创建与转换、文档协作者及评论读写权限，同时订阅消息和文档评论事件。新机器人默认仅在群内被 @ 时回复。"),
         h("ol", { className: "spa-feishu-steps spa-im-steps" },
           h("li", null, "打开飞书移动端，使用扫一扫读取二维码"),
           h("li", null, repairing

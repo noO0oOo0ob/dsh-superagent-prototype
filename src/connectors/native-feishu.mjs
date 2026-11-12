@@ -63,7 +63,7 @@ export function normalizeNativeMessage(raw, config) {
 }
 
 /** Construct an independently stored account controller and its Personal Agent adapter. */
-export async function createNativeFeishu({ context, stateDir, lifetime, logger = console, onAccounts, onCard, sdk = Lark, Runtime = FeishuRuntime }) {
+export async function createNativeFeishu({ context, stateDir, lifetime, logger = console, onAccounts, onCard, onDocumentComment, sdk = Lark, Runtime = FeishuRuntime }) {
   const credentials = context.get?.('credentials') ?? context.credentials;
   if (!credentials) throw new Error('DSH credentials service is unavailable');
   const root = join(stateDir, 'connectors', 'feishu');
@@ -107,7 +107,14 @@ export async function createNativeFeishu({ context, stateDir, lifetime, logger =
         domain: config.domain, botOpenId: config.botOpenId, ownerOpenIds: config.ownerOpenIds, harness, state: await stateFor(botId), repair,
         slashManifest: NATIVE_SLASH_COMMAND_MANIFEST, groupResponseMode: config.groupResponseMode, mentionTopicReply: config.mentionTopicReply, slashPanel: config.slashPanel, logger,
         wsAgent: proxyAgent,
-        nativeCallbacks: { onCard: async raw => onCard?.(botId, raw) },
+        nativeCallbacks: { onCard: async raw => onCard?.(botId, raw), onDocumentComment: async raw => {
+          const current = configStore.getBot(botId);
+          if (closed || runtimes.get(botId) !== runtime || !current || fingerprint(current) !== fingerprint(config)) throw failure('account-changed');
+          if (raw.app_id && raw.app_id !== current.appId) return;
+          if (!raw.is_mentioned || raw.notice_meta?.to_user_id?.open_id !== current.botOpenId
+            || raw.notice_meta?.from_user_id?.open_id === current.botOpenId) return;
+          await onDocumentComment?.(botId, fingerprint(current), raw);
+        } },
         acceptExternal: async (raw, { signal } = {}) => {
           if (closed || runtimes.get(botId) !== runtime) throw failure('consumer-unavailable');
           const current = configStore.getBot(botId);
@@ -166,6 +173,20 @@ export async function createNativeFeishu({ context, stateDir, lifetime, logger =
   };
   const handle = {
     service, accounts, botSettings,
+    documentRequest(botId, expectedFingerprint, request, signal) {
+      if (!/^\/open-apis\/(docx|drive)\/v1\//.test(request.url)) throw failure('invalid-document-api');
+      return core.withNativeDocument(botId, async client => {
+        let response;
+        try { response = await client.request({ ...request, signal: signal ? AbortSignal.any([signal, lifetime]) : lifetime }); }
+        catch (cause) {
+          const code = cause?.response?.data?.code;
+          if (typeof code === 'number' && code !== 0) throw failure(`feishu-${code}`, 'failed', cause);
+          throw failure('document-outcome-unknown', 'unknown', cause);
+        }
+        if (response?.code) throw failure(`feishu-${response.code}`, 'failed');
+        return response?.data;
+      }, { expectedFingerprint, signal: signal ? AbortSignal.any([signal, lifetime]) : lifetime });
+    },
     allowsCommand(botId, expectedFingerprint, actorId, kind) {
       const current = configStore.getBot(botId);
       if (closed || lifetime.aborted || !current || fingerprint(current) !== expectedFingerprint) return false;
@@ -214,6 +235,7 @@ export async function createNativeFeishu({ context, stateDir, lifetime, logger =
         } finally { options.signal.removeEventListener('abort', abort); stream.destroy?.(); }
       }, options);
     },
+    async validateRoute(botId, route, options) { await core.withNativeRoute(botId, route, async () => {}, options); },
     async sendPart(botId, route, block, options) {
       const send = async ({ client, channel, message }) => {
         const current = configStore.getBot(botId);

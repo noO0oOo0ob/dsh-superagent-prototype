@@ -41,7 +41,7 @@ it('requires both an explicit principal match and a directional conversation gra
   } finally { store.close(); rmSync(directory, { recursive: true, force: true }) }
 })
 
-it('revokes followed-conversation fanout and fresh worker reads when a routing grant is removed', async () => {
+it('requires explicit routing for followed conversations and revokes worker reads when a grant is removed', async () => {
   const h = await startRuntime()
   try {
     const { ticket, sessionId, trigger: origin } = await h.acceptedTicket(feishu('1', '@bot Research'))
@@ -57,9 +57,13 @@ it('revokes followed-conversation fanout and fresh worker reads when a routing g
     const allowed = { ...incoming, id: 'home-2', at: '2026-11-04T01:01:00Z', text: 'Allowed before grant removal' }
     h.runtime.receive(allowed)
     await h.runtime.idle()
+    expect(h.runtime.store.triggers.disposition(allowed.id)?.fanout).not.toContain(ticket.id)
+    h.runtime.engine.attach(ticket.id, allowed.id)
+    await h.runtime.idle()
     const recorded = h.runtime.store.tickets.get(ticket.id)!
     const input = recorded.inputs.find(item => item.kind === 'trigger' && item.triggerId === allowed.id)!
-    expect(input).toMatchObject({ context: true })
+    expect(input).toMatchObject({ triggerId: allowed.id })
+    expect('context' in input && input.context).not.toBe(true)
     expect(await h.runTool(sessionId, 'personal_agent_read', { resource: `trigger/${allowed.id}` })).toMatchObject({ trigger_id: allowed.id })
     const before = h.runtime.routing.list()
     const latest = h.runtime.personal.view()

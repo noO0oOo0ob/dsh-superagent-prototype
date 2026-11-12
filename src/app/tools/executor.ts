@@ -13,6 +13,7 @@ import type { Sessions } from '../sessions.ts'
 import { AcknowledgementSchema, readTool, tool, type Tool } from './tool.ts'
 
 export interface ExecutorToolsHost {
+  replyTarget?(ticketId: string): string | undefined
   artifactLimit?(): number
   readonly engine: Pick<EngineForExecutor, 'report' | 'reply' | 'markUnrelated' | 'handback' | 'followForContext'>
   readonly store: Pick<Store, 'tickets' | 'replyStatus' | 'atomic'>
@@ -36,9 +37,10 @@ export function executorTools(host: ExecutorToolsHost, ticket: Ticket): Tool[] {
         text: AcknowledgementSchema.describe(`At most ${IM_WORDS} words; Markdown is supported.`),
       }).strict(),
       execute: async args => {
-        const reply = host.engine.reply({ purpose: 'acknowledgement', ticketId, triggerId: args.trigger_id, text: args.text })
+        const triggerId = host.replyTarget?.(ticketId) ?? args.trigger_id
+        const reply = host.engine.reply({ purpose: 'acknowledgement', ticketId, triggerId, text: args.text })
         if (reply.status !== 'sent') await host.sendReplies()
-        return { trigger_id: args.trigger_id, acknowledgement: host.store.replyStatus(reply.id)!, reused: reply.reused }
+        return { trigger_id: triggerId, acknowledgement: host.store.replyStatus(reply.id)!, reused: reply.reused }
       },
     }),
     tool({
@@ -106,9 +108,10 @@ export function executorTools(host: ExecutorToolsHost, ticket: Ticket): Tool[] {
         return host.store.atomic(() => {
           const refused = pull && claimPull(host.github, ticketId, pull)
           if (refused) throw new Error(refused)
+          const target = host.replyTarget?.(ticketId)
           const report = { state: args.state, summary: args.summary, ...(args.publication ? { publication: args.publication } : {}), ...(args.human_action !== undefined ? { question: args.human_action } : {}),
-            ...(args.question_for_trigger_id ? { askedBy: args.question_for_trigger_id } : {}),
-            ...(args.reply_to_trigger_id ? { answers: args.reply_to_trigger_id } : {}) }
+            ...(args.human_action && target ? { askedBy: target } : args.question_for_trigger_id ? { askedBy: args.question_for_trigger_id } : {}),
+            ...(!args.human_action && target ? { answers: target } : args.reply_to_trigger_id ? { answers: args.reply_to_trigger_id } : {}) }
           const updated = host.engine.report(ticketId, report)
           const relay = reportRelay(updated, report)
           if (relay) host.sessions.relay(relay.id, relay.text)

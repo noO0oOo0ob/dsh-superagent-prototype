@@ -33,6 +33,10 @@ The bot's Groups settings shows observed provider/channel/tenant/group scopes an
 
 The first callback freezes the group message’s default account across all receiving accounts, so changing the default before another bot’s delayed callback cannot trigger a second handler. Rejected events stay rejected after default changes or restart. Accepted events whose intake failed remain pending for the same account; duplicate callbacks share the operation. The model cannot select a different destination. The Groups page displays recent decisions, including unverified targeting. Live two-bot verification of tenant/chat ID scope and round trips remains separate from the offline adapter tests.
 
+## Documents and comment replies
+
+Markdown file publications use native cloud documents; direct Markdown text stays inline. Permission repair includes document creation, conversion, sharing and comment events. Bound comments use the existing Worker and captured reply destination. See [setup, recovery and limits](feishu-documents-upgrade.md).
+
 ## Stages
 
 1. [x] Pin and copy upstream Feishu/shared/UI source and focused tests.

@@ -15,6 +15,7 @@ let requests: { path: string; method: string; body: Record<string, unknown> }[]
 let bots: unknown[]
 let events: ApiResponse<'GET personal/hooks'>
 let nativeBots: Record<string, unknown>[]
+let documents: ApiResponse<'GET personal/documents'>
 let parts: ApiResponse<'GET personal/messages'>
 let groupView: ApiResponse<'GET personal/groups'>
 let error: string | undefined
@@ -25,7 +26,7 @@ const schedule = (): View['schedules'][number] => ({ version: 1, revision: 1, st
 
 beforeEach(() => {
   current = { revision: 0, config: PersonalConfigSchema.parse({}), connectors: {}, deliveries: [], vault: [], routeDecisions: [], schedules: [], runs: [], hooks: [] }
-  groupView = { groups: [], decisions: [] }; requests = []; bots = []; events = []; nativeBots = []; parts = []; error = undefined
+  groupView = { groups: [], decisions: [] }; requests = []; bots = []; events = []; nativeBots = []; parts = []; documents = { documents: [], comments: [] }; error = undefined
   const fallback = globalThis.fetch
   vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input).replace('/super-personal-agent/api/', ''), method = init?.method ?? 'GET'
@@ -56,6 +57,8 @@ beforeEach(() => {
       group.defaultAccount = group.accounts.find(account => account.connectorId === body.connectorId) ?? null
       group.defaultAvailable = !!group.defaultAccount; group.revision++; return response(group)
     }
+    if (path === 'personal/documents') return response(documents)
+    if (path.startsWith('personal/documents/')) return response({ recorded: true })
     if (path === 'personal/messages') return response(parts)
     if (path.startsWith('personal/messages/')) return response({ recorded: true })
     if (path === 'personal/bots') return response({ bots })
@@ -350,4 +353,16 @@ it('sets a verified group default in the original bot settings without a competi
   await click(zh['messaging.back'])
   await click(document.querySelector<HTMLElement>('[aria-label="更多机器人设置"]')!)
   expect(field<HTMLSelectElement>(label).value).toBe('two')
+})
+
+it('requires a verification note and existing document ID to reconcile an applied creation', async () => {
+  documents.documents = [{ id: 'binding', botId: 'bot', fingerprint: 'fp', artifactId: 'artifact', actorId: 'owner', completed: [], recovery: [], inFlight: 'create', error: 'Response lost' }]
+  at({ page: 'messaging', query: { view: 'deliveries' } }); await mount()
+  const confirm = () => all('button').find(item => item.textContent === zh['messaging.documentApplied']) as HTMLButtonElement
+  expect(confirm().disabled).toBe(true)
+  await type(field<HTMLInputElement>(zh['messaging.note']), 'Verified existing document in Feishu')
+  expect(confirm().disabled).toBe(true)
+  await type(field<HTMLInputElement>(zh['messaging.documentId']), 'existingDoc')
+  await click(zh['messaging.documentApplied'])
+  expect(requests.find(item => item.path === 'personal/documents/binding')?.body).toEqual({ stage: 'create', note: 'Verified existing document in Feishu', action: 'confirm_applied', documentId: 'existingDoc' })
 })

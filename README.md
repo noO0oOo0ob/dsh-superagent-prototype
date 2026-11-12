@@ -20,6 +20,8 @@ New background tasks require [ModLens](https://github.com/liustack/modlens) to b
 
 Replies default to usable conversation content, with scenario-specific delivery guidance in each expert and an optional presentation Skill. New task results carry a captured expert or general-assistant footer in Main and the originating channel. See [Expert packages](docs/expert-packages.md#reply-forms-and-result-authors).
 
+Native Feishu/Lark converts selected Markdown file artifacts into cloud documents. Mentions by the original requester continue the bound Worker and receive replies under the original comment. Existing accounts need the permission update in [Feishu documents and comments](docs/feishu-documents-upgrade.md).
+
 Automatic results and Main's reply tool share a persistent delivery receipt per result and destination. Rewording a reply or restarting the plugin does not resend a published result. Transferring an existing bot from dsh-im requires stopping its old listener first; independently installed plugins do not share an intake ledger. See [Connector ownership and handover](docs/014-connectors.md#consumer-mode-handover).
 
 ## Documentation

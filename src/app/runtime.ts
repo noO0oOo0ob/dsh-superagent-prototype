@@ -1,3 +1,4 @@
+import { FeishuDocuments } from '../messaging/feishu-documents.ts'
 import { bundledExperts } from '../experts/bundled.ts'
 /** Application composition root and lifecycle manager for dsh-super-personal-agent. */
 import { Service, type Context } from '@deepseek-ai/cordis'
@@ -108,6 +109,7 @@ export class Runtime extends Service implements SourceHost {
   readonly main: MainInput
   readonly results: Results
   readonly messageDelivery: MessageDelivery
+  readonly documents: FeishuDocuments
   readonly conversations: Conversations
   readonly inbound: InboundFiles
   readonly messageActions: MessageActions
@@ -162,7 +164,7 @@ export class Runtime extends Service implements SourceHost {
       this.vault = new Vault(store, () => this.personal.view().config.vault, { get: id => this.results.get(id), materialize: id => this.results.materialize(id) })
       this.repositories = new RepositoryRegistry({ stateDir: machine.stateDir, git: (args, cwd, signal) =>
         runAsWorker(ctx.subprocess, ['git', ...args], cwd, AbortSignal.any([signal, AbortSignal.timeout(90_000)]), this.setup.workerEnvironment) })
-      this.routing = new Routing(store, () => { const view = this.personal.view(); return { revision: view.revision, routing: view.config.routing } })
+      this.routing = new Routing(store, () => { const view = this.personal.view(); return { revision: view.revision, routing: view.config.routing } }, (ticket, trigger) => this.documents?.authorized(ticket, trigger) ?? false)
       const setup = this.setup = new Setup({ context: ctx, machine, lifetime: this.lifetime, restart })
       this.execution = { backend: ctx.subprocess, environment: () => setup.workerEnvironment }
       const deployed = () => setup.configured()
@@ -241,6 +243,14 @@ export class Runtime extends Service implements SourceHost {
       this.results = new Results({ files: new ArtifactFiles(join(machine.stateDir, 'artifacts')), store, effects, outbox, masterId, vault: this.vault, port: ctx.webServer.port,
         onSaved: result => this.hooks.record({ version: 1, kind: 'result.saved', id: key('hook-result', result.id), at: result.at,
           taskId: result.ticketId, resultId: result.id, contexts: result.contexts, artifactIds: this.vault.list(result.id).map(item => item.id) }) })
+      this.documents = new FeishuDocuments({ store, results: this.results, ledger: this.messageDelivery, native: () => this.nativeFeishu,
+        signal: this.lifetime, limits: () => this.personal.view().config.feishuDocuments, allowed: trigger => this.sources.scope(trigger).listened, maxBytes: () => this.personal.view().config.artifacts.maxBytes,
+        receive: trigger => { this.engine.receive(trigger) }, attach: (ticket, trigger) => { this.engine.attach(ticket, trigger) },
+        busy: ticketId => { const agent = ctx.agents.get(workerSessionId(ticketId) as SessionId); return !!agent && agent.status !== 'idle' } })
+      this.disposers.push(sources.register({ kind: 'feishu-doc', defaultEnabled: true, title: { zh: '飞书文档评论', en: 'Feishu document comments' },
+        description: { zh: '已绑定文档中的任务评论。', en: 'Task comments on published documents.' }, schema: z.object({}).strict(), fields: [], health: [],
+        scope: ({ meta }) => this.documents.pending().some(item => item.id === meta.requestId) ? { listened: true, observed: false } : { listened: false, reason: 'unbound_document' },
+        channel: { send: (_host, message) => this.documents.send(message), link: address => ({ url: this.documents.list().find(item => item.id === address.bindingId)?.url ?? '', label: { zh: '文档评论', en: 'Document comment' } }) } }))
       const { assessor, executor } = this
       const policy = () => scheduledPolicy(settingsPolicy(store.settings(), sources), this.schedules)
       const engine = this.engine = new Engine({ repo: store, scope: sources, policy, assessor, executor,
@@ -254,14 +264,18 @@ export class Runtime extends Service implements SourceHost {
           }
         },
         beforeReceive: trigger => {
+          if (trigger.source === 'feishu-doc' && !this.documents.accepts(trigger)) throw new Error('Document input is not authorized')
           if (trigger.source !== 'schedule') return
           const origin = this.schedules.originFor(trigger)
           if (!origin) throw new Error('Scheduled input is not authorized')
           store.contexts.parent(trigger, origin)
         },
-        permitsInput: (ticket, trigger) => this.routing.permits(ticket, trigger) && this.conversations.permitsInput(ticket, trigger) && this.directTarget(trigger) === ticket.id,
+        permitsInput: (ticket, trigger) => !this.documents.replyTarget(ticket.id) && this.routing.permits(ticket, trigger) && this.conversations.permitsInput(ticket, trigger) && this.directTarget(trigger) === ticket.id,
         beforeFollow: (ticket, thread) => this.routing.follow(ticket, thread),
-        beforeAttach: (ticket, trigger) => { this.conversations.authorizeMutation(ticket, trigger); this.routing.attach(ticket, trigger) },
+        beforeAttach: (ticket, trigger) => {
+          const active = this.documents.replyTarget(ticket.id)
+          if (active && active !== trigger.id) throw new Error('A document comment is running; retry after it settles')
+          this.conversations.authorizeMutation(ticket, trigger); this.routing.attach(ticket, trigger) },
         outbox, prepareTicket: (ticket, outcome) => {
           const ids = z.array(z.string()).parse(outcome.audit?.resource_ids ?? [])
           const selection = this.repositories.select(this.personal.view().config.repositories, ids)
@@ -278,7 +292,7 @@ export class Runtime extends Service implements SourceHost {
             const origin = store.triggers.get(task.origin.triggerId)
             if (origin) this.conversations.focus(task, origin)
           }
-          if (event.type === 'assignment.reported') this.results.record(store.tickets.get(event.data.ticketId)!, event.data.replyTo)
+          if (event.type === 'assignment.reported') this.results.record(store.tickets.get(event.data.ticketId)!, this.documents.replyTarget(event.data.ticketId) ?? event.data.replyTo)
           // Notify the main Session only about domain events it did not initiate itself.
           const notice = this.quiet ? undefined : eventNotice(event, id => store.tickets.get(id))
           if (notice) sessions.notify(...notice)
@@ -302,6 +316,7 @@ export class Runtime extends Service implements SourceHost {
       const evals = board.claim('evals', { state: 'ready', detail: 'No unavailable Eval in the last hour' })
       const evaluateDue = async () => {
         if (!this.paused()) this.schedules.pass()
+        if (!this.paused()) this.documents.pass()
         engine.evaluateDue(); evals.set(evalsHealth(store))
         await this.connectors?.refresh()
         if (!this.paused()) await this.hooks.pass()
@@ -323,7 +338,7 @@ export class Runtime extends Service implements SourceHost {
       this.sourceDeps = { store, engine, outbox, commands, sources, get ready() { return runtime.ready },
         get deployment() { return setup.deployment }, configured: () => setup.configured(),
         get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, get githubProblem() { return setup.githubProblem }, receive: trigger => passes.receive(trigger) }
-      this.toolHost = { authorizeRoute: (id, ticketId, kind) => this.authorizeMainRoute(id, ticketId, kind), expertPreferences: this.expertPreferences, experts: this.experts, artifactLimit: () => this.personal.view().config.artifacts.maxBytes, context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources,
+      this.toolHost = { replyTarget: id => this.documents.replyTarget(id), authorizeRoute: (id, ticketId, kind) => this.authorizeMainRoute(id, ticketId, kind), expertPreferences: this.expertPreferences, experts: this.experts, artifactLimit: () => this.personal.view().config.artifacts.maxBytes, context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources,
         get github() { return runtime.context({ kind: 'github', health: ['github'] }) },
         requestPass: () => { passes.request() }, sendReplies: () => outbox.sent(),
         quietly: run => { this.quiet++; try { return run() } finally { this.quiet-- } } }
@@ -415,12 +430,14 @@ export class Runtime extends Service implements SourceHost {
   private async startNativeFeishu(): Promise<void> {
     if (!this.ctx.get('credentials')) return
     const native = await createNativeFeishu({ context: this.ctx, stateDir: this.machine.stateDir, lifetime: this.lifetime, logger: this.ctx.logger,
-      onAccounts: accounts => this.syncNativeAccounts(accounts), onCard: async (botId, event) => {
+      onAccounts: accounts => this.syncNativeAccounts(accounts), onDocumentComment: async (botId, fingerprint, event) => {
+        await this.documents.receive(botId, fingerprint, event); this.passes.request()
+      }, onCard: async (botId, event) => {
         this.lifetime.throwIfAborted()
         return this.messageActions.receive(botId, event, trigger => { this.receiveConversation(trigger) })
       } })
     this.nativeFeishu = native
-    nativeDelivery(native, this.messageDelivery, this.results)
+    nativeDelivery(native, this.messageDelivery, this.results, this.documents)
     native.service.readResource = (botId, route, key, options) => native.readResource(botId, route, key, options)
     native.service.manage = (endpoint, payload, signal) => native.rpc(endpoint, payload, signal)
     native.service.prepareDialogue = (botId, key, fingerprint) => native.prepareDialogue(botId, key, fingerprint)

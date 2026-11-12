@@ -21,7 +21,7 @@ export interface RouteDecision {
   from: { source: string; conversation: string; account?: string }; to: { source: string; conversation: string; account?: string }; principalId?: string
 }
 const records = family<RouteDecision>('personal-route:')
-const managed = (source: string) => source === 'main' || source === 'inbox' || source === 'schedule' || source.startsWith('im-')
+const managed = (source: string) => source === 'main' || source === 'inbox' || source === 'schedule' || source === 'feishu-doc' || source.startsWith('im-')
 const originScope = (trigger: Trigger) => ({ source: trigger.source,
   conversation: typeof trigger.meta.conversationId === 'string' ? trigger.meta.conversationId : trigger.channel?.thread ?? trigger.threads[0]?.id ?? trigger.id,
   ...(typeof trigger.meta.fingerprint === 'string' ? { account: trigger.meta.fingerprint } : {}) })
@@ -32,7 +32,7 @@ export class RoutingDenied extends Error {}
 
 /** Identity bindings never grant intake permission; grants authorize only a particular task attachment. */
 export class Routing {
-  constructor(private readonly store: Store, private readonly config: () => { revision: number; routing: RoutingConfig }) {}
+  constructor(private readonly store: Store, private readonly config: () => { revision: number; routing: RoutingConfig }, private readonly bound?: (ticket: Ticket, trigger: Trigger) => boolean) {}
   list(): RouteDecision[] { return this.store.keys(records).flatMap(name => this.store.get(name) ?? []).sort((a, b) => b.at.localeCompare(a.at)) }
   /** Called before the attachment transaction so rejected decisions remain auditable. */
   follow(ticket: Ticket, thread: ThreadRef): void {
@@ -65,7 +65,8 @@ export class Routing {
     const original = ticket.origin.triggerId === trigger.id || ticket.origin.triggerIds.includes(trigger.id)
     const localOwner = trigger.source === 'main' && trigger.actor.source === 'main' && trigger.actor.id === 'owner' && trigger.human
     const continuation = mode === 'read' && localOwner && ticket.inputs.some(input => input.kind === 'trigger' && input.triggerId === trigger.id && !input.context)
-    if (original) { allowed = true; reason = 'original_task_input' }
+    if (this.bound?.(ticket, trigger)) { allowed = true; reason = 'published_document_binding' }
+    else if (original) { allowed = true; reason = 'original_task_input' }
     else if (mode === 'attach' && localOwner) { allowed = true; reason = 'explicit_main_continuation' }
     else if (continuation) { allowed = true; reason = 'attached_main_continuation' }
     else if (equal(from, to)) { allowed = true; reason = 'same_conversation' }

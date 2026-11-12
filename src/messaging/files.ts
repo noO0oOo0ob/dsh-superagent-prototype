@@ -10,7 +10,7 @@ export const StoredFileSchema = z.object({ digest: z.string().regex(/^[a-f0-9]{6
   fileName: z.string().min(1).refine(name => !/[\\/\x00-\x1f]/.test(name)), mediaType: z.string().min(1).max(200) }).strict()
 export type StoredFile = z.infer<typeof StoredFileSchema>
 const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex')
-const mediaTypes: Record<string, string> = { '.md': 'text/markdown', '.txt': 'text/plain', '.csv': 'text/csv', '.json': 'application/json',
+const mediaTypes: Record<string, string> = { '.md': 'text/markdown', '.markdown': 'text/markdown', '.txt': 'text/plain', '.csv': 'text/csv', '.json': 'application/json',
   '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
   '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.mp4': 'video/mp4', '.zip': 'application/zip',
   '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }

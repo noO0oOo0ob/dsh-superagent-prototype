@@ -407,6 +407,10 @@ export class FeishuRuntime {
       this.#bridge = bridge;
 
       const dispatcher = new this.#lark.EventDispatcher({}).register({
+        'drive.notice.comment_add_v1': event => {
+          assertCurrentStart();
+          return this.#nativeCallbacks?.onDocumentComment?.(event);
+        },
         'im.message.receive_v1': (event) => {
           if (this.#consumerMode === 'external-consumer') {
             assertCurrentStart();
@@ -809,6 +813,14 @@ export class FeishuRuntime {
   }
 
   recordNativeReply() { this.#status.messagesReplied += 1; this.#status.lastReplyAt = new Date().toISOString(); }
+
+  async withNativeDocument(operation, { signal } = {}) {
+    const client = this.#client;
+    if (!client || this.#consumerMode !== 'external-consumer')
+      throw Object.assign(new Error('bot-not-connected'), { code: 'bot-not-connected', outcome: 'failed' });
+    signal?.throwIfAborted();
+    return operation(client);
+  }
 
   async withNativeRoute(route, operation, { signal } = {}) {
     if (!route || typeof route.messageId !== 'string' || typeof route.conversationId !== 'string'
