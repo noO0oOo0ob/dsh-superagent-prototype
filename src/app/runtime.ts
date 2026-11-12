@@ -315,7 +315,7 @@ export class Runtime extends Service implements SourceHost {
         description: { zh: '来自已批准计划的独立任务。', en: 'Independent tasks from approved schedules.' }, schema: z.object({}).strict(), fields: [], health: [],
         scope: ({ meta }) => typeof meta.executionId === 'string' && !!this.schedules.run(meta.executionId)
           ? { listened: true, observed: false } : { listened: false, reason: 'unknown_schedule' } }))
-      this.main = new MainInput({ context: ctx, store, sources, sessions, engine, masterId, requestPass: () => passes.request() })
+      this.main = new MainInput({ expertPreferences: this.expertPreferences, context: ctx, store, sources, sessions, engine, masterId, requestPass: () => passes.request() })
       this.connectors = new Connectors({ store, sources, personal: this.personal, lifetime: this.lifetime, receive: trigger => this.receiveConversation(trigger),
         policyChanged: (before, after) => engine.policyChanged(policyVersion(before), policyVersion(after),
           policyEffects(store.tickets.open(), before, after, settings => ({ scope: input => sources.scope(input, settings) }))) })

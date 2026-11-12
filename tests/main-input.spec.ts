@@ -120,3 +120,60 @@ it('does not inject a question cleared while its Main Session is being resolved'
     expect(JSON.stringify(h.agents.get(h.runtime.masterId)!.inject.mock.calls)).not.toContain('Obsolete question?')
   } finally { hold.resolve(); await h.stop() }
 })
+
+it('selects a local task expert, loads its Worker instructions and preserves the binding on retries and continuation', async () => {
+  const h = await startRuntime()
+  try {
+    const capture = (text: string) => h.runtime.main.capture(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }))!
+    const request = capture('Plan a quiet weekend trip.')
+    const catalog = h.runtime.experts.choices().find(item => item.id === 'builtin-planning')!
+    const expert = { id: catalog.id, digest: catalog.digest, reason: 'A weekend itinerary is requested.' }
+    const args = { trigger_id: request.id, title: 'Trip', worktree_name: 'trip', expert }
+    const result = await h.runTool(h.runtime.masterId, 'personal_agent_submit', args)
+    const id = (result.ticket as { ticket_id: string }).ticket_id
+    await h.runtime.idle()
+    const ticket = h.runtime.store.tickets.get(id)!
+    expect(ticket.expert?.snapshot.id).toBe(expert.id)
+    expect(h.promptSections.get(`spa-worker-${id}`)!({})).toContain(ticket.expert!.snapshot.agents)
+    await h.runTool(h.runtime.masterId, 'personal_agent_submit', { ...args, expert: { ...expert, digest: 'f'.repeat(64) } })
+    expect(h.runtime.store.tickets.list()).toHaveLength(1)
+    const follow = { ...args, trigger_id: capture('Make day two easier.').id, ticket_id: id }
+    await expect(h.runTool(h.runtime.masterId, 'personal_agent_submit', follow)).rejects.toThrow('original expert')
+    await h.runTool(h.runtime.masterId, 'personal_agent_submit', { ...follow, expert: null })
+    expect(h.runtime.store.tickets.get(id)?.expert).toEqual(ticket.expert)
+  } finally { await h.stop() }
+})
+
+it('rejects stale local expert selections and applies the same fixed-source expert policy', async () => {
+  const h = await startRuntime()
+  try {
+    const request = h.runtime.main.capture(createUserMessage({ content: [{ type: 'text', text: 'Plan a trip' }], source: { kind: 'user' } }))!
+    const args = { trigger_id: request.id, title: 'Trip', worktree_name: 'trip' }
+    await expect(h.runTool(h.runtime.masterId, 'personal_agent_submit', { ...args,
+      expert: { id: 'builtin-planning', digest: 'f'.repeat(64), reason: 'Travel' } })).rejects.toThrow('changed')
+    expect(h.runtime.store.tickets.list()).toEqual([])
+    const prefs = h.runtime.expertPreferences.view()
+    h.runtime.expertPreferences.save({ ...prefs.config, accounts: [{ source: 'main', persona: prefs.config.main,
+      allowed: ['builtin-planning'], defaultExpert: 'builtin-planning', mode: 'fixed' }] }, prefs.revision)
+    await h.runTool(h.runtime.masterId, 'personal_agent_submit', args)
+    expect(h.runtime.store.tickets.list()[0]?.expert?.snapshot.id).toBe('builtin-planning')
+  } finally { await h.stop() }
+})
+
+it('rejects an expert policy change during local model preflight without creating work', async () => {
+  const h = await startRuntime(), hold = deferred(), started = deferred()
+  try {
+    const original = h.controller.modelCatalog.getMockImplementation()!
+    h.controller.modelCatalog.mockImplementationOnce(async (...args) => { started.resolve(); await hold.promise; return original(...args) })
+    const request = h.runtime.main.capture(createUserMessage({ content: [{ type: 'text', text: 'Plan a trip' }], source: { kind: 'user' } }))!
+    const pending = h.runTool(h.runtime.masterId, 'personal_agent_submit', { trigger_id: request.id, title: 'Trip', worktree_name: 'trip' })
+    const refused = expect(pending).rejects.toThrow('Expert selection changed')
+    await started.promise
+    const prefs = h.runtime.expertPreferences.view()
+    h.runtime.expertPreferences.save({ ...prefs.config, accounts: [{ source: 'main', persona: prefs.config.main,
+      allowed: ['builtin-planning'], defaultExpert: 'builtin-planning', mode: 'fixed' }] }, prefs.revision)
+    hold.resolve()
+    await refused
+    expect(h.runtime.store.tickets.list()).toEqual([])
+  } finally { hold.resolve(); await h.stop() }
+})
